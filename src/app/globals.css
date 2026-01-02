@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  background-color: #0b1021;
+  color: #f8fafc;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.card {
+  @apply rounded-2xl bg-white/5 p-6 shadow-lg ring-1 ring-white/10;
+}
+
+.pill {
+  @apply rounded-full bg-white/10 px-3 py-1 text-sm text-white;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-gray-400;
+}
