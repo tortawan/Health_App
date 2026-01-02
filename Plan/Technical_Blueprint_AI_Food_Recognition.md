@@ -1,141 +1,157 @@
-# AI-Native Nutrition Tracker: Master Plan (MVP)
 
-> **Status:** Blueprint / Specification
-> **Target Scale:** 500+ Daily Active Users (Zero Infrastructure Cost)
-> **Core Stack:** Next.js, Supabase, Gemini 1.5 Flash, USDA Data
+# 🚀 Revised Technical Blueprint: AI-Native Nutrition Tracker (Production-Ready)
+
+> **Status:** Final Execution Plan
+> **Core Principle:** "Visual RAG" (Perception via AI -> Fact Retrieval via Database)
+> **Constraint:** Zero Infrastructure Cost (Free Tiers Only)
+
+---
 
 ## 1. Executive Summary
 
-This project aims to build a friction-less food tracking application that eliminates manual entry. Unlike traditional trackers that rely on expensive APIs (Nutritionix) or limited vision models, this project utilizes a **Multimodal RAG (Retrieval-Augmented Generation)** architecture.
+This project builds a friction-less food tracker using **Multimodal RAG**. Instead of asking an LLM to hallucinate nutrition facts, we use:
 
-By leveraging **Gemini 1.5 Flash** for reasoning and **Supabase Vector Search** for data retrieval, we can achieve high accuracy and significantly higher rate limits compared to legacy solutions, all while staying strictly within free usage tiers.
-
----
-
-## 2. Technical Architecture
-
-### 2.1 The "Free Tier" Production Stack
-
-Selected specifically to avoid "cold starts" and API billing limits.
-
-| Component | Selected Technology | Free Tier Limits (2026) | Role |
-| --- | --- | --- | --- |
-| **Frontend/Backend** | **Next.js 15+ (App Router)** | Hosted on **Vercel** | Unified full-stack framework. Server Actions handle secure API calls. Avoids the 15-min sleep/cold-start issues of Render free tiers. |
-| **AI Vision** | **Gemini 1.5 Flash** | **1,500 reqs/day** | Analyzes images to identify food items and estimate weight. Generates structured JSON output. |
-| **Database** | **Supabase** (PostgreSQL) | 500MB Storage | Stores user logs and the vector-embedded USDA dataset. |
-| **Search Engine** | **pgvector** (Supabase) | Unlimited Queries | Performs semantic search to map AI text to accurate nutrition facts. |
-| **Image Storage** | **Supabase Storage** | 1GB Storage | Hosting for user food photos with Row Level Security (RLS). |
-| **Data Source** | **USDA FoodData Central** | Open Source | Foundation Foods dataset (self-hosted to avoid API rate limits). |
-
-### 2.2 The "Visual RAG" Workflow
-
-Instead of asking the AI to *guess* calories (which leads to hallucinations), we use the AI to *perceive* and *retrieve*.
-
-1. **Capture:** User snaps a photo via the PWA.
-2. **Upload:** Image uploaded to Supabase Storage; public/signed URL generated.
-3. **Analyze (AI):** Gemini 1.5 Flash receives the image URL.
-* *Prompt:* "Identify food items and estimate weight in grams. Return JSON."
-
-
-4. **Retrieve (DB):** System converts the food name (e.g., "Avocado Toast") into a vector embedding and queries the USDA database for the closest semantic match using `pgvector`.
-5. **Calculate:** `(USDA_Kcal / 100) * AI_Estimated_Weight = Total Calories`.
-6. **Verify:** User reviews the draft and saves.
+1. **Gemini 1.5 Flash** to *perceive* the image (identify food names + visual quantity estimation).
+2. **Supabase Vector Search** to *retrieve* validated nutrition facts from a self-hosted USDA database.
+3. **Next.js Server Actions** to orchestrate the flow without managing a separate backend server.
 
 ---
 
-## 3. Database Schema
+## 2. The "Free Tier" Production Stack
 
-Run this SQL in your Supabase SQL Editor to set up the backend.sql
--- 1. Enable Vector Extension for Semantic Search
+| Component | Technology | Reasoning |
+| --- | --- | --- |
+| **Framework** | **Next.js 15+ (App Router)** | Deployed on Vercel. Server Actions handle logic; avoids "cold start" timeouts of free containers. |
+| **AI Vision** | **Gemini 1.5 Flash** | High rate limit (1,500/day free). Used strictly for *identification*, not for factual nutrition data. |
+| **Database** | **Supabase (PostgreSQL)** | Stores user logs and USDA data. Includes `pgvector` for semantic search. |
+| **Embeddings** | **Transformers.js** | **CRITICAL FIX:** Runs `all-MiniLM-L6-v2` (or similar) inside the Next.js API route to ensure the *exact same model* is used for both USDA ingestion and user queries. |
+| **Data Source** | **USDA Foundation Foods** | Downloaded and **denormalized** into a flat table to avoid complex joins at runtime. |
+
+---
+
+## 3. The Optimized "Visual RAG" Workflow
+
+1. **Capture & Optimistic UI:**
+* User snaps photo.
+* **UI Update:** Immediately show the image with a "Scanning..." skeleton loader (Masks latency).
+* Image is uploaded to Supabase Storage.
+
+
+2. **AI Analysis (Gemini):**
+* Backend sends image URL to Gemini.
+* **Prompt:** *"Identify the distinct food items. For each, provide a search query string (e.g. 'Grilled Salmon') and a visual portion estimate (e.g. 'small fillet, approx 150g'). Return JSON."*
+
+
+3. **Vector Retrieval (The "Truth" Step):**
+* Backend generates a vector embedding for the *search query string* using `transformers.js`.
+* Database performs a similarity search on `usda_library`.
+
+
+4. **Verification (The "Human Loop"):**
+* App presents a "Draft Log": *"We found Grilled Salmon. Estimated 150g?"*
+* User can quickly tap "Small (100g) / Medium (150g) / Large (200g)" or edit manually.
+* **Reasoning:** AI weight guessing is error-prone; user confirmation prevents frustration.
+
+
+
+---
+
+## 4. Revised Database Schema
+
+Run this in your Supabase SQL Editor. It includes the critical **RLS (Row Level Security)** fixes to ensure users can actually read the public USDA data.
+
+```sql
+-- 1. Enable Vector Extension
 create extension if not exists vector;
 
--- 2. Create Static Reference Table (USDA Data)
+-- 2. USDA Library (Denormalized & Public)
 create table usda_library (
-id bigint primary key, -- Matches USDA FDC ID
-description text not null,
-embedding vector(384), -- For semantic search (using lightweight model)
-kcal_100g numeric,
-protein_100g numeric,
-carbs_100g numeric,
-fat_100g numeric,
-search_text tsvector generated always as (to_tsvector('english', description)) stored
+  id bigint primary key,            -- Matches USDA FDC ID
+  description text not null,        -- Product name (e.g., "Avocado, raw")
+  embedding vector(384),            -- Matches 'all-MiniLM-L6-v2' dimensions
+  kcal_100g numeric,
+  protein_100g numeric,
+  carbs_100g numeric,
+  fat_100g numeric,
+  search_text tsvector generated always as (to_tsvector('english', description)) stored
 );
 
--- Index for fast vector similarity search
-create index on usda_library using ivfflat (embedding vector_cosine_ops)
-with (lists = 100);
+-- Index for speed
+create index on usda_library using ivfflat (embedding vector_cosine_ops) with (lists = 100);
 
--- 3. Create User Logs Table
+-- 3. User Logs (Private)
 create table food_logs (
-id uuid default gen_random_uuid() primary key,
-user_id uuid references auth.users(id) not null,
-image_path text, -- Supabase Storage file path
-
--- AI Output
-detected_name text,
-
--- The Actual Data Used
-usda_id bigint references usda_library(id),
-weight_g numeric not null default 100,
-
--- Calculated Macros (Cached for easy reads)
-calories numeric,
-protein numeric,
-carbs numeric,
-fat numeric,
-
-consumed_at timestamptz default now()
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) not null,
+  image_path text,
+  
+  -- Snapshot of data at time of logging (in case USDA DB changes)
+  food_name text not null,
+  weight_g numeric not null default 100,
+  calories numeric,
+  protein numeric,
+  carbs numeric,
+  fat numeric,
+  
+  consumed_at timestamptz default now()
 );
 
--- 4. Security Policies (RLS)
+-- 4. SECURITY POLICIES (CRITICAL FIXES)
+alter table usda_library enable row level security;
 alter table food_logs enable row level security;
 
-create policy "Users can see own logs"
-on food_logs for select
+-- Allow EVERYONE (including anon) to read USDA data
+create policy "Public Read USDA"
+on usda_library for select
+using (true);
+
+-- Allow Users to manage ONLY their own logs
+create policy "Users manage own logs"
+on food_logs for all
 using (auth.uid() = user_id);
 
-create policy "Users can create own logs"
-on food_logs for insert
-with check (auth.uid() = user_id);
-
 ```
 
 ---
 
-## 4. Implementation Roadmap
+## 5. Implementation Roadmap
 
-### Phase 1: Data Ingestion (The Foundation)
-*   **Goal:** Replace the Nutritionix API with your own database.
-*   **Steps:**
-    1.  Download `Foundation Foods` CSV from USDA FoodData Central.
-    2.  Create a Node.js script to parse the CSV.
-    3.  Use `transformers.js` (Hugging Face) to generate embeddings for food names.
-    4.  Bulk insert into `usda_library` on Supabase.
+### Phase 1: The Data Foundation (Do this first)
 
-### Phase 2: The Vision Pipeline
-*   **Goal:** Get Gemini to return JSON from an image.
-*   **Steps:**
-    1.  Initialize Next.js project: `npx create-next-app@latest`.
-    2.  Install Google GenAI SDK: `npm install @google/generative-ai`.
-    3.  Create a Server Action or API Route `/api/analyze` that accepts a file upload.
-    4.  Prompt Gemini with `response_mime_type: "application/json"`.[6]
+* **Goal:** Create the "Truth" database.
+* **Action:**
+1. Download USDA "Foundation Foods" CSV.
+2. Write a local script to **flatten** the data (merge `food_nutrient` rows into a single `kcal`, `protein`, `fat` row per food).
+3. Generate embeddings for all rows using the **same model** you will use in the app (e.g., `Xenova/all-MiniLM-L6-v2`).
+4. Upload the resulting clean JSON/CSV to Supabase.
 
-### Phase 3: The MVP Loop
-*   **Goal:** Connect Vision -> Vector Search -> UI.
-*   **Steps:**
-    1.  Frontend uploads image to Supabase Storage.
-    2.  Backend sends URL to Gemini.
-    3.  Backend takes Gemini output ("Grilled Chicken") and queries `usda_library` using vector similarity.
-    4.  Frontend displays the "Card" with the USDA nutritional info.
-    5.  User clicks "Save".
+
+
+### Phase 2: The Core Loop (Back-end)
+
+* **Goal:** Input Image -> Output Nutrition JSON.
+* **Action:**
+1. Set up Next.js API route `/api/analyze`.
+2. Integrate Gemini SDK to handle image inputs.
+3. Integrate `transformers.js` (or Supabase's built-in embedding generation if available) to vectorize the Gemini text output.
+4. Query Supabase and return the merged object.
+
+
+
+### Phase 3: The MVP UI (Front-end)
+
+* **Goal:** A simple, fast mobile web interface.
+* **Action:**
+1. Camera capture button (input `type="file" capture="environment"`).
+2. "Draft" Review Screen (allows users to correct the AI's weight guess).
+3. "Daily Log" Dashboard (simple list of today's entries).
+
+
 
 ---
 
-## 5. Strategic Notes & Risks
+## 6. Strategic UX Notes
 
-*   **Cold Starts:** By using Next.js on Vercel (Serverless), we avoid the 15-minute inactivity sleep timer common with free-tier Docker containers like Render.[1]
-*   **API Costs:** Gemini 1.5 Flash is free for up to 1,500 requests/day. If you exceed this, the app will simply error out for the rest of the day (graceful degradation).[2]
-*   **Data Privacy:** The Gemini Free Tier allows Google to use submitted data for training. You **must** disclose this in your Privacy Policy if you release this publicly.
-*   **UX Pattern:** Always assume the AI is wrong. The UI should present data as a "Draft" for the user to confirm, not as an absolute fact.
-
-```
+* **Trust but Verify:** Never auto-save. Always present the data as a "suggestion" for the user to tap "Confirm".
+* **Fail Gracefully:** If Gemini fails or hits a rate limit, allow the user to type the food name manually and search the `usda_library` directly (using the same vector search).
+* **Privacy:** Since you are using Gemini Free Tier, add a footer note: *"Food images are processed by Google AI."*
