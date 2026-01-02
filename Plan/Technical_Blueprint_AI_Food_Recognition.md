@@ -148,5 +148,11 @@ using (auth.uid() = user_id);
 ## 6. Strategic UX Notes
 
 * **Trust but Verify:** Never auto-save. Always present the data as a "suggestion" for the user to tap "Confirm".
-* **Fail Gracefully:** If Gemini fails or hits a rate limit, allow the user to type the food name manually and search the `usda_library` directly (using the same vector search).
+* **Confidence Thresholds:**
+* **High (>0.85):** Auto-select the top match.
+* **Medium (0.70 - 0.85):** Show top 3 matches for user to tap.
+* **Low (<0.70):** Default to the "Manual Search" input box; do not show bad guesses.
+
+
 * **Privacy:** Since you are using Gemini Free Tier, add a footer note: *"Food images are processed by Google AI."*
+
