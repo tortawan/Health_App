@@ -99,7 +99,10 @@ export async function POST(request: Request) {
               protein_100g: top.protein_100g,
               carbs_100g: top.carbs_100g,
               fat_100g: top.fat_100g,
-              distance: top.distance ?? top.similarity ?? null,
+              similarity:
+                top.similarity ??
+                (typeof top.distance === "number" ? 1 - top.distance : null) ??
+                null,
             }
           : undefined,
       };

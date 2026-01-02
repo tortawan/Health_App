@@ -6,14 +6,19 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "usda:download": "node scripts/download_usda.js",
+    "usda:flatten": "node scripts/flatten_data.js",
+    "usda:embed": "node scripts/embed_and_upload.js"
   },
   "dependencies": {
+    "adm-zip": "^0.5.12",
     "@google/generative-ai": "^0.11.4",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/ssr": "^0.4.0",
     "@supabase/supabase-js": "^2.48.0",
     "@xenova/transformers": "^2.17.2",
+    "csv-parse": "^5.5.6",
     "next": "^15.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
