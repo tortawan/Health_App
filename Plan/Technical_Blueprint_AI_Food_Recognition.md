@@ -22,19 +22,10 @@ Selected specifically to avoid "cold starts" and API billing limits.
 | --- | --- | --- | --- |
 | **Frontend/Backend** | **Next.js 15+ (App Router)** | Hosted on **Vercel** | Unified full-stack framework. Server Actions handle secure API calls. Avoids the 15-min sleep/cold-start issues of Render free tiers. |
 | **AI Vision** | **Gemini 1.5 Flash** | **1,500 reqs/day** | Analyzes images to identify food items and estimate weight. Generates structured JSON output. |
- 
-| **Database** | **Supabase** (PostgreSQL) | 500MB Storage | Stores user logs and the vector-embedded USDA dataset.
-
- |
-| **Search Engine** | **pgvector** (Supabase) | Unlimited Queries | Performs semantic search to map AI text to accurate nutrition facts.
-
- |
-| **Image Storage** | **Supabase Storage** | 1GB Storage | Hosting for user food photos with Row Level Security (RLS).
-
- |
-| **Data Source** | **USDA FoodData Central** | Open Source | Foundation Foods dataset (self-hosted to avoid API rate limits).
-
- |
+| **Database** | **Supabase** (PostgreSQL) | 500MB Storage | Stores user logs and the vector-embedded USDA dataset. |
+| **Search Engine** | **pgvector** (Supabase) | Unlimited Queries | Performs semantic search to map AI text to accurate nutrition facts. |
+| **Image Storage** | **Supabase Storage** | 1GB Storage | Hosting for user food photos with Row Level Security (RLS). |
+| **Data Source** | **USDA FoodData Central** | Open Source | Foundation Foods dataset (self-hosted to avoid API rate limits). |
 
 ### 2.2 The "Visual RAG" Workflow
 
