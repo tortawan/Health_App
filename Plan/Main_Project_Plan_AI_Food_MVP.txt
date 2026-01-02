@@ -1,0 +1,69 @@
+MAIN PROJECT PLANHealth & Nutrition Tracking App – AI Food Recognition First
+
+PRIMARY MVP GOAL
+The very first feature of this project is:
+- Take a photo (camera or upload) of food
+- Use AI to identify the food and ingredients
+- Pull nutrition facts from reputable databases
+- Log daily intake automatically
+
+This feature comes BEFORE community, challenges, or messaging.
+
+PHASE 0 – AI FOOD RECOGNITION MVP (FOUNDATION)
+This phase is mandatory and blocks all other features.
+
+User Flow:
+1. User opens app
+2. Clicks “Take Photo” or “Upload Image”
+3. AI analyzes the image
+4. App returns:
+   - Food name(s)
+   - Ingredients (if applicable)
+   - Calories
+   - Protein, Carbs, Fat
+5. User confirms or edits result
+6. Data is saved to daily log
+
+Why this first:
+- Core value of the app
+- Hardest technical problem
+- Everything else depends on accurate nutrition data
+
+AI & DATA SOURCES (REPUTABLE)
+Food Identification (AI Vision):
+- Google Cloud Vision API (Food & Object Detection)
+- OR OpenAI Vision (image → food description)
+- OR CalorieMama API (food-specific model)
+
+Nutrition Databases:
+- USDA FoodData Central (official US government source)
+- Nutritionix API (commercial, widely used)
+- OpenFoodFacts (open, global database)
+
+AI Logic:
+1. Vision AI → identify food name(s)
+2. NLP step → normalize food names
+3. Nutrition API → fetch macros & calories
+4. Confidence score returned
+5. User confirmation required
+
+PHASE 1 – BASIC TRACKING
+- User accounts
+- Daily food log (from AI results)
+- Daily totals (calories, protein, carbs, fat)
+- Manual edit / correction
+
+PHASE 2 – DASHBOARD
+- Daily summary
+- Weekly trends
+- Weight tracking (manual input)
+
+PHASE 3 – COMMUNITY (LATER)
+- Sharing
+- Challenges
+- Leaderboards
+- Messaging
+
+PLATFORM
+- Web App first (mobile-friendly)
+- Free tiers only

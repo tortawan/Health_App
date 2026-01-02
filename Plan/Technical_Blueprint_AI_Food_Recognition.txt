@@ -1,0 +1,101 @@
+STRATEGIC ARCHITECTURAL PLAN – AI-NATIVE NUTRITION TRACKING (2026 STANDARD)
+
+PURPOSE
+This document defines the FINAL, EXECUTABLE architecture for an AI-native nutrition tracking app that:
+- Starts with food image recognition
+- Uses ONLY free tiers for MVP
+- Is scalable, low-latency, and modern
+- Avoids dead-end APIs and legacy patterns
+
+This plan replaces all prior blueprints.
+
+==================================================
+1. CORE MVP GOAL (NON-NEGOTIABLE)
+==================================================
+
+The FIRST and REQUIRED capability:
+
+User takes or uploads a food photo →
+AI identifies food items →
+AI estimates portion →
+Nutrition facts retrieved from USDA →
+User confirms →
+Daily intake logged
+
+No community. No challenges. No messaging.
+Everything else comes AFTER this works.
+
+==================================================
+2. ARCHITECTURAL PRINCIPLES
+==================================================
+
+- AI-native (multimodal-first, not vision-first)
+- Retrieval-Augmented Generation (RAG), not guessing
+- Human-in-the-loop verification
+- Zero-cost MVP using legitimate free tiers
+- Low-latency UX (<2s perceived response)
+- Single unified stack (minimal DevOps)
+
+==================================================
+3. FINAL TECH STACK (APPROVED)
+==================================================
+
+Frontend + Backend:
+- Next.js (App Router)
+- Deployed on Vercel (Free tier)
+
+Database + Auth + Storage:
+- Supabase (Free tier)
+  - PostgreSQL
+  - pgvector
+  - Auth
+  - Storage (images)
+
+AI Model:
+- Gemini 1.5 Flash (Free tier)
+
+Nutrition Data:
+- USDA FoodData Central (self-hosted subset)
+
+==================================================
+4. VISUAL RAG PIPELINE
+==================================================
+
+ONE-TIME SETUP:
+- Download USDA Foundation Foods
+- Clean dataset
+- Generate embeddings
+- Store in pgvector
+
+RUNTIME:
+1. Capture image
+2. Compress + upload
+3. Gemini analysis
+4. Vector search USDA
+5. Calculate macros
+6. User confirm
+7. Save log
+
+==================================================
+5. DATABASE (MINIMAL)
+==================================================
+
+users
+food_items_usda
+food_logs
+
+==================================================
+6. CODING ORDER
+==================================================
+
+1. Next.js setup
+2. Supabase setup
+3. USDA ingestion
+4. Image upload
+5. Gemini vision
+6. Vector search
+7. UI confirm
+8. Save log
+
+==================================================
+END
