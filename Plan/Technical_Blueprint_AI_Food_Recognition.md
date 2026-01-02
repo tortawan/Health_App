@@ -23,6 +23,9 @@ Selected specifically to avoid "cold starts" and API billing limits.
 | **Frontend/Backend** | **Next.js 15+ (App Router)** | Hosted on **Vercel** | Unified full-stack framework. Server Actions handle secure API calls. Avoids the 15-min sleep/cold-start issues of Render free tiers.
 
  |
+ | **Frontend/Backend** | **Next.js 15+ (App Router)** | Hosted on **Vercel** | Unified full-stack framework. Server Actions handle secure API calls. Avoids the 15-min sleep/cold-start issues of Render free tiers.
+
+ |
 | **AI Vision** | **Gemini 1.5 Flash** | **1,500 reqs/day** | Analyzes images to identify food items and estimate weight. Generates structured JSON output.
 
  |
