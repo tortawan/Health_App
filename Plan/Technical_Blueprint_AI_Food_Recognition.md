@@ -1,5 +1,5 @@
 
-# 🚀 Revised Technical Blueprint: AI-Native Nutrition Tracker (Production-Ready)
+# 🚀 Technical Blueprint: AI-Native Nutrition Tracker (Production-Ready)
 
 > **Status:** Final Execution Plan
 > **Core Principle:** "Visual RAG" (Perception via AI -> Fact Retrieval via Database)
@@ -11,48 +11,43 @@
 
 This project builds a friction-less food tracker using **Multimodal RAG**. Instead of asking an LLM to hallucinate nutrition facts, we use:
 
-1. **Gemini 1.5 Flash** to *perceive* the image (identify food names + visual quantity estimation).
-2. **Supabase Vector Search** to *retrieve* validated nutrition facts from a self-hosted USDA database.
-3. **Next.js Server Actions** to orchestrate the flow without managing a separate backend server.
+1.  **Gemini 1.5 Flash** to *perceive* the image (identify food names + visual quantity estimation).
+2.  **Supabase Vector Search** to *retrieve* validated nutrition facts from a self-hosted USDA database.
+3.  **Next.js Server Actions** to orchestrate the flow without managing a separate backend server.
 
 ---
 
 ## 2. The "Free Tier" Production Stack
 
 | Component | Technology | Reasoning |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | **Framework** | **Next.js 15+ (App Router)** | Deployed on Vercel. Server Actions handle logic; avoids "cold start" timeouts of free containers. |
 | **AI Vision** | **Gemini 1.5 Flash** | High rate limit (1,500/day free). Used strictly for *identification*, not for factual nutrition data. |
 | **Database** | **Supabase (PostgreSQL)** | Stores user logs and USDA data. Includes `pgvector` for semantic search. |
-| **Embeddings** | **Transformers.js** | **CRITICAL FIX:** Runs `all-MiniLM-L6-v2` (or similar) inside the Next.js API route to ensure the *exact same model* is used for both USDA ingestion and user queries. |
+| **Embeddings** | **Transformers.js** | **CRITICAL FIX:** Runs `all-MiniLM-L6-v2` inside the Next.js API route. **Requirement:** Define `EMBEDDING_MODEL=Xenova/all-MiniLM-L6-v2` in `.env` and use this variable in both the ingestion script and the app to guarantee vector alignment. |
 | **Data Source** | **USDA Foundation Foods** | Downloaded and **denormalized** into a flat table to avoid complex joins at runtime. |
 
 ---
 
 ## 3. The Optimized "Visual RAG" Workflow
 
-1. **Capture & Optimistic UI:**
-* User snaps photo.
-* **UI Update:** Immediately show the image with a "Scanning..." skeleton loader (Masks latency).
-* Image is uploaded to Supabase Storage.
+1.  **Capture & Optimistic UI:**
+    * User snaps photo.
+    * **UI Update:** Immediately show the image with a "Scanning..." skeleton loader (Masks latency).
+    * Image is uploaded to Supabase Storage.
 
+2.  **AI Analysis (Gemini):**
+    * Backend sends image URL to Gemini.
+    * **Prompt:** *"Identify all distinct food items in this image. Return a JSON array where each object contains: `food_name` (string, for search), `search_term` (string, optimized for database lookup), and `quantity_estimate` (string, e.g., '150g'). Do not hallucinate nutrition data."*
 
-2. **AI Analysis (Gemini):**
-* Backend sends image URL to Gemini.
-* **Prompt:** *"Identify the distinct food items. For each, provide a search query string (e.g. 'Grilled Salmon') and a visual portion estimate (e.g. 'small fillet, approx 150g'). Return JSON."*
+3.  **Vector Retrieval (The "Truth" Step):**
+    * Backend generates a vector embedding for the *search query string* using `transformers.js`.
+    * Database performs a similarity search on `usda_library`.
 
-
-3. **Vector Retrieval (The "Truth" Step):**
-* Backend generates a vector embedding for the *search query string* using `transformers.js`.
-* Database performs a similarity search on `usda_library`.
-
-
-4. **Verification (The "Human Loop"):**
-* App presents a "Draft Log": *"We found Grilled Salmon. Estimated 150g?"*
-* User can quickly tap "Small (100g) / Medium (150g) / Large (200g)" or edit manually.
-* **Reasoning:** AI weight guessing is error-prone; user confirmation prevents frustration.
-
-
+4.  **Verification (The "Human Loop"):**
+    * App presents a "Draft Log": *"We found Grilled Salmon. Estimated 150g?"*
+    * User can quickly tap "Small (100g) / Medium (150g) / Large (200g)" or edit manually.
+    * **Reasoning:** AI weight guessing is error-prone; user confirmation prevents frustration.
 
 ---
 
