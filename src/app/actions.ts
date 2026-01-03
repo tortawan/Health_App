@@ -71,7 +71,7 @@ export async function logFood(entry: {
 }
 
 export async function manualSearch(searchTerm: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const query = searchTerm.trim();
 
   if (!query) return [];
@@ -111,7 +111,7 @@ export async function manualSearch(searchTerm: string) {
 }
 
 export async function signOutAction() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
   redirect("/login");
 }
@@ -163,7 +163,7 @@ export async function upsertUserProfile(input: {
   goalType: GoalType;
   macroSplit?: Record<string, unknown> | null;
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
