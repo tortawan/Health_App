@@ -5,23 +5,208 @@
   - main [ref=e3]:
     - generic [ref=e4]:
       - generic [ref=e5]:
-        - heading "Login" [level=1] [ref=e6]
-        - button "Need an account?" [ref=e7] [cursor=pointer]
-      - paragraph [ref=e8]: Use Supabase email/password auth to protect your food logs. Sessions are stored via HttpOnly cookies for RLS compatibility.
-      - generic [ref=e9]:
-        - generic [ref=e10]:
-          - text: Email
-          - textbox "Email" [ref=e11]:
-            - /placeholder: you@example.com
-            - text: tortawan@gmail.com
-        - generic [ref=e12]:
-          - text: Password
-          - textbox "Password" [ref=e13]:
-            - /placeholder: ••••••••
-            - text: password123
-        - button "Sign in" [ref=e14] [cursor=pointer]
-      - generic [ref=e15]: Email not confirmed
-  - button "Open Next.js Dev Tools" [ref=e21] [cursor=pointer]:
-    - img [ref=e22]
-  - alert [ref=e25]
+        - generic [ref=e6]:
+          - generic [ref=e7]: Phase 2 – Tracker Mode
+          - generic [ref=e8]: Gemini + Supabase + pgvector
+        - generic [ref=e9]:
+          - generic [ref=e10]: 🔥 0 day streak
+          - link "Stats" [ref=e11] [cursor=pointer]:
+            - /url: /stats
+          - generic [ref=e12]:
+            - paragraph [ref=e13]: Signed in
+            - paragraph [ref=e14]: tortawan@gmail.com
+          - button "Sign out" [ref=e16] [cursor=pointer]
+      - generic [ref=e17]:
+        - heading "Snap → Verify → Log (Trust-but-Verify)" [level=1] [ref=e18]
+        - paragraph [ref=e19]: Upload a meal photo or quick-add calories. We calculate goals from your profile and keep you on track with streaks, targets, and edits.
+      - generic [ref=e20]:
+        - generic [ref=e21]: Optimistic UI
+        - generic [ref=e22]: Manual override
+        - generic [ref=e23]: Progress rings
+        - generic [ref=e24]: Weekly trends
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - paragraph [ref=e27]: Target
+        - heading "Personalize your calorie + protein goals" [level=2] [ref=e28]
+        - paragraph [ref=e29]: We use Mifflin-St Jeor (assumes male constant) with your activity level and goal to calculate daily calorie and protein targets. Macro split is stored for future breakdowns.
+        - generic [ref=e30]:
+          - generic [ref=e31]:
+            - text: Height (cm)
+            - spinbutton "Height (cm)" [ref=e32]: "170"
+          - generic [ref=e33]:
+            - text: Weight (kg)
+            - spinbutton "Weight (kg)" [ref=e34]: "70"
+          - generic [ref=e35]:
+            - text: Age
+            - spinbutton "Age" [ref=e36]: "30"
+          - generic [ref=e37]:
+            - text: Activity level
+            - combobox "Activity level" [ref=e38]:
+              - option "Sedentary"
+              - option "Light" [selected]
+              - option "Moderate"
+              - option "Active"
+              - option "Very Active"
+          - generic [ref=e39]:
+            - text: Goal
+            - combobox "Goal" [ref=e40]:
+              - option "Lose"
+              - option "Maintain" [selected]
+              - option "Gain"
+          - generic [ref=e41]:
+            - paragraph [ref=e42]: Macro split (%)
+            - generic [ref=e43]:
+              - generic [ref=e44]:
+                - text: protein
+                - spinbutton "protein" [ref=e45]: "30"
+              - generic [ref=e46]:
+                - text: carbs
+                - spinbutton "carbs" [ref=e47]: "40"
+              - generic [ref=e48]:
+                - text: fat
+                - spinbutton "fat" [ref=e49]: "30"
+        - button "Save goals" [ref=e50] [cursor=pointer]
+      - generic [ref=e51]:
+        - paragraph [ref=e52]: Today
+        - generic [ref=e53]:
+          - generic "Calorie progress" [ref=e54]:
+            - generic [ref=e55]:
+              - generic [ref=e56]: Calories
+              - generic [ref=e57]: 0 / 2000
+          - generic [ref=e58]:
+            - generic [ref=e59]:
+              - generic "Protein progress" [ref=e60]:
+                - generic [ref=e61]:
+                  - generic [ref=e62]: 0g
+                  - generic [ref=e63]: / 150g
+              - generic [ref=e64]:
+                - paragraph [ref=e65]: Protein
+                - paragraph [ref=e66]: 0.0 / 150g
+            - generic [ref=e67]:
+              - generic "Carbs progress" [ref=e68]:
+                - generic [ref=e69]:
+                  - generic [ref=e70]: 0g
+                  - generic [ref=e71]: / 200g
+              - generic [ref=e72]:
+                - paragraph [ref=e73]: Carbs
+                - paragraph [ref=e74]: 0.0 / 200g
+            - generic [ref=e75]:
+              - generic "Fat progress" [ref=e76]:
+                - generic [ref=e77]:
+                  - generic [ref=e78]: 0g
+                  - generic [ref=e79]: / 67g
+              - generic [ref=e80]:
+                - paragraph [ref=e81]: Fat
+                - paragraph [ref=e82]: 0.0 / 67g
+    - generic [ref=e83]:
+      - generic [ref=e84]:
+        - generic [ref=e85]:
+          - generic [ref=e86]:
+            - paragraph [ref=e87]: Capture
+            - heading "Upload a meal photo or quick add" [level=2] [ref=e88]
+            - paragraph [ref=e89]: We immediately render the image while the backend runs Gemini + Supabase searches in parallel, or you can bypass AI with manual text entry.
+          - generic [ref=e90]:
+            - button "Photo" [ref=e91] [cursor=pointer]
+            - button "Text / Manual" [ref=e92] [cursor=pointer]
+        - generic [ref=e93]:
+          - generic [ref=e94]:
+            - generic [ref=e95]:
+              - paragraph [ref=e96]: Quick load
+              - paragraph [ref=e97]: Drop in a saved meal template to insert multiple entries.
+            - generic [ref=e98]: 0 saved
+          - generic [ref=e99]:
+            - combobox [ref=e100]:
+              - option "No templates yet" [selected]
+            - button "Quick load meal" [disabled] [ref=e101]
+        - generic [ref=e102] [cursor=pointer]: Take Photo
+        - img "Uploaded meal preview" [ref=e104]
+        - generic [ref=e105]: "{code: ..., details: Null, hint: Null, message: ...}"
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - generic [ref=e108]:
+            - paragraph [ref=e109]: Verification
+            - heading "Draft entries" [level=2] [ref=e110]
+            - paragraph [ref=e111]: We never auto-save. Confirm or adjust the AI guess before logging.
+          - generic [ref=e112]: High confidence
+        - generic [ref=e113]:
+          - generic [ref=e114]:
+            - paragraph [ref=e115]: Save as meal template
+            - generic [ref=e116]: Store this draft for faster future logging.
+          - generic [ref=e117]:
+            - textbox "e.g., Chicken and Rice" [ref=e118]
+            - button "Save as meal" [ref=e119] [cursor=pointer]
+        - generic [ref=e121]:
+          - generic [ref=e122]:
+            - generic [ref=e123]:
+              - heading "Mock Chicken Bowl" [level=3] [ref=e124]
+              - button "200g (200g)" [ref=e125] [cursor=pointer]
+            - paragraph [ref=e126]: "Search term: chicken bowl"
+            - generic [ref=e127]:
+              - generic [ref=e128]:
+                - paragraph [ref=e129]: Match (0.92 similarity)
+                - paragraph [ref=e130]: Grilled chicken breast
+              - generic [ref=e131]:
+                - paragraph [ref=e132]: Macros / 100g
+                - paragraph [ref=e133]:
+                  - generic [ref=e134]: Kcal 165.0
+                  - generic [ref=e135]: Protein 31.0g
+                  - generic [ref=e136]: Carbs 0.0g
+                  - generic [ref=e137]: Fat 3.6g
+              - generic [ref=e138]:
+                - paragraph [ref=e139]: Adjusted macros (200g)
+                - paragraph [ref=e140]:
+                  - generic [ref=e141]: Kcal 330.0
+                  - generic [ref=e142]: Protein 62.0g
+                  - generic [ref=e143]: Carbs 0.0g
+                  - generic [ref=e144]: Fat 7.2g
+          - generic [ref=e145]:
+            - button "Confirm" [ref=e146] [cursor=pointer]
+            - button "Adjust weight" [ref=e147] [cursor=pointer]
+            - button "Manual search" [ref=e148] [cursor=pointer]
+    - generic [ref=e149]:
+      - generic [ref=e150]:
+        - heading "Prompting" [level=3] [ref=e151]
+        - paragraph [ref=e152]: The API uses a constrained JSON prompt to Gemini 1.5 Flash to avoid hallucinated nutrition values. Only names + quantities are returned.
+      - generic [ref=e153]:
+        - heading "Vector search" [level=3] [ref=e154]
+        - paragraph [ref=e155]:
+          - text: We embed the Gemini search term locally with transformers.js using
+          - code [ref=e156]: Xenova/all-MiniLM-L6-v2
+          - text: to match the pgvector data stored in Supabase.
+      - generic [ref=e157]:
+        - heading "Supabase policies" [level=3] [ref=e158]
+        - paragraph [ref=e159]: USDA data stays public (select only), while user food logs are RLS protected. The code anticipates the SQL policies defined in the blueprint.
+    - generic [ref=e160]:
+      - generic [ref=e161]:
+        - generic [ref=e162]:
+          - paragraph [ref=e163]: Daily log
+          - generic [ref=e164]:
+            - heading "Saturday, Jan 3" [level=3] [ref=e165]
+            - generic [ref=e166]:
+              - button "Previous day" [ref=e167] [cursor=pointer]: ←
+              - textbox [ref=e168]: 2026-01-03
+              - button "Next day" [ref=e169] [cursor=pointer]: →
+          - paragraph [ref=e170]: Totals are summed from your food_logs entries for the selected date.
+        - generic [ref=e171]:
+          - paragraph [ref=e172]: Daily Total
+          - paragraph [ref=e173]:
+            - generic [ref=e174]: Kcal 0
+            - generic [ref=e175]: Protein 0.0g
+            - generic [ref=e176]: Carbs 0.0g
+            - generic [ref=e177]: Fat 0.0g
+      - generic [ref=e178]: No logs yet for today. Confirm a draft entry to see it here.
+  - generic [ref=e183] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e184]:
+      - img [ref=e185]
+    - generic [ref=e188]:
+      - button "Open issues overlay" [ref=e189]:
+        - generic [ref=e190]:
+          - generic [ref=e191]: "1"
+          - generic [ref=e192]: "2"
+        - generic [ref=e193]:
+          - text: Issue
+          - generic [ref=e194]: s
+      - button "Collapse issues badge" [ref=e195]:
+        - img [ref=e196]
+  - alert [ref=e198]
 ```

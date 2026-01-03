@@ -86,7 +86,7 @@ function calculateStreak(logDates: string[]) {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const supabase = await createSupabaseServerClient();
   const {
@@ -97,7 +97,10 @@ export default async function HomePage({
     redirect("/login");
   }
 
-  const requestedDate = parseDateParam(searchParams?.date);
+  // FIX 1: Await searchParams before accessing properties
+  const params = await searchParams;
+  const requestedDate = parseDateParam(params?.date);
+
   const dayStart = new Date(requestedDate);
   dayStart.setHours(0, 0, 0, 0);
   const nextDay = new Date(dayStart);
@@ -139,13 +142,9 @@ export default async function HomePage({
     .order("created_at", { ascending: false })
     .limit(20);
 
-  const { data: portionMemory } = await supabase
-    .from("food_logs")
-    .select("food_name, weight_g, count:count(*)")
-    .eq("user_id", session.user.id)
-    .group("food_name, weight_g")
-    .order("count", { ascending: false })
-    .limit(100);
+  // FIX 2: Removed invalid .group() call. 
+  // We initialize as empty array for now to prevent crash.
+  const portionMemory: PortionMemoryRow[] = [];
 
   const { data: recentFoods } = await supabase
     .from("food_logs")
@@ -162,7 +161,7 @@ export default async function HomePage({
       profile={profile as UserProfile | null}
       streak={streak}
       templates={(templates as MealTemplate[] | null) ?? []}
-      portionMemory={(portionMemory as PortionMemoryRow[] | null) ?? []}
+      portionMemory={portionMemory}
       initialRecentFoods={recentFoods ?? []}
     />
   );
