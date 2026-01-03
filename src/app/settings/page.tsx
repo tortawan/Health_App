@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase";
+import { updatePrivacy } from "../actions";
 
 export default async function SettingsPage() {
   const supabase = await createSupabaseServerClient();
@@ -11,6 +12,18 @@ export default async function SettingsPage() {
   if (!session) {
     redirect("/login");
   }
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("is_public")
+    .eq("user_id", session.user.id)
+    .maybeSingle();
+
+  const togglePrivacy = async (formData: FormData) => {
+    "use server";
+    const desired = formData.get("is_public") === "on";
+    await updatePrivacy(desired);
+  };
 
   return (
     <div className="space-y-4">
@@ -27,6 +40,34 @@ export default async function SettingsPage() {
         <Link className="btn bg-white/10 text-white hover:bg-white/20" href="/">
           Back to tracker
         </Link>
+      </div>
+
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-white">Privacy</p>
+            <p className="text-xs text-white/60">
+              Control whether your future social feed activity is visible.
+            </p>
+          </div>
+          <span className="pill bg-white/10 text-xs text-white/60">
+            {profile?.is_public ? "Public" : "Private"}
+          </span>
+        </div>
+        <form action={togglePrivacy} className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-white/80">
+            <input
+              defaultChecked={profile?.is_public ?? false}
+              name="is_public"
+              type="checkbox"
+              className="h-4 w-4 rounded border-white/20 bg-white/10"
+            />
+            Make my profile public
+          </label>
+          <button className="btn" type="submit">
+            Save privacy
+          </button>
+        </form>
       </div>
 
       <div className="card space-y-3">

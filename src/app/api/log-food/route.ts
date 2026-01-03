@@ -7,6 +7,9 @@ type MacroMatch = {
   protein_100g: number | null;
   carbs_100g: number | null;
   fat_100g: number | null;
+  fiber_100g?: number | null;
+  sugar_100g?: number | null;
+  sodium_100g?: number | null;
 };
 
 type Payload = {
@@ -44,6 +47,9 @@ export async function POST(request: Request) {
   const carbs =
     body.manualMacros?.carbs ?? calc(body.match?.carbs_100g ?? null);
   const fat = body.manualMacros?.fat ?? calc(body.match?.fat_100g ?? null);
+  const fiber = calc(body.match?.fiber_100g ?? null);
+  const sugar = calc(body.match?.sugar_100g ?? null);
+  const sodium = calc(body.match?.sodium_100g ?? null);
 
   const { data, error } = await supabase
     .from("food_logs")
@@ -56,6 +62,9 @@ export async function POST(request: Request) {
       protein,
       carbs,
       fat,
+      fiber,
+      sugar,
+      sodium,
     })
     .select()
     .single();

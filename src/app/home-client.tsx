@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import toast from "react-hot-toast";
 import {
   deleteFoodLog,
@@ -14,6 +14,8 @@ import {
   updateFoodLog,
   upsertUserProfile,
   deleteMealTemplate,
+  copyDay,
+  logWater,
   type MealTemplateItem,
 } from "./actions";
 import { supabaseBrowser } from "@/lib/supabase-browser";
@@ -47,6 +49,9 @@ type FoodLogRecord = {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+   fiber?: number | null;
+   sugar?: number | null;
+   sodium?: number | null;
   consumed_at: string;
   image_path?: string | null;
 };
@@ -61,6 +66,7 @@ type UserProfile = {
   macro_split: Record<string, unknown> | null;
   daily_calorie_target: number | null;
   daily_protein_target: number | null;
+  is_public?: boolean | null;
 } | null;
 
 type MealTemplate = {
@@ -81,6 +87,9 @@ type RecentFood = {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  fiber?: number | null;
+  sugar?: number | null;
+  sodium?: number | null;
   weight_g: number;
 };
 
@@ -91,6 +100,11 @@ type ProfileFormState = {
   activityLevel: ActivityLevel;
   goalType: GoalType;
   macroSplit: Record<string, number>;
+};
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
 function extractWeight(estimate: string) {
@@ -276,6 +290,7 @@ export default function HomeClient({
   templates,
   portionMemory,
   initialRecentFoods,
+  initialWater,
 }: {
   initialLogs: FoodLogRecord[];
   userEmail: string | null | undefined;
@@ -285,6 +300,7 @@ export default function HomeClient({
   templates: MealTemplate[];
   portionMemory: PortionMemoryRow[];
   initialRecentFoods: RecentFood[];
+  initialWater: number;
 }) {
   const [captureMode, setCaptureMode] = useState<"photo" | "manual">("photo");
   const [filePreview, setFilePreview] = useState<string | null>(null);
@@ -327,6 +343,9 @@ export default function HomeClient({
       protein_100g: item.protein,
       carbs_100g: item.carbs,
       fat_100g: item.fat,
+      fiber_100g: item.fiber,
+      sugar_100g: item.sugar,
+      sodium_100g: item.sodium,
     })),
   );
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
@@ -342,7 +361,25 @@ export default function HomeClient({
       fat: 30,
     },
   });
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isConfirmingAll, setIsConfirmingAll] = useState(false);
+  const [waterIntake, setWaterIntake] = useState(initialWater);
+  const [isLoggingWater, setIsLoggingWater] = useState(false);
+  const [isCopyingDay, setIsCopyingDay] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      event.preventDefault?.();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", handler as EventListener);
+    return () => window.removeEventListener("beforeinstallprompt", handler as EventListener);
+  }, []);
+
+  useEffect(() => {
+    setWaterIntake(initialWater);
+  }, [initialWater, selectedDate]);
 
   const confidenceLabel = useMemo(() => {
     if (!draft[0]?.match) return "Pending";
@@ -371,6 +408,7 @@ export default function HomeClient({
     () => buildDateFromInput(selectedDate),
     [selectedDate],
   );
+  const todayKey = useMemo(() => formatDateParam(new Date()), []);
 
   const portionMemoryMap = useMemo(() => {
     const map = new Map<string, { weight: number; count: number }>();
@@ -417,6 +455,30 @@ export default function HomeClient({
 
       return [{ food_name: foodName, weight_g: weight, count: 1 }, ...prev].slice(0, 200);
     });
+  };
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    setInstallPrompt(null);
+  };
+
+  const handleAddWater = async (amount = 250) => {
+    setWaterIntake((prev) => prev + amount);
+    setIsLoggingWater(true);
+    try {
+      await logWater(amount);
+      toast.success("Water logged");
+    } catch (err) {
+      console.error(err);
+      setWaterIntake((prev) => Math.max(0, prev - amount));
+      setError(
+        err instanceof Error ? err.message : "Unable to log water right now.",
+      );
+      toast.error("Unable to log water");
+    } finally {
+      setIsLoggingWater(false);
+    }
   };
 
   const navigateToDate = (value: string) => {
@@ -634,6 +696,69 @@ export default function HomeClient({
     setManualOpenIndex(null);
   };
 
+  const handleConfirmAll = async () => {
+    if (!draft.length) return;
+    const toSave = draft
+      .map((item, index) => ({ item, index }))
+      .filter(
+        ({ item }) =>
+          item.match && (item.match.similarity ?? 0) >= 0.7,
+      );
+
+    if (!toSave.length) {
+      toast.error("No high-confidence matches to confirm.");
+      return;
+    }
+
+    setIsConfirmingAll(true);
+    setError(null);
+    const savedIndices: number[] = [];
+    const inserted: FoodLogRecord[] = [];
+
+    for (const entry of toSave) {
+      try {
+        const result = await submitLogFood({
+          foodName: entry.item.food_name,
+          weight: entry.item.weight,
+          match: entry.item.match,
+          imageUrl: imagePublicUrl,
+        });
+        if (result.queued) {
+          toast.success("Queued for sync when back online");
+        } else if (result.data) {
+          inserted.push(result.data as FoodLogRecord);
+          savedIndices.push(entry.index);
+          bumpPortionMemory(entry.item.food_name, entry.item.weight);
+        }
+      } catch (err) {
+        console.error(err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to save all draft entries.",
+        );
+        toast.error("Unable to save all entries");
+        break;
+      }
+    }
+
+    if (inserted.length) {
+      setDailyLogs((prev) =>
+        [...inserted, ...prev].sort(
+          (a, b) =>
+            new Date(b.consumed_at).getTime() -
+            new Date(a.consumed_at).getTime(),
+        ),
+      );
+    }
+
+    if (savedIndices.length) {
+      setDraft((prev) => prev.filter((_, idx) => !savedIndices.includes(idx)));
+    }
+
+    setIsConfirmingAll(false);
+  };
+
   const handleConfirm = async (index: number) => {
     const item = draft[index];
     if (!item) return;
@@ -701,6 +826,36 @@ export default function HomeClient({
       toast.error("Unable to quick add");
     } finally {
       setIsQuickSaving(false);
+    }
+  };
+
+  const handleCopyYesterday = async () => {
+    setIsCopyingDay(true);
+    setError(null);
+    const source = new Date(selectedDateObj);
+    source.setDate(source.getDate() - 1);
+    const sourceDate = formatDateParam(source);
+    try {
+      const inserted = (await copyDay(sourceDate)) as FoodLogRecord[];
+      if (selectedDate === todayKey) {
+        setDailyLogs((prev) =>
+          [...inserted, ...prev].sort(
+            (a, b) =>
+              new Date(b.consumed_at).getTime() -
+              new Date(a.consumed_at).getTime(),
+          ),
+        );
+      }
+      inserted.forEach((log) => bumpPortionMemory(log.food_name, log.weight_g));
+      toast.success(`Copied ${inserted.length} items from yesterday`);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error ? err.message : "Unable to copy yesterday's logs.",
+      );
+      toast.error("Unable to copy yesterday");
+    } finally {
+      setIsCopyingDay(false);
     }
   };
 
@@ -923,6 +1078,15 @@ export default function HomeClient({
             <div className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100">
               🔥 {streak} day streak
             </div>
+            {installPrompt ? (
+              <button
+                className="btn bg-emerald-500 text-white hover:bg-emerald-600"
+                onClick={handleInstallClick}
+                type="button"
+              >
+                Install App
+              </button>
+            ) : null}
             <a
               className="btn bg-white/10 text-white hover:bg-white/20"
               href="/stats"
@@ -1142,6 +1306,27 @@ export default function HomeClient({
                 </div>
               ))}
             </div>
+            <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/80">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs uppercase tracking-wide text-white/60">
+                  Water
+                </p>
+                <span className="pill bg-white/10 text-xs text-white/60">
+                  Goal 2000ml
+                </span>
+              </div>
+              <p className="text-lg font-semibold text-white">
+                {waterIntake} ml
+              </p>
+              <button
+                className="btn w-full sm:w-auto"
+                disabled={isLoggingWater}
+                onClick={() => void handleAddWater(250)}
+                type="button"
+              >
+                {isLoggingWater ? "Saving..." : "+ 250ml"}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -1341,9 +1526,19 @@ export default function HomeClient({
                 logging.
               </p>
             </div>
-            <span className="pill bg-emerald-500/20 text-emerald-100">
-              {confidenceLabel}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!draft.length || isConfirmingAll || isImageUploading}
+                onClick={handleConfirmAll}
+                type="button"
+              >
+                {isConfirmingAll ? "Saving all..." : "Confirm all"}
+              </button>
+              <span className="pill bg-emerald-500/20 text-emerald-100">
+                {confidenceLabel}
+              </span>
+            </div>
           </div>
 
           {draft.length > 0 && (
@@ -1481,7 +1676,10 @@ export default function HomeClient({
                       <button
                         className="btn disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={
-                          !item.match || loggingIndex === index || isImageUploading
+                          !item.match ||
+                          loggingIndex === index ||
+                          isImageUploading ||
+                          isConfirmingAll
                         }
                         onClick={() => handleConfirm(index)}
                         type="button"
@@ -1580,6 +1778,14 @@ export default function HomeClient({
                   →
                 </button>
               </div>
+              <button
+                className="btn bg-white/10 text-white hover:bg-white/20"
+                disabled={isCopyingDay}
+                onClick={handleCopyYesterday}
+                type="button"
+              >
+                {isCopyingDay ? "Copying..." : "Copy yesterday"}
+              </button>
             </div>
             <p className="text-sm text-white/60">
               Totals are summed from your food_logs entries for the selected date.
