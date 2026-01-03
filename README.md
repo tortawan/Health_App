@@ -28,6 +28,7 @@ Create the `match_foods` helper used by `/api/analyze` and the manual search fal
 ```sql
 create or replace function match_foods (
   query_embedding vector(384),
+  query_text text,
   match_threshold float,
   match_count int
 )
@@ -38,11 +39,21 @@ returns table (
   protein_100g numeric,
   carbs_100g numeric,
   fat_100g numeric,
-  similarity float
+  fiber_100g numeric,
+  sugar_100g numeric,
+  sodium_100g numeric,
+  similarity float,
+  text_rank float
 )
 language plpgsql
 as $$
+declare
+  ts_query tsquery := null;
 begin
+  if coalesce(trim(query_text), '') <> '' then
+    ts_query := websearch_to_tsquery('english', query_text);
+  end if;
+
   return query
   select
     usda_library.id,
@@ -51,10 +62,16 @@ begin
     usda_library.protein_100g,
     usda_library.carbs_100g,
     usda_library.fat_100g,
-    1 - (usda_library.embedding <=> query_embedding) as similarity
+    usda_library.fiber_100g,
+    usda_library.sugar_100g,
+    usda_library.sodium_100g,
+    1 - (usda_library.embedding <=> query_embedding) as similarity,
+    coalesce(ts_rank_cd(usda_library.search_text, ts_query), 0) as text_rank
   from usda_library
-  where 1 - (usda_library.embedding <=> query_embedding) > match_threshold
-  order by usda_library.embedding <=> query_embedding
+  where (1 - (usda_library.embedding <=> query_embedding)) > match_threshold
+    or (ts_query is not null and ts_query @@ usda_library.search_text)
+  order by ((1 - (usda_library.embedding <=> query_embedding)) * 0.7)
+    + (coalesce(ts_rank_cd(usda_library.search_text, ts_query), 0) * 0.3) desc
   limit match_count;
 end;
 $$;

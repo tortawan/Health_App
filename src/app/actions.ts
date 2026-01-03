@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getEmbedder } from "@/lib/embedder";
+import { calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
 type MacroMatch = {
@@ -11,7 +12,11 @@ type MacroMatch = {
   protein_100g: number | null;
   carbs_100g: number | null;
   fat_100g: number | null;
+  fiber_100g?: number | null;
+  sugar_100g?: number | null;
+  sodium_100g?: number | null;
   similarity?: number | null;
+  text_rank?: number | null;
 };
 
 export async function logFood(entry: {
@@ -81,6 +86,7 @@ export async function manualSearch(searchTerm: string) {
 
   const { data, error } = await supabase.rpc("match_foods", {
     query_embedding: embedding,
+    query_text: query,
     match_threshold: 0.6,
     match_count: 5,
   });
@@ -95,7 +101,11 @@ export async function manualSearch(searchTerm: string) {
     protein_100g: number | null;
     carbs_100g: number | null;
     fat_100g: number | null;
+    fiber_100g: number | null;
+    sugar_100g: number | null;
+    sodium_100g: number | null;
     similarity?: number | null;
+    text_rank?: number | null;
   };
 
   return (
@@ -105,7 +115,11 @@ export async function manualSearch(searchTerm: string) {
       protein_100g: row.protein_100g ?? null,
       carbs_100g: row.carbs_100g ?? null,
       fat_100g: row.fat_100g ?? null,
+      fiber_100g: row.fiber_100g ?? null,
+      sugar_100g: row.sugar_100g ?? null,
+      sodium_100g: row.sodium_100g ?? null,
       similarity: row.similarity ?? null,
+      text_rank: row.text_rank ?? null,
     })) ?? []
   );
 }
@@ -114,45 +128,6 @@ export async function signOutAction() {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
   redirect("/login");
-}
-
-type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
-type GoalType = "lose" | "maintain" | "gain";
-
-const activityMultipliers: Record<ActivityLevel, number> = {
-  sedentary: 1.2,
-  light: 1.375,
-  moderate: 1.55,
-  active: 1.725,
-  very_active: 1.9,
-};
-
-function calculateTargets({
-  height,
-  weight,
-  age,
-  activityLevel,
-  goalType,
-}: {
-  height: number;
-  weight: number;
-  age: number;
-  activityLevel: ActivityLevel;
-  goalType: GoalType;
-}) {
-  const bmr = 10 * weight + 6.25 * height - 5 * age + 5;
-  const tdee = bmr * (activityMultipliers[activityLevel] ?? 1.2);
-  let calorieTarget = tdee;
-
-  if (goalType === "lose") calorieTarget = tdee * 0.85;
-  if (goalType === "gain") calorieTarget = tdee * 1.1;
-
-  const proteinTarget = weight * 1.6;
-
-  return {
-    daily_calorie_target: Math.round(calorieTarget),
-    daily_protein_target: Math.round(proteinTarget),
-  };
 }
 
 export async function upsertUserProfile(input: {
@@ -365,6 +340,30 @@ export async function applyMealTemplate(templateId: string) {
   revalidatePath("/");
   revalidatePath("/stats");
   return data;
+}
+
+export async function deleteMealTemplate(id: string) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to delete templates.");
+  }
+
+  const { error } = await supabase
+    .from("meal_templates")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", session.user.id);
+
+  if (error) {
+    throw error;
+  }
+
+  revalidatePath("/");
+  revalidatePath("/stats");
 }
 
 export async function getRecentFoods() {

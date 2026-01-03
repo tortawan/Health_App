@@ -13,6 +13,15 @@ export default function WeightLogger({
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
 
+  const toUtcDate = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+      return new Date().toISOString();
+    }
+    const utcDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    return utcDate.toISOString();
+  };
+
   const submit = async () => {
     if (!weight || weight <= 0) {
       toast.error("Enter a valid weight in kg");
@@ -21,7 +30,7 @@ export default function WeightLogger({
 
     setLoading(true);
     try {
-      await logWeight(weight, new Date(date).toISOString());
+      await logWeight(weight, toUtcDate(date));
       toast.success("Weight saved");
     } catch (err) {
       console.error(err);

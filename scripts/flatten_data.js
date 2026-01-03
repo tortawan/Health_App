@@ -19,6 +19,9 @@ const MACRO_IDS = {
   protein_100g: 1003,
   carbs_100g: 1005,
   fat_100g: 1004,
+  fiber_100g: 1079,
+  sugar_100g: 2000,
+  sodium_100g: 1093,
 };
 
 function loadJson(filePath) {
@@ -60,6 +63,9 @@ function flattenFoods(foodRows, macroMap) {
         protein_100g: macros.protein_100g ?? null,
         carbs_100g: macros.carbs_100g ?? null,
         fat_100g: macros.fat_100g ?? null,
+        fiber_100g: macros.fiber_100g ?? null,
+        sugar_100g: macros.sugar_100g ?? null,
+        sodium_100g: macros.sodium_100g ?? null,
       };
     })
     .filter((row) => !!row.description);

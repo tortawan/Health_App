@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:unit": "vitest",
     "test:e2e": "playwright test",
     "usda:download": "node scripts/download_usda.js",
     "usda:flatten": "node scripts/flatten_data.js",
@@ -39,6 +40,7 @@
     "eslint-config-next": "^15.0.3",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
   }
 }
