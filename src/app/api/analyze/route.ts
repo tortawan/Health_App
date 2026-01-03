@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 import { supabaseServer } from "@/lib/supabase";
 import { FOOD_PROMPT, geminiClient } from "@/lib/gemini";
 import { getEmbedder } from "@/lib/embedder";
@@ -22,8 +24,52 @@ const FALLBACK: GeminiItem[] = [
   },
 ];
 
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+    : null;
+
+const rateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, "1 m"),
+      analytics: true,
+      prefix: "ratelimit:analyze",
+    })
+  : null;
+
 export async function POST(request: Request) {
   const formData = await request.formData();
+  if ([...formData.keys()].length === 0) {
+    return NextResponse.json(
+      { error: "No form data received" },
+      { status: 400 },
+    );
+  }
+
+  if (rateLimiter) {
+    const clientIp =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      "anonymous";
+    const { success, reset } = await rateLimiter.limit(clientIp);
+
+    if (!success) {
+      const retryAfter = reset
+        ? Math.max(0, Math.ceil((reset - Date.now()) / 1000))
+        : 60;
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please try again shortly." },
+        {
+          status: 429,
+          headers: { "Retry-After": retryAfter.toString() },
+        },
+      );
+    }
+  }
+
   const file = formData.get("file") as File | null;
 
   if (!file) {
