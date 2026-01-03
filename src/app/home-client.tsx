@@ -6,7 +6,6 @@ import React, { useMemo, useState, useTransition } from "react";
 import toast from "react-hot-toast";
 import {
   deleteFoodLog,
-  logFood,
   manualSearch,
   applyMealTemplate,
   getRecentFoods,
@@ -14,16 +13,22 @@ import {
   signOutAction,
   updateFoodLog,
   upsertUserProfile,
+  deleteMealTemplate,
   type MealTemplateItem,
 } from "./actions";
 import { supabaseBrowser } from "@/lib/supabase-browser";
+import { adjustedMacros, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 type MacroMatch = {
   description: string;
   kcal_100g: number | null;
   protein_100g: number | null;
   carbs_100g: number | null;
   fat_100g: number | null;
+  fiber_100g?: number | null;
+  sugar_100g?: number | null;
+  sodium_100g?: number | null;
   similarity?: number | null;
+  text_rank?: number | null;
 };
 
 type DraftLog = {
@@ -79,8 +84,6 @@ type RecentFood = {
   weight_g: number;
 };
 
-type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
-type GoalType = "lose" | "maintain" | "gain";
 type ProfileFormState = {
   height: number;
   weight: number;
@@ -126,20 +129,6 @@ function formatNumber(value: number | null | undefined, digits = 1) {
   return Number(value).toFixed(digits);
 }
 
-function adjustedMacros(match: MacroMatch | undefined, weight: number) {
-  if (!match) return null;
-  const factor = weight / 100;
-  const calc = (value: number | null | undefined) =>
-    value === null || value === undefined ? null : Number(value) * factor;
-
-  return {
-    calories: calc(match.kcal_100g),
-    protein: calc(match.protein_100g),
-    carbs: calc(match.carbs_100g),
-    fat: calc(match.fat_100g),
-  };
-}
-
 function buildRingStyle(progress: number, isOver: boolean) {
   const clamped = Math.min(Math.max(progress, 0), 1);
   const percent = clamped * 360;
@@ -159,6 +148,36 @@ function buildDonutStyle(progress: number, color: string) {
   return {
     background: `conic-gradient(${color} ${percent}deg, ${bg} 0deg)`,
   };
+}
+
+async function submitLogFood(payload: {
+  foodName: string;
+  weight: number;
+  match?: MacroMatch;
+  imageUrl?: string | null;
+  manualMacros?: {
+    calories: number | null;
+    protein?: number | null;
+    carbs?: number | null;
+    fat?: number | null;
+  };
+}) {
+  const response = await fetch("/api/log-food", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (response.status === 202) {
+    return { queued: true, data: null };
+  }
+
+  if (!response.ok) {
+    const payloadText = await response.text();
+    throw new Error(payloadText || "Unable to save your log entry.");
+  }
+
+  return { queued: false, data: await response.json() };
 }
 
 async function resizeImageFile(file: File) {
@@ -298,6 +317,8 @@ export default function HomeClient({
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [templateBeingDeleted, setTemplateBeingDeleted] = useState<string | null>(null);
   const [portionMemoryList, setPortionMemoryList] = useState<PortionMemoryRow[]>(portionMemory);
   const [recentFoods, setRecentFoods] = useState<MacroMatch[]>(
     initialRecentFoods.map((item) => ({
@@ -620,15 +641,19 @@ export default function HomeClient({
     setLoggingIndex(index);
 
     try {
-      const inserted = await logFood({
+      const result = await submitLogFood({
         foodName: item.food_name,
         weight: item.weight,
         match: item.match,
         imageUrl: imagePublicUrl,
       });
-      setDailyLogs((prev) => [inserted as FoodLogRecord, ...prev]);
-      bumpPortionMemory(item.food_name, item.weight);
-      toast.success("Food log saved");
+      if (result.queued) {
+        toast.success("Offline — queued for sync once you reconnect");
+      } else if (result.data) {
+        setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
+        bumpPortionMemory(item.food_name, item.weight);
+        toast.success("Food log saved");
+      }
     } catch (err) {
       console.error(err);
       setError(
@@ -649,7 +674,7 @@ export default function HomeClient({
     setIsQuickSaving(true);
     setError(null);
     try {
-      const inserted = await logFood({
+      const result = await submitLogFood({
         foodName: quickName.trim(),
         weight: 1,
         manualMacros: {
@@ -659,13 +684,17 @@ export default function HomeClient({
           fat: quickFat ?? null,
         },
       });
-      setDailyLogs((prev) => [inserted as FoodLogRecord, ...prev]);
-      setQuickName("");
-      setQuickCalories(null);
-      setQuickProtein(null);
-      setQuickCarbs(null);
-      setQuickFat(null);
-      toast.success("Entry added");
+      if (result.queued) {
+        toast.success("Quick add queued for sync when back online");
+      } else if (result.data) {
+        setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
+        setQuickName("");
+        setQuickCalories(null);
+        setQuickProtein(null);
+        setQuickCarbs(null);
+        setQuickFat(null);
+        toast.success("Entry added");
+      }
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Unable to quick add.");
@@ -743,6 +772,28 @@ export default function HomeClient({
       toast.error("Unable to save template");
     } finally {
       setIsSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    setTemplateBeingDeleted(templateId);
+    setError(null);
+    try {
+      await deleteMealTemplate(templateId);
+      setTemplateList((prev) => {
+        const next = prev.filter((template) => template.id !== templateId);
+        if (selectedTemplateId === templateId) {
+          setSelectedTemplateId(next[0]?.id ?? null);
+        }
+        return next;
+      });
+      toast.success("Template deleted");
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Unable to delete template.");
+      toast.error("Unable to delete template");
+    } finally {
+      setTemplateBeingDeleted(null);
     }
   };
 
@@ -877,6 +928,12 @@ export default function HomeClient({
               href="/stats"
             >
               Stats
+            </a>
+            <a
+              className="btn bg-white/10 text-white hover:bg-white/20"
+              href="/settings"
+            >
+              Settings
             </a>
             <div className="text-right">
               <p className="text-xs uppercase tracking-wide text-white/40">
@@ -1155,6 +1212,13 @@ export default function HomeClient({
                     type="button"
                   >
                     {isApplyingTemplate ? "Loading..." : "Quick load meal"}
+                  </button>
+                  <button
+                    className="btn bg-white/10 text-white hover:bg-white/20"
+                    onClick={() => setShowTemplateManager(true)}
+                    type="button"
+                  >
+                    Manage templates
                   </button>
                 </div>
               </div>
@@ -1658,6 +1722,57 @@ export default function HomeClient({
         )}
       </section>
 
+      {showTemplateManager && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-wide text-emerald-200">
+                  Manage meal templates
+                </p>
+                <h4 className="text-lg font-semibold text-white">Delete or switch templates</h4>
+              </div>
+              <button
+                className="text-white/70 hover:text-white"
+                onClick={() => setShowTemplateManager(false)}
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {templateList.length === 0 ? (
+                <p className="text-sm text-white/60">
+                  No templates saved yet. Generate a draft and save it to manage here.
+                </p>
+              ) : (
+                templateList.map((template) => (
+                  <div
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3"
+                    key={template.id}
+                  >
+                    <div>
+                      <p className="text-white">{template.name}</p>
+                      <p className="text-xs text-white/60">
+                        {template.items.length} items
+                      </p>
+                    </div>
+                    <button
+                      className="pill bg-red-500/20 text-red-100 hover:bg-red-500/30"
+                      disabled={templateBeingDeleted === template.id}
+                      onClick={() => handleDeleteTemplate(template.id)}
+                      type="button"
+                    >
+                      {templateBeingDeleted === template.id ? "Deleting..." : "🗑️ Delete"}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {manualOpenIndex !== null && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl">
@@ -1720,6 +1835,11 @@ export default function HomeClient({
                           {formatNumber(result.carbs_100g)}g • Fat{" "}
                           {formatNumber(result.fat_100g)}g
                         </p>
+                        <p className="text-xs text-white/60">
+                          Fiber {formatNumber(result.fiber_100g)}g • Sugar{" "}
+                          {formatNumber(result.sugar_100g)}g • Sodium{" "}
+                          {formatNumber(result.sodium_100g)}mg
+                        </p>
                       </button>
                     ))}
                   </div>
@@ -1732,16 +1852,22 @@ export default function HomeClient({
                       key={`${result.description}-${idx}`}
                       onClick={() => applyManualResult(result)}
                       type="button"
-                    >
-                      <p className="text-white">{result.description}</p>
-                      <p className="text-xs text-white/60">
-                        Similarity {formatNumber(result.similarity, 2)}
+                      >
+                        <p className="text-white">{result.description}</p>
+                        <p className="text-xs text-white/60">
+                        Similarity {formatNumber(result.similarity, 2)} • Text rank{" "}
+                          {formatNumber(result.text_rank, 2)}
                       </p>
                       <p className="text-sm text-white/70">
                         Kcal {formatNumber(result.kcal_100g)} • Protein{" "}
                         {formatNumber(result.protein_100g)}g • Carbs{" "}
                         {formatNumber(result.carbs_100g)}g • Fat{" "}
                         {formatNumber(result.fat_100g)}g
+                      </p>
+                      <p className="text-xs text-white/60">
+                        Fiber {formatNumber(result.fiber_100g)}g • Sugar{" "}
+                        {formatNumber(result.sugar_100g)}g • Sodium{" "}
+                        {formatNumber(result.sodium_100g)}mg
                       </p>
                     </button>
                   ))

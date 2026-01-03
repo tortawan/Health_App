@@ -124,6 +124,10 @@ export default async function HomePage({
     .eq("user_id", session.user.id)
     .maybeSingle();
 
+  if (!profile || profile.daily_calorie_target === null || profile.daily_calorie_target === 0) {
+    redirect("/onboarding");
+  }
+
   const { data: streakLogs } = await supabase
     .from("food_logs")
     .select("consumed_at")

@@ -130,6 +130,7 @@ export async function POST(request: Request) {
 
       const { data: matches } = await supabaseServer.rpc("match_foods", {
         query_embedding: embedding,
+        query_text: item.search_term,
         match_threshold: 0.6,
         match_count: 3,
       });
@@ -145,10 +146,14 @@ export async function POST(request: Request) {
               protein_100g: top.protein_100g,
               carbs_100g: top.carbs_100g,
               fat_100g: top.fat_100g,
+              fiber_100g: top.fiber_100g,
+              sugar_100g: top.sugar_100g,
+              sodium_100g: top.sodium_100g,
               similarity:
                 top.similarity ??
                 (typeof top.distance === "number" ? 1 - top.distance : null) ??
                 null,
+              text_rank: top.text_rank ?? null,
             }
           : undefined,
       };
