@@ -26,7 +26,7 @@ export async function logFood(entry: {
     fat?: number | null;
   };
 }) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -209,7 +209,7 @@ export async function upsertUserProfile(input: {
 }
 
 export async function updateFoodLog(id: string, changes: Partial<{ food_name: string; weight_g: number; calories: number | null; protein: number | null; carbs: number | null; fat: number | null }>) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -233,7 +233,7 @@ export async function updateFoodLog(id: string, changes: Partial<{ food_name: st
 }
 
 export async function deleteFoodLog(id: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -257,7 +257,7 @@ export async function deleteFoodLog(id: string) {
 }
 
 export async function logWeight(weightKg: number, loggedAt?: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -289,7 +289,7 @@ export type MealTemplateItem = {
 };
 
 export async function saveMealTemplate(name: string, items: MealTemplateItem[]) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -316,7 +316,7 @@ export async function saveMealTemplate(name: string, items: MealTemplateItem[]) 
 }
 
 export async function applyMealTemplate(templateId: string) {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -368,7 +368,7 @@ export async function applyMealTemplate(templateId: string) {
 }
 
 export async function getRecentFoods() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();

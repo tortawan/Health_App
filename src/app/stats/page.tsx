@@ -8,7 +8,7 @@ function formatLabel(date: Date) {
 }
 
 export default async function StatsPage() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
