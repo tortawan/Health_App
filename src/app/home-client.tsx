@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import toast from "react-hot-toast";
 import { logFood, manualSearch, signOutAction } from "./actions";
+import { supabaseBrowser } from "@/lib/supabase";
 
 type MacroMatch = {
   description: string;
@@ -39,6 +42,29 @@ function extractWeight(estimate: string) {
   return 100;
 }
 
+function buildDateFromInput(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (
+    Number.isNaN(year) ||
+    Number.isNaN(month) ||
+    Number.isNaN(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return new Date();
+  }
+  return new Date(year, month - 1, day);
+}
+
+function formatDateParam(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatNumber(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return "—";
@@ -63,12 +89,16 @@ function adjustedMacros(match: MacroMatch | undefined, weight: number) {
 export default function HomeClient({
   initialLogs,
   userEmail,
+  selectedDate,
 }: {
   initialLogs: FoodLogRecord[];
   userEmail: string | null | undefined;
+  selectedDate: string;
 }) {
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [imagePublicUrl, setImagePublicUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
   const [draft, setDraft] = useState<DraftLog[]>([]);
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +110,7 @@ export default function HomeClient({
   const [manualResults, setManualResults] = useState<MacroMatch[]>([]);
   const [isSearching, startSearching] = useTransition();
   const [loggingIndex, setLoggingIndex] = useState<number | null>(null);
+  const router = useRouter();
 
   const confidenceLabel = useMemo(() => {
     if (!draft[0]?.match) return "Pending";
@@ -101,15 +132,90 @@ export default function HomeClient({
     );
   }, [dailyLogs]);
 
+  const selectedDateObj = useMemo(
+    () => buildDateFromInput(selectedDate),
+    [selectedDate],
+  );
+
+  const navigateToDate = (value: string) => {
+    if (!value) {
+      router.push("/");
+      return;
+    }
+    router.push(`/?date=${value}`);
+  };
+
+  const shiftDate = (delta: number) => {
+    const adjusted = new Date(selectedDateObj);
+    adjusted.setDate(adjusted.getDate() + delta);
+    navigateToDate(formatDateParam(adjusted));
+  };
+
   const onFileChange = async (file?: File) => {
     if (!file) return;
     setError(null);
     setIsUploading(true);
+    setIsImageUploading(true);
+    setImagePublicUrl(null);
     setDraft([]);
 
     const reader = new FileReader();
     reader.onloadend = () => setFilePreview(reader.result as string);
     reader.readAsDataURL(file);
+
+    const uploadPromise = (async () => {
+      if (!supabaseBrowser) {
+        setError(
+          "Supabase storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        );
+        return null;
+      }
+
+      const bucket =
+        process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? "food-photos";
+      const extension =
+        file.name.split(".").pop() || file.type.split("/")[1] || "jpg";
+      const path = `uploads/${new Date()
+        .toISOString()
+        .slice(0, 10)}/${crypto.randomUUID()}.${extension}`;
+
+      const { error: uploadError } = await supabaseBrowser.storage
+        .from(bucket)
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const {
+        data: publicUrlData,
+        error: publicUrlError,
+      } = supabaseBrowser.storage.from(bucket).getPublicUrl(path);
+
+      if (publicUrlError) {
+        throw publicUrlError;
+      }
+
+      return publicUrlData.publicUrl;
+    })()
+      .then((url) => {
+        if (url) setImagePublicUrl(url);
+        return url;
+      })
+      .catch((uploadErr) => {
+        console.error(uploadErr);
+        setError(
+          uploadErr instanceof Error
+            ? uploadErr.message
+            : "Unable to upload the image to storage.",
+        );
+        toast.error("Image upload failed. You can still log without a photo.");
+        return null;
+      })
+      .finally(() => setIsImageUploading(false));
 
     try {
       const formData = new FormData();
@@ -143,6 +249,7 @@ export default function HomeClient({
           : "Unexpected issue analyzing the image.",
       );
     } finally {
+      await uploadPromise;
       setIsUploading(false);
     }
   };
@@ -197,26 +304,28 @@ export default function HomeClient({
         foodName: item.food_name,
         weight: item.weight,
         match: item.match,
-        imagePath: filePreview,
+        imageUrl: imagePublicUrl,
       });
       setDailyLogs((prev) => [inserted as FoodLogRecord, ...prev]);
+      toast.success("Food log saved");
     } catch (err) {
       console.error(err);
       setError(
         err instanceof Error ? err.message : "Unable to save your log entry.",
       );
+      toast.error("Unable to save your log entry");
     } finally {
       setLoggingIndex(null);
     }
   };
 
   const todayLabel = useMemo(() => {
-    return new Date().toLocaleDateString(undefined, {
+    return selectedDateObj.toLocaleDateString(undefined, {
       weekday: "long",
       month: "short",
       day: "numeric",
     });
-  }, []);
+  }, [selectedDateObj]);
 
   return (
     <main className="space-y-8">
@@ -309,7 +418,11 @@ export default function HomeClient({
               <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
                 <div className="flex flex-col items-center gap-2 text-sm text-white/80">
                   <span className="h-8 w-8 animate-ping rounded-full bg-emerald-400/60" />
-                  <p>Scanning with Gemini...</p>
+                  <p>
+                    {isImageUploading
+                      ? "Uploading photo to Supabase..."
+                      : "Scanning with Gemini..."}
+                  </p>
                 </div>
               </div>
             )}
@@ -447,11 +560,17 @@ export default function HomeClient({
                     <div className="mt-3 flex flex-wrap gap-2 text-sm">
                       <button
                         className="btn disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={!item.match || loggingIndex === index}
+                        disabled={
+                          !item.match || loggingIndex === index || isImageUploading
+                        }
                         onClick={() => handleConfirm(index)}
                         type="button"
                       >
-                        {loggingIndex === index ? "Saving..." : "Confirm"}
+                        {loggingIndex === index
+                          ? "Saving..."
+                          : isImageUploading
+                            ? "Uploading photo..."
+                            : "Confirm"}
                       </button>
                       <button
                         className="btn bg-white/10 text-white hover:bg-white/20"
@@ -510,13 +629,40 @@ export default function HomeClient({
 
       <section className="card space-y-4">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="space-y-2">
             <p className="text-sm uppercase tracking-wide text-emerald-200">
               Daily log
             </p>
-            <h3 className="text-xl font-semibold text-white">{todayLabel}</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="text-xl font-semibold text-white">{todayLabel}</h3>
+              <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/70">
+                <button
+                  aria-label="Previous day"
+                  className="rounded px-2 py-1 hover:bg-white/10"
+                  onClick={() => shiftDate(-1)}
+                  type="button"
+                >
+                  ←
+                </button>
+                <input
+                  className="rounded bg-transparent px-2 py-1 outline-none"
+                  max={new Date().toISOString().slice(0, 10)}
+                  type="date"
+                  value={selectedDate}
+                  onChange={(event) => navigateToDate(event.target.value)}
+                />
+                <button
+                  aria-label="Next day"
+                  className="rounded px-2 py-1 hover:bg-white/10"
+                  onClick={() => shiftDate(1)}
+                  type="button"
+                >
+                  →
+                </button>
+              </div>
+            </div>
             <p className="text-sm text-white/60">
-              Totals are summed from your food_logs entries for today.
+              Totals are summed from your food_logs entries for the selected date.
             </p>
           </div>
           <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-50">

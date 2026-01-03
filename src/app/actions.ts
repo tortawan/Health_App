@@ -18,7 +18,7 @@ export async function logFood(entry: {
   foodName: string;
   weight: number;
   match?: MacroMatch;
-  imagePath?: string | null;
+  imageUrl?: string | null;
 }) {
   const supabase = createSupabaseServerClient();
   const {
@@ -39,7 +39,7 @@ export async function logFood(entry: {
       user_id: session.user.id,
       food_name: entry.foodName,
       weight_g: entry.weight,
-      image_path: entry.imagePath ?? null,
+      image_path: entry.imageUrl ?? null,
       calories: calc(entry.match?.kcal_100g ?? null),
       protein: calc(entry.match?.protein_100g ?? null),
       carbs: calc(entry.match?.carbs_100g ?? null),
