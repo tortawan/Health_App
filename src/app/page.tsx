@@ -152,10 +152,24 @@ export default async function HomePage({
 
   const { data: recentFoods } = await supabase
     .from("food_logs")
-    .select("food_name, calories, protein, carbs, fat, weight_g, consumed_at")
+    .select(
+      "food_name, calories, protein, carbs, fat, fiber, sugar, sodium, weight_g, consumed_at",
+    )
     .eq("user_id", session.user.id)
     .order("consumed_at", { ascending: false })
     .limit(40);
+
+  const { data: waterLogs } = await supabase
+    .from("water_logs")
+    .select("amount_ml, logged_at")
+    .eq("user_id", session.user.id)
+    .gte("logged_at", dayStart.toISOString())
+    .lt("logged_at", nextDay.toISOString());
+
+  const initialWater = waterLogs?.reduce(
+    (total, row) => total + Number(row.amount_ml ?? 0),
+    0,
+  );
 
   return (
     <HomeClient
@@ -167,6 +181,7 @@ export default async function HomePage({
       templates={(templates as MealTemplate[] | null) ?? []}
       portionMemory={portionMemory}
       initialRecentFoods={recentFoods ?? []}
+      initialWater={initialWater ?? 0}
     />
   );
 }

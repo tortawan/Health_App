@@ -51,6 +51,9 @@ export async function logFood(entry: {
   const carbs =
     entry.manualMacros?.carbs ?? calc(entry.match?.carbs_100g ?? null);
   const fat = entry.manualMacros?.fat ?? calc(entry.match?.fat_100g ?? null);
+  const fiber = calc(entry.match?.fiber_100g ?? null);
+  const sugar = calc(entry.match?.sugar_100g ?? null);
+  const sodium = calc(entry.match?.sodium_100g ?? null);
 
   const { data, error } = await supabase
     .from("food_logs")
@@ -63,6 +66,9 @@ export async function logFood(entry: {
       protein,
       carbs,
       fat,
+      fiber,
+      sugar,
+      sodium,
     })
     .select()
     .single();
@@ -81,6 +87,14 @@ export async function manualSearch(searchTerm: string) {
 
   if (!query) return [];
 
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to search.");
+  }
+
   const embed = await getEmbedder();
   const { data: embedding } = await embed(query);
 
@@ -89,6 +103,7 @@ export async function manualSearch(searchTerm: string) {
     query_text: query,
     match_threshold: 0.6,
     match_count: 5,
+    user_id: session.user.id,
   });
 
   if (error) {
@@ -378,7 +393,9 @@ export async function getRecentFoods() {
 
   const { data, error } = await supabase
     .from("food_logs")
-    .select("food_name, calories, protein, carbs, fat, weight_g, consumed_at")
+    .select(
+      "food_name, calories, protein, carbs, fat, fiber, sugar, sodium, weight_g, consumed_at",
+    )
     .eq("user_id", session.user.id)
     .order("consumed_at", { ascending: false })
     .limit(40);
@@ -399,10 +416,138 @@ export async function getRecentFoods() {
       protein_100g: row.protein ?? null,
       carbs_100g: row.carbs ?? null,
       fat_100g: row.fat ?? null,
+      fiber_100g: row.fiber ?? null,
+      sugar_100g: row.sugar ?? null,
+      sodium_100g: row.sodium ?? null,
       similarity: null,
     });
     if (unique.length >= 10) break;
   }
 
   return unique;
+}
+
+export async function copyDay(sourceDate: string) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to copy a day.");
+  }
+
+  const source = new Date(sourceDate);
+  source.setHours(0, 0, 0, 0);
+  const next = new Date(source);
+  next.setDate(source.getDate() + 1);
+
+  const { data: logs, error } = await supabase
+    .from("food_logs")
+    .select(
+      "food_name, weight_g, calories, protein, carbs, fat, fiber, sugar, sodium, image_path, consumed_at",
+    )
+    .eq("user_id", session.user.id)
+    .gte("consumed_at", source.toISOString())
+    .lt("consumed_at", next.toISOString());
+
+  if (error) {
+    throw error;
+  }
+
+  if (!logs?.length) {
+    throw new Error("No logs found for that date to copy.");
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const payload = logs.map((log, index) => {
+    const time = new Date(log.consumed_at as string);
+    const consumedAt = new Date(today);
+    consumedAt.setHours(time.getHours(), time.getMinutes(), time.getSeconds(), index);
+
+    return {
+      user_id: session.user.id,
+      food_name: log.food_name,
+      weight_g: log.weight_g,
+      calories: log.calories,
+      protein: log.protein,
+      carbs: log.carbs,
+      fat: log.fat,
+      fiber: log.fiber ?? null,
+      sugar: log.sugar ?? null,
+      sodium: log.sodium ?? null,
+      image_path: log.image_path ?? null,
+      consumed_at: consumedAt.toISOString(),
+    };
+  });
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("food_logs")
+    .insert(payload)
+    .select();
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  revalidatePath("/");
+  revalidatePath("/stats");
+  return inserted;
+}
+
+export async function logWater(amount: number) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to log water.");
+  }
+
+  const { data, error } = await supabase
+    .from("water_logs")
+    .insert({
+      user_id: session.user.id,
+      amount_ml: amount,
+    })
+    .select("amount_ml, logged_at")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  revalidatePath("/");
+  return data;
+}
+
+export async function updatePrivacy(isPublic: boolean) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to update privacy.");
+  }
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .upsert(
+      {
+        user_id: session.user.id,
+        is_public: isPublic,
+      },
+      { onConflict: "user_id" },
+    );
+
+  if (error) {
+    throw error;
+  }
+
+  revalidatePath("/settings");
+  return { is_public: isPublic };
 }

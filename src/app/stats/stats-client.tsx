@@ -21,6 +21,8 @@ type ChartRow = {
   protein: number;
   carbs: number;
   fat: number;
+  fiber: number;
+  sodium: number;
 };
 
 export default function StatsClient({
@@ -30,7 +32,9 @@ export default function StatsClient({
   data: ChartRow[];
   target: number;
 }) {
-  const [mode, setMode] = useState<"calories" | "macros">("calories");
+  const [mode, setMode] = useState<"calories" | "macros" | "micros">(
+    "calories",
+  );
 
   const chartData = useMemo(
     () =>
@@ -56,6 +60,16 @@ export default function StatsClient({
     [data],
   );
 
+  const micronutrients = useMemo(
+    () =>
+      data.map((row) => ({
+        ...row,
+        fiberGoal: 30,
+        sodiumLimit: 2300,
+      })),
+    [data],
+  );
+
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between">
@@ -64,7 +78,11 @@ export default function StatsClient({
             Weekly trends
           </p>
           <h1 className="text-2xl font-semibold text-white">
-            {mode === "calories" ? "Calories vs. goal" : "Macro trends"}
+            {mode === "calories"
+              ? "Calories vs. goal"
+              : mode === "macros"
+                ? "Macro trends"
+                : "Micronutrients"}
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -83,6 +101,13 @@ export default function StatsClient({
             >
               Macro Trends
             </button>
+            <button
+              className={`rounded-full px-3 py-1 ${mode === "micros" ? "bg-emerald-500 text-white" : ""}`}
+              onClick={() => setMode("micros")}
+              type="button"
+            >
+              Micronutrients
+            </button>
           </div>
           <Link className="btn bg-white/10 text-white hover:bg-white/20" href="/">
             Back to tracker
@@ -91,48 +116,67 @@ export default function StatsClient({
       </div>
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          {mode === "calories" ? (
-            <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-              <XAxis dataKey="label" stroke="#9ca3af" />
-              <YAxis stroke="#9ca3af" yAxisId="calories" />
-              <YAxis stroke="#fbbf24" yAxisId="weight" orientation="right" allowDecimals={false} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#0f172a", color: "white", border: "1px solid #1f2937" }}
-              />
-              <Legend />
-              <Bar dataKey="calories" fill="#34d399" name="Calories" yAxisId="calories" />
-              <Bar dataKey="goal" fill="#2563eb" name="Goal" yAxisId="calories" />
-              <Line
-                type="monotone"
-                dataKey="weight"
-                name="Weight (kg)"
-                stroke="#fbbf24"
-                strokeWidth={2}
-                yAxisId="weight"
-                dot={{ stroke: "#fbbf24", fill: "#0f172a" }}
-              />
-            </ComposedChart>
-          ) : (
-            <ComposedChart data={macroRatios}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-              <XAxis dataKey="label" stroke="#9ca3af" />
-              <YAxis stroke="#9ca3af" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#0f172a", color: "white", border: "1px solid #1f2937" }}
-                formatter={(value, name, props) => {
-                  const key = name.toString().toLowerCase();
-                  const gramsKey = key.replace(" ratio", "");
-                  const grams = props.payload?.[gramsKey];
-                  return [`${Number(value).toFixed(1)}% (${grams ?? 0}g)`, name];
-                }}
-              />
-              <Legend />
-              <Bar dataKey="proteinRatio" stackId="macro" fill="#38bdf8" name="Protein ratio" />
-              <Bar dataKey="carbsRatio" stackId="macro" fill="#fbbf24" name="Carb ratio" />
-              <Bar dataKey="fatRatio" stackId="macro" fill="#f472b6" name="Fat ratio" />
-            </ComposedChart>
-          )}
+          {mode === "calories"
+            ? (
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis dataKey="label" stroke="#9ca3af" />
+                <YAxis stroke="#9ca3af" yAxisId="calories" />
+                <YAxis stroke="#fbbf24" yAxisId="weight" orientation="right" allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#0f172a", color: "white", border: "1px solid #1f2937" }}
+                />
+                <Legend />
+                <Bar dataKey="calories" fill="#34d399" name="Calories" yAxisId="calories" />
+                <Bar dataKey="goal" fill="#2563eb" name="Goal" yAxisId="calories" />
+                <Line
+                  type="monotone"
+                  dataKey="weight"
+                  name="Weight (kg)"
+                  stroke="#fbbf24"
+                  strokeWidth={2}
+                  yAxisId="weight"
+                  dot={{ stroke: "#fbbf24", fill: "#0f172a" }}
+                />
+              </ComposedChart>
+            )
+            : mode === "macros"
+              ? (
+                <ComposedChart data={macroRatios}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis dataKey="label" stroke="#9ca3af" />
+                  <YAxis stroke="#9ca3af" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#0f172a", color: "white", border: "1px solid #1f2937" }}
+                    formatter={(value, name, props) => {
+                      const key = name.toString().toLowerCase();
+                      const gramsKey = key.replace(" ratio", "");
+                      const grams = props.payload?.[gramsKey];
+                      return [`${Number(value).toFixed(1)}% (${grams ?? 0}g)`, name];
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="proteinRatio" stackId="macro" fill="#38bdf8" name="Protein ratio" />
+                  <Bar dataKey="carbsRatio" stackId="macro" fill="#fbbf24" name="Carb ratio" />
+                  <Bar dataKey="fatRatio" stackId="macro" fill="#f472b6" name="Fat ratio" />
+                </ComposedChart>
+              )
+              : (
+                <ComposedChart data={micronutrients}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis dataKey="label" stroke="#9ca3af" />
+                  <YAxis stroke="#9ca3af" yAxisId="fiber" tickFormatter={(v) => `${v}g`} />
+                  <YAxis stroke="#f472b6" yAxisId="sodium" orientation="right" tickFormatter={(v) => `${v}mg`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "#0f172a", color: "white", border: "1px solid #1f2937" }}
+                  />
+                  <Legend />
+                  <Bar dataKey="fiber" fill="#34d399" name="Fiber (g)" yAxisId="fiber" />
+                  <Bar dataKey="fiberGoal" fill="#2563eb" name="Fiber goal (30g)" yAxisId="fiber" />
+                  <Bar dataKey="sodium" fill="#f472b6" name="Sodium (mg)" yAxisId="sodium" />
+                  <Bar dataKey="sodiumLimit" fill="#f59e0b" name="Sodium limit (2300mg)" yAxisId="sodium" />
+                </ComposedChart>
+              )}
         </ResponsiveContainer>
       </div>
     </div>

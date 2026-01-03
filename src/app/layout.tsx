@@ -23,6 +23,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-slate-950 text-slate-50">
         <div className="mx-auto max-w-5xl px-6 py-10">{children}</div>
+        <footer className="mt-8 border-t border-white/5 bg-slate-950/80 px-6 py-4 text-center text-xs text-white/60 backdrop-blur">
+          Food images are processed by Google AI.
+        </footer>
         <ToastProvider />
         <ServiceWorkerRegister />
       </body>

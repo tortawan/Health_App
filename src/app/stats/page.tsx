@@ -24,7 +24,7 @@ export default async function StatsPage() {
 
   const { data: logs } = await supabase
     .from("food_logs")
-    .select("calories, protein, carbs, fat, consumed_at")
+    .select("calories, protein, carbs, fat, fiber, sodium, consumed_at")
     .eq("user_id", session.user.id)
     .gte("consumed_at", start.toISOString())
     .lte("consumed_at", end.toISOString());
@@ -41,21 +41,39 @@ export default async function StatsPage() {
 
   const calorieTarget = profile?.daily_calorie_target ?? 2000;
 
-  const days: { [key: string]: { calories: number; protein: number; carbs: number; fat: number } } = {};
+  const days: {
+    [key: string]: {
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+      fiber: number;
+      sodium: number;
+    };
+  } = {};
   const cursor = new Date(start);
   for (let i = 0; i < 7; i++) {
     const key = cursor.toISOString().slice(0, 10);
-    days[key] = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    days[key] = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sodium: 0 };
     cursor.setDate(cursor.getDate() + 1);
   }
 
   logs?.forEach((log) => {
     const key = (log.consumed_at as string).slice(0, 10);
-    const entry = days[key] ?? { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    const entry = days[key] ?? {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      fiber: 0,
+      sodium: 0,
+    };
     entry.calories = (entry.calories ?? 0) + Number(log.calories ?? 0);
     entry.protein = (entry.protein ?? 0) + Number(log.protein ?? 0);
     entry.carbs = (entry.carbs ?? 0) + Number(log.carbs ?? 0);
     entry.fat = (entry.fat ?? 0) + Number(log.fat ?? 0);
+    entry.fiber = (entry.fiber ?? 0) + Number(log.fiber ?? 0);
+    entry.sodium = (entry.sodium ?? 0) + Number(log.sodium ?? 0);
     days[key] = entry;
   });
 
@@ -79,6 +97,8 @@ export default async function StatsPage() {
     protein: totals.protein,
     carbs: totals.carbs,
     fat: totals.fat,
+    fiber: totals.fiber,
+    sodium: totals.sodium,
     weight: weightByDay[date] ?? null,
   }));
 

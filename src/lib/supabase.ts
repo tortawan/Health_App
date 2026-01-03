@@ -32,14 +32,14 @@ export async function createSupabaseServerClient() {
       set(name, value, options) {
         try {
           cookieStore.set({ name, value, ...options });
-        } catch (error) {
+        } catch {
           // Handle setting cookies in Server Components (which isn't allowed)
         }
       },
       remove(name, options) {
         try {
           cookieStore.set({ name, value: "", ...options });
-        } catch (error) {
+        } catch {
           // Handle deleting cookies in Server Components
         }
       },
