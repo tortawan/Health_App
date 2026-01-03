@@ -1,7 +1,7 @@
 import path from "node:path";
 import { test, expect } from "@playwright/test";
 
-const TEST_EMAIL = process.env.PLAYWRIGHT_EMAIL || "test@example.com";
+const TEST_EMAIL = process.env.PLAYWRIGHT_EMAIL || "tortawan@gmail.com";
 const TEST_PASSWORD = process.env.PLAYWRIGHT_PASSWORD || "password123";
 
 test("image draft to confirmed log flow", async ({ page }) => {

@@ -13,14 +13,14 @@
           - text: Email
           - textbox "Email" [ref=e11]:
             - /placeholder: you@example.com
-            - text: test@example.com
+            - text: tortawan@gmail.com
         - generic [ref=e12]:
           - text: Password
           - textbox "Password" [ref=e13]:
             - /placeholder: ••••••••
             - text: password123
         - button "Sign in" [ref=e14] [cursor=pointer]
-      - generic [ref=e15]: Invalid login credentials
+      - generic [ref=e15]: Email not confirmed
   - button "Open Next.js Dev Tools" [ref=e21] [cursor=pointer]:
     - img [ref=e22]
   - alert [ref=e25]
