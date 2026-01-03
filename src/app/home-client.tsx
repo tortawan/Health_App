@@ -16,8 +16,7 @@ import {
   upsertUserProfile,
   type MealTemplateItem,
 } from "./actions";
-import { supabaseBrowser } from "@/lib/supabase";
-
+import { supabaseBrowser } from "@/lib/supabase-browser";
 type MacroMatch = {
   description: string;
   kcal_100g: number | null;

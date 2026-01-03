@@ -1,16 +1,11 @@
-import { createBrowserClient, createServerClient } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.warn(
-    "Supabase credentials are missing. Populate NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable API calls.",
-  );
-}
-
+// Generic server client (for API routes/admin)
 export const supabaseServer = supabaseUrl && supabaseKey
   ? createClient(supabaseUrl, supabaseKey, {
       auth: {
@@ -19,35 +14,34 @@ export const supabaseServer = supabaseUrl && supabaseKey
     })
   : null;
 
-export const supabaseBrowser = supabaseUrl && supabaseKey
-  ? createBrowserClient(supabaseUrl, supabaseKey)
-  : null;
-
-export function createSupabaseServerClient() {
-  const cookieStore = cookies();
+// Context-aware server client (for Server Actions/Pages)
+export async function createSupabaseServerClient() {
+  const cookieStore = await cookies(); // Await cookies() in Next.js 15+
 
   if (!supabaseUrl || !supabaseKey) {
     throw new Error(
-      "Supabase credentials are missing. Populate NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable API calls.",
+      "Supabase credentials are missing. Populate NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
     );
   }
 
   return createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
       get(name) {
-        return cookieStore.get(name);
+        return cookieStore.get(name)?.value;
       },
       set(name, value, options) {
-        cookieStore.set({ name, value, ...options, path: options?.path ?? "/" });
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch (error) {
+          // Handle setting cookies in Server Components (which isn't allowed)
+        }
       },
       remove(name, options) {
-        cookieStore.set({
-          name,
-          value: "",
-          ...options,
-          path: options?.path ?? "/",
-          expires: new Date(0),
-        });
+        try {
+          cookieStore.set({ name, value: "", ...options });
+        } catch (error) {
+          // Handle deleting cookies in Server Components
+        }
       },
     },
   });
