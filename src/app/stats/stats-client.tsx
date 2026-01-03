@@ -3,20 +3,21 @@
 import Link from "next/link";
 import {
   Bar,
-  BarChart,
+  ComposedChart,
   CartesianGrid,
   Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  Line,
 } from "recharts";
 
 export default function StatsClient({
   data,
   target,
 }: {
-  data: { label: string; calories: number }[];
+  data: { label: string; calories: number; weight: number | null }[];
   target: number;
 }) {
   const chartData = data.map((row) => ({
@@ -39,17 +40,27 @@ export default function StatsClient({
       </div>
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
+          <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
             <XAxis dataKey="label" stroke="#9ca3af" />
-            <YAxis stroke="#9ca3af" />
+            <YAxis stroke="#9ca3af" yAxisId="calories" />
+            <YAxis stroke="#fbbf24" yAxisId="weight" orientation="right" allowDecimals={false} />
             <Tooltip
               contentStyle={{ backgroundColor: "#0f172a", color: "white", border: "1px solid #1f2937" }}
             />
             <Legend />
-            <Bar dataKey="calories" fill="#34d399" name="Calories" />
-            <Bar dataKey="goal" fill="#2563eb" name="Goal" />
-          </BarChart>
+            <Bar dataKey="calories" fill="#34d399" name="Calories" yAxisId="calories" />
+            <Bar dataKey="goal" fill="#2563eb" name="Goal" yAxisId="calories" />
+            <Line
+              type="monotone"
+              dataKey="weight"
+              name="Weight (kg)"
+              stroke="#fbbf24"
+              strokeWidth={2}
+              yAxisId="weight"
+              dot={{ stroke: "#fbbf24", fill: "#0f172a" }}
+            />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>

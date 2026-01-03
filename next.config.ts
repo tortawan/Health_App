@@ -1,6 +1,38 @@
 import type { NextConfig } from "next";
+import createNextPWA from "next-pwa";
 
-const nextConfig: NextConfig = {
+const isProd = process.env.NODE_ENV === "production";
+
+const runtimeCaching = [
+  {
+    urlPattern: /^https:\/\/fonts\.(gstatic|googleapis)\.com\/.*/i,
+    handler: "CacheFirst",
+    options: {
+      cacheName: "google-fonts",
+      expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 },
+    },
+  },
+  {
+    urlPattern: /^https?:\/\/.*/i,
+    handler: "NetworkFirst",
+    options: {
+      cacheName: "offline-cache",
+      networkTimeoutSeconds: 10,
+      expiration: { maxEntries: 150, maxAgeSeconds: 60 * 60 * 24 * 7 },
+    },
+  },
+];
+
+const withPWA = createNextPWA({
+  dest: "public",
+  disable: !isProd,
+  register: true,
+  skipWaiting: true,
+  runtimeCaching,
+  buildExcludes: [/middleware-manifest.json$/],
+});
+
+const nextConfig: NextConfig = withPWA({
   reactStrictMode: true,
   experimental: {
     serverActions: {
@@ -38,6 +70,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-};
+});
 
 export default nextConfig;

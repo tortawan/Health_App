@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import StatsClient from "./stats-client";
+import WeightLogger from "../WeightLogger";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
 function formatLabel(date: Date) {
@@ -49,10 +50,35 @@ export default async function StatsPage() {
     days[key] = (days[key] ?? 0) + Number(log.calories ?? 0);
   });
 
+  const { data: weightLogs } = await supabase
+    .from("weight_logs")
+    .select("weight_kg, logged_at")
+    .eq("user_id", session.user.id)
+    .gte("logged_at", start.toISOString())
+    .lte("logged_at", end.toISOString())
+    .order("logged_at", { ascending: true });
+
+  const weightByDay: Record<string, number> = {};
+  weightLogs?.forEach((row) => {
+    const key = (row.logged_at as string).slice(0, 10);
+    weightByDay[key] = Number(row.weight_kg);
+  });
+
   const chartData = Object.entries(days).map(([date, calories]) => ({
     label: formatLabel(new Date(date)),
     calories,
+    weight: weightByDay[date] ?? null,
   }));
 
-  return <StatsClient data={chartData} target={calorieTarget} />;
+  const latestWeight =
+    weightLogs && weightLogs.length
+      ? Number(weightLogs[weightLogs.length - 1].weight_kg)
+      : null;
+
+  return (
+    <div className="space-y-4">
+      <StatsClient data={chartData} target={calorieTarget} />
+      <WeightLogger defaultWeight={latestWeight} />
+    </div>
+  );
 }

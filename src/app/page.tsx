@@ -14,6 +14,18 @@ type UserProfile = {
   daily_protein_target: number | null;
 };
 
+type MealTemplate = {
+  id: string;
+  name: string;
+  items: unknown;
+};
+
+type PortionMemoryRow = {
+  food_name: string;
+  weight_g: number;
+  count: number;
+};
+
 function parseDateParam(dateValue?: string | string[]) {
   if (!dateValue || Array.isArray(dateValue)) return new Date();
 
@@ -120,6 +132,28 @@ export default async function HomePage({
     ? calculateStreak(streakLogs.map((row) => row.consumed_at as string))
     : 0;
 
+  const { data: templates } = await supabase
+    .from("meal_templates")
+    .select("id, name, items")
+    .eq("user_id", session.user.id)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const { data: portionMemory } = await supabase
+    .from("food_logs")
+    .select("food_name, weight_g, count:count(*)")
+    .eq("user_id", session.user.id)
+    .group("food_name, weight_g")
+    .order("count", { ascending: false })
+    .limit(100);
+
+  const { data: recentFoods } = await supabase
+    .from("food_logs")
+    .select("food_name, calories, protein, carbs, fat, weight_g, consumed_at")
+    .eq("user_id", session.user.id)
+    .order("consumed_at", { ascending: false })
+    .limit(40);
+
   return (
     <HomeClient
       initialLogs={logs ?? []}
@@ -127,6 +161,9 @@ export default async function HomePage({
       selectedDate={formatDateParam(dayStart)}
       profile={profile as UserProfile | null}
       streak={streak}
+      templates={(templates as MealTemplate[] | null) ?? []}
+      portionMemory={(portionMemory as PortionMemoryRow[] | null) ?? []}
+      initialRecentFoods={recentFoods ?? []}
     />
   );
 }

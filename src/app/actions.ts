@@ -255,3 +255,155 @@ export async function deleteFoodLog(id: string) {
   revalidatePath("/");
   revalidatePath("/stats");
 }
+
+export async function logWeight(weightKg: number, loggedAt?: string) {
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to save weight.");
+  }
+
+  const { error } = await supabase.from("weight_logs").insert({
+    user_id: session.user.id,
+    weight_kg: weightKg,
+    logged_at: loggedAt ?? new Date().toISOString(),
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  revalidatePath("/stats");
+}
+
+export type MealTemplateItem = {
+  food_name: string;
+  weight_g: number;
+  calories: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+};
+
+export async function saveMealTemplate(name: string, items: MealTemplateItem[]) {
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to save templates.");
+  }
+
+  const { data, error } = await supabase
+    .from("meal_templates")
+    .insert({
+      user_id: session.user.id,
+      name,
+      items,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function applyMealTemplate(templateId: string) {
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to load templates.");
+  }
+
+  const { data: template, error: templateError } = await supabase
+    .from("meal_templates")
+    .select("items, name, user_id")
+    .eq("id", templateId)
+    .maybeSingle();
+
+  if (templateError) {
+    throw templateError;
+  }
+
+  if (!template || template.user_id !== session.user.id) {
+    throw new Error("Template not found.");
+  }
+
+  const now = new Date();
+  const payload =
+    (template.items as MealTemplateItem[] | null)?.map((item, index) => ({
+      user_id: session.user.id,
+      food_name: item.food_name,
+      weight_g: item.weight_g,
+      calories: item.calories,
+      protein: item.protein,
+      carbs: item.carbs,
+      fat: item.fat,
+      consumed_at: new Date(now.getTime() - index * 1000).toISOString(),
+    })) ?? [];
+
+  if (!payload.length) {
+    throw new Error("Template has no items to insert.");
+  }
+
+  const { data, error } = await supabase.from("food_logs").insert(payload).select();
+
+  if (error) {
+    throw error;
+  }
+
+  revalidatePath("/");
+  revalidatePath("/stats");
+  return data;
+}
+
+export async function getRecentFoods() {
+  const supabase = createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to view recents.");
+  }
+
+  const { data, error } = await supabase
+    .from("food_logs")
+    .select("food_name, calories, protein, carbs, fat, weight_g, consumed_at")
+    .eq("user_id", session.user.id)
+    .order("consumed_at", { ascending: false })
+    .limit(40);
+
+  if (error) {
+    throw error;
+  }
+
+  const seen = new Set<string>();
+  const unique = [];
+  for (const row of data ?? []) {
+    const name = row.food_name.toLowerCase();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    unique.push({
+      description: row.food_name,
+      kcal_100g: row.calories ?? null,
+      protein_100g: row.protein ?? null,
+      carbs_100g: row.carbs ?? null,
+      fat_100g: row.fat ?? null,
+      similarity: null,
+    });
+    if (unique.length >= 10) break;
+  }
+
+  return unique;
+}

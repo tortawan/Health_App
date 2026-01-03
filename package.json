@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:e2e": "playwright test",
     "usda:download": "node scripts/download_usda.js",
     "usda:flatten": "node scripts/flatten_data.js",
     "usda:embed": "node scripts/embed_and_upload.js"
@@ -25,12 +26,14 @@
     "react-hot-toast": "^2.4.1",
     "next": "^15.0.3",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "next-pwa": "^5.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.4",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@playwright/test": "^1.48.2",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.14.0",
     "eslint-config-next": "^15.0.3",

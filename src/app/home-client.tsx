@@ -8,9 +8,13 @@ import {
   deleteFoodLog,
   logFood,
   manualSearch,
+  applyMealTemplate,
+  getRecentFoods,
+  saveMealTemplate,
   signOutAction,
   updateFoodLog,
   upsertUserProfile,
+  type MealTemplateItem,
 } from "./actions";
 import { supabaseBrowser } from "@/lib/supabase";
 
@@ -54,6 +58,27 @@ type UserProfile = {
   daily_calorie_target: number | null;
   daily_protein_target: number | null;
 } | null;
+
+type MealTemplate = {
+  id: string;
+  name: string;
+  items: MealTemplateItem[];
+};
+
+type PortionMemoryRow = {
+  food_name: string;
+  weight_g: number;
+  count: number;
+};
+
+type RecentFood = {
+  food_name: string;
+  calories: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+  weight_g: number;
+};
 
 type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
 type GoalType = "lose" | "maintain" | "gain";
@@ -124,6 +149,16 @@ function buildRingStyle(progress: number, isOver: boolean) {
 
   return {
     background: `conic-gradient(${base} ${percent}deg, ${bg} 0deg)`,
+  };
+}
+
+function buildDonutStyle(progress: number, color: string) {
+  const clamped = Math.min(Math.max(progress, 0), 1);
+  const percent = clamped * 360;
+  const bg = "rgba(255,255,255,0.08)";
+
+  return {
+    background: `conic-gradient(${color} ${percent}deg, ${bg} 0deg)`,
   };
 }
 
@@ -220,12 +255,18 @@ export default function HomeClient({
   selectedDate,
   profile,
   streak,
+  templates,
+  portionMemory,
+  initialRecentFoods,
 }: {
   initialLogs: FoodLogRecord[];
   userEmail: string | null | undefined;
   selectedDate: string;
   profile: UserProfile;
   streak: number;
+  templates: MealTemplate[];
+  portionMemory: PortionMemoryRow[];
+  initialRecentFoods: RecentFood[];
 }) {
   const [captureMode, setCaptureMode] = useState<"photo" | "manual">("photo");
   const [filePreview, setFilePreview] = useState<string | null>(null);
@@ -253,6 +294,22 @@ export default function HomeClient({
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [templateList, setTemplateList] = useState<MealTemplate[]>(templates);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(templates[0]?.id ?? null);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [portionMemoryList, setPortionMemoryList] = useState<PortionMemoryRow[]>(portionMemory);
+  const [recentFoods, setRecentFoods] = useState<MacroMatch[]>(
+    initialRecentFoods.map((item) => ({
+      description: item.food_name,
+      kcal_100g: item.calories,
+      protein_100g: item.protein,
+      carbs_100g: item.carbs,
+      fat_100g: item.fat,
+    })),
+  );
+  const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
     height: profile?.height ?? 170,
     weight: profile?.weight ?? 70,
@@ -294,6 +351,53 @@ export default function HomeClient({
     () => buildDateFromInput(selectedDate),
     [selectedDate],
   );
+
+  const portionMemoryMap = useMemo(() => {
+    const map = new Map<string, { weight: number; count: number }>();
+    portionMemoryList.forEach((row) => {
+      const key = row.food_name.toLowerCase();
+      const existing = map.get(key);
+      if (!existing || row.count > existing.count) {
+        map.set(key, { weight: row.weight_g, count: row.count });
+      }
+    });
+    return new Map(Array.from(map.entries()).map(([key, value]) => [key, value.weight]));
+  }, [portionMemoryList]);
+
+  const macroTargets = useMemo(() => {
+    const split = profileForm.macroSplit as Record<string, number>;
+    const totalCalories = calorieTarget || 1;
+    const proteinFromSplit = ((split?.protein ?? 0) / 100) * totalCalories / 4;
+    const carbsTarget = ((split?.carbs ?? 0) / 100) * totalCalories / 4;
+    const fatTarget = ((split?.fat ?? 0) / 100) * totalCalories / 9;
+
+    return {
+      protein: proteinFromSplit > 0 ? proteinFromSplit : proteinTarget,
+      carbs: carbsTarget,
+      fat: fatTarget,
+    };
+  }, [calorieTarget, proteinTarget, profileForm.macroSplit]);
+
+  const bumpPortionMemory = (foodName: string, weight: number) => {
+    setPortionMemoryList((prev) => {
+      const existingIndex = prev.findIndex(
+        (row) =>
+          row.food_name.toLowerCase() === foodName.toLowerCase() &&
+          Math.round(row.weight_g) === Math.round(weight),
+      );
+
+      if (existingIndex !== -1) {
+        const next = [...prev];
+        next[existingIndex] = {
+          ...next[existingIndex],
+          count: next[existingIndex].count + 1,
+        };
+        return next;
+      }
+
+      return [{ food_name: foodName, weight_g: weight, count: 1 }, ...prev].slice(0, 200);
+    });
+  };
 
   const navigateToDate = (value: string) => {
     if (!value) {
@@ -385,36 +489,75 @@ export default function HomeClient({
       .finally(() => setIsImageUploading(false));
 
     try {
-      const formData = new FormData();
-      formData.append("file", processed);
+      const analyzeWithRetry = async () => {
+        let lastError: Error | null = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const formData = new FormData();
+            formData.append("file", processed);
 
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        body: formData,
-      });
+            const response = await fetch("/api/analyze", {
+              method: "POST",
+              body: formData,
+            });
 
-      if (!response.ok) {
-        throw new Error("Unable to analyze image. Please try again.");
-      }
+            if (!response.ok) {
+              if (response.status === 413) {
+                throw new Error("Image too large. Please upload a smaller photo.");
+              }
+              if (response.status >= 500) {
+                throw new Error("AI overloaded. Retrying...");
+              }
+              throw new Error("Unable to analyze image. Please try again.");
+            }
 
-      const payload = (await response.json()) as {
-        draft: DraftLog[];
-        imagePath?: string;
+            const payload = (await response.json()) as {
+              draft: DraftLog[];
+              imagePath?: string;
+            };
+            return payload;
+          } catch (attemptError) {
+            lastError =
+              attemptError instanceof Error
+                ? attemptError
+                : new Error("Unexpected issue analyzing the image.");
+            if (attempt < 3) {
+              toast.error(lastError.message);
+              await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+              continue;
+            }
+            throw lastError;
+          }
+        }
+        throw lastError ?? new Error("Unable to analyze image.");
       };
 
-      const enhanced = payload.draft.map((item) => ({
-        ...item,
-        weight: extractWeight(item.quantity_estimate),
-      }));
+      const payload = await analyzeWithRetry();
+
+      const enhanced = payload.draft.map((item) => {
+        const fallbackWeight = extractWeight(item.quantity_estimate);
+        const memoryWeight = portionMemoryMap.get(item.food_name.toLowerCase());
+        return {
+          ...item,
+          weight: memoryWeight ?? fallbackWeight,
+        };
+      });
       setDraft(enhanced);
       if (payload.imagePath) setFilePreview(payload.imagePath);
     } catch (err) {
       console.error(err);
-      setError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Unexpected issue analyzing the image.",
-      );
+          : "Unexpected issue analyzing the image.";
+      setError(message);
+      if (message.includes("too large")) {
+        toast.error("Image too large");
+      } else if (message.toLowerCase().includes("overloaded")) {
+        toast.error("AI overloaded, please retry");
+      } else if (message.toLowerCase().includes("fetch") || message.toLowerCase().includes("network")) {
+        toast.error("Database connection lost");
+      }
       setDraft([
         {
           food_name: "Manual entry",
@@ -442,6 +585,7 @@ export default function HomeClient({
     setManualOpenIndex(index);
     setManualResults([]);
     setManualQuery(draft[index]?.search_term ?? "");
+    void loadRecentFoodsList();
   };
 
   const runManualSearch = () => {
@@ -484,6 +628,7 @@ export default function HomeClient({
         imageUrl: imagePublicUrl,
       });
       setDailyLogs((prev) => [inserted as FoodLogRecord, ...prev]);
+      bumpPortionMemory(item.food_name, item.weight);
       toast.success("Food log saved");
     } catch (err) {
       console.error(err);
@@ -528,6 +673,91 @@ export default function HomeClient({
       toast.error("Unable to quick add");
     } finally {
       setIsQuickSaving(false);
+    }
+  };
+
+  const handleApplyTemplate = async () => {
+    if (!selectedTemplateId) {
+      setError("Select a template to load.");
+      return;
+    }
+    setIsApplyingTemplate(true);
+    setError(null);
+    try {
+      const inserted = await applyMealTemplate(selectedTemplateId);
+      setDailyLogs((prev) => {
+        const combined = [...(inserted as FoodLogRecord[]), ...prev];
+        return combined.sort(
+          (a, b) => new Date(b.consumed_at).getTime() - new Date(a.consumed_at).getTime(),
+        );
+      });
+      (inserted as FoodLogRecord[]).forEach((log) => bumpPortionMemory(log.food_name, log.weight_g));
+      toast.success("Template applied");
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Unable to apply template.");
+      toast.error("Unable to apply template");
+    } finally {
+      setIsApplyingTemplate(false);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!draft.length) {
+      setError("Generate a draft first to save it as a template.");
+      return;
+    }
+    const name = templateName.trim() || `Meal ${new Date().toLocaleDateString()}`;
+    setIsSavingTemplate(true);
+    setError(null);
+    try {
+      const items: MealTemplateItem[] = draft.map((item) => {
+        const macros = adjustedMacros(item.match, item.weight) ?? {
+          calories: null,
+          protein: null,
+          carbs: null,
+          fat: null,
+        };
+        return {
+          food_name: item.food_name,
+          weight_g: item.weight,
+          calories: macros.calories,
+          protein: macros.protein,
+          carbs: macros.carbs,
+          fat: macros.fat,
+        };
+      });
+
+      const saved = await saveMealTemplate(name, items);
+      const newTemplate: MealTemplate = {
+        id: saved.id as string,
+        name: saved.name as string,
+        items: saved.items as MealTemplateItem[],
+      };
+      setTemplateList((prev) => [newTemplate, ...prev]);
+      setSelectedTemplateId(newTemplate.id);
+      setTemplateName("");
+      toast.success("Meal saved for quick loading");
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Unable to save template.");
+      toast.error("Unable to save template");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  const loadRecentFoodsList = async () => {
+    if (recentFoods.length || isLoadingRecentFoods) return;
+    setIsLoadingRecentFoods(true);
+    try {
+      const recents = await getRecentFoods();
+      setRecentFoods(recents);
+    } catch (err) {
+      console.error(err);
+      toast.error("Unable to load recent foods");
+    } finally {
+      setIsLoadingRecentFoods(false);
     }
   };
 
@@ -788,7 +1018,7 @@ export default function HomeClient({
         </div>
         <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-4">
           <p className="text-sm uppercase tracking-wide text-emerald-200">Today</p>
-          <div className="mt-4 flex items-center gap-6">
+          <div className="mt-4 flex flex-wrap items-center gap-6">
             <div
               aria-label="Calorie progress"
               className="grid h-32 w-32 place-items-center rounded-full bg-white/5 text-center text-white"
@@ -801,18 +1031,60 @@ export default function HomeClient({
                 </span>
               </div>
             </div>
-            <div className="space-y-2 text-sm text-white/70">
-              <p>
-                Protein: <span className="text-white">{formatNumber(dailyTotals.protein)}g</span>{" "}
-                <span className="text-white/60">/ {proteinTarget}g</span>
-              </p>
-              <p>
-                Carbs: <span className="text-white">{formatNumber(dailyTotals.carbs)}g</span>
-              </p>
-              <p>
-                Fat: <span className="text-white">{formatNumber(dailyTotals.fat)}g</span>
-              </p>
-              <p className="text-emerald-200">Stay green to stay on target.</p>
+            <div className="grid flex-1 gap-3 sm:grid-cols-3">
+              {[
+                {
+                  key: "protein",
+                  label: "Protein",
+                  value: dailyTotals.protein,
+                  target: macroTargets.protein || proteinTarget,
+                  color: "#38bdf8",
+                  suffix: "g",
+                },
+                {
+                  key: "carbs",
+                  label: "Carbs",
+                  value: dailyTotals.carbs,
+                  target: macroTargets.carbs || 1,
+                  color: "#fbbf24",
+                  suffix: "g",
+                },
+                {
+                  key: "fat",
+                  label: "Fat",
+                  value: dailyTotals.fat,
+                  target: macroTargets.fat || 1,
+                  color: "#f472b6",
+                  suffix: "g",
+                },
+              ].map((macro) => (
+                <div
+                  className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white"
+                  key={macro.key}
+                >
+                  <div
+                    aria-label={`${macro.label} progress`}
+                    className="grid h-16 w-16 place-items-center rounded-full text-xs"
+                    style={buildDonutStyle(
+                      macro.value / (macro.target || 1),
+                      macro.color,
+                    )}
+                  >
+                    <div className="text-center text-[11px] leading-tight text-white">
+                      <div className="font-semibold">{formatNumber(macro.value, 0)}{macro.suffix}</div>
+                      <div className="text-white/60">/ {formatNumber(macro.target, 0)}{macro.suffix}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-white/60">
+                      {macro.label}
+                    </p>
+                    <p className="text-white/80">
+                      {formatNumber(macro.value, 1)} / {formatNumber(macro.target, 0)}{macro.suffix}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -854,6 +1126,39 @@ export default function HomeClient({
 
           {captureMode === "photo" ? (
             <>
+              <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm uppercase tracking-wide text-emerald-200">Quick load</p>
+                    <p className="text-xs text-white/60">Drop in a saved meal template to insert multiple entries.</p>
+                  </div>
+                  <span className="pill bg-white/10 text-white/60">
+                    {templateList.length} saved
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <select
+                    className="min-w-[200px] rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                    value={selectedTemplateId ?? ""}
+                    onChange={(e) => setSelectedTemplateId(e.target.value || null)}
+                  >
+                    {templateList.length === 0 && <option value="">No templates yet</option>}
+                    {templateList.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn"
+                    disabled={!selectedTemplateId || isApplyingTemplate}
+                    onClick={handleApplyTemplate}
+                    type="button"
+                  >
+                    {isApplyingTemplate ? "Loading..." : "Quick load meal"}
+                  </button>
+                </div>
+              </div>
               <label className="btn cursor-pointer">
                 <input
                   accept="image/*"
@@ -977,6 +1282,33 @@ export default function HomeClient({
               {confidenceLabel}
             </span>
           </div>
+
+          {draft.length > 0 && (
+            <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-white/80">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium text-white">Save as meal template</p>
+                <span className="text-xs text-white/60">
+                  Store this draft for faster future logging.
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  className="min-w-[200px] flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                  placeholder="e.g., Chicken and Rice"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                />
+                <button
+                  className="btn"
+                  disabled={isSavingTemplate}
+                  onClick={handleSaveTemplate}
+                  type="button"
+                >
+                  {isSavingTemplate ? "Saving..." : "Save as meal"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {!draft.length ? (
             <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-4 text-sm text-white/60">
@@ -1370,11 +1702,31 @@ export default function HomeClient({
                 </p>
               </div>
               <div className="max-h-64 space-y-2 overflow-y-auto">
-                {!manualResults.length ? (
-                  <p className="text-sm text-white/60">
-                    No results yet. Enter a query to search.
-                  </p>
-                ) : (
+                {!manualResults.length && !manualQuery && recentFoods.length ? (
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wide text-white/50">
+                      Recent picks
+                    </p>
+                    {recentFoods.map((result, idx) => (
+                      <button
+                        className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-left hover:border-emerald-400/70"
+                        key={`${result.description}-recent-${idx}`}
+                        onClick={() => applyManualResult(result)}
+                        type="button"
+                      >
+                        <p className="text-white">{result.description}</p>
+                        <p className="text-sm text-white/70">
+                          Kcal {formatNumber(result.kcal_100g)} • Protein{" "}
+                          {formatNumber(result.protein_100g)}g • Carbs{" "}
+                          {formatNumber(result.carbs_100g)}g • Fat{" "}
+                          {formatNumber(result.fat_100g)}g
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {manualResults.length ? (
                   manualResults.map((result, idx) => (
                     <button
                       className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-left hover:border-emerald-400/70"
@@ -1394,7 +1746,11 @@ export default function HomeClient({
                       </p>
                     </button>
                   ))
-                )}
+                ) : manualQuery || !recentFoods.length ? (
+                  <p className="text-sm text-white/60">
+                    {isLoadingRecentFoods ? "Loading recent foods..." : "No results yet. Enter a query to search."}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
