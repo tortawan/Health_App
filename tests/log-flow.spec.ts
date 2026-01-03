@@ -50,5 +50,5 @@ test("image draft to confirmed log flow", async ({ page }) => {
   
   // Verify Success
   await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
-  await expect(page.getByText("Mock Chicken Bowl")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mock Chicken Bowl" })).toBeVisible();
 });
