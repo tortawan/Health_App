@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Generic server client (for API routes/admin)
 export const supabaseServer = supabaseUrl && supabaseKey
@@ -13,6 +14,13 @@ export const supabaseServer = supabaseUrl && supabaseKey
       },
     })
   : null;
+
+export function createSupabaseServiceClient() {
+  if (!supabaseUrl || !supabaseServiceKey) return null;
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false },
+  });
+}
 
 // Context-aware server client (for Server Actions/Pages)
 export async function createSupabaseServerClient() {

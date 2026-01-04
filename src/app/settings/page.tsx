@@ -93,6 +93,31 @@ export default async function SettingsPage() {
           </a>
         </div>
       </div>
+
+      <div className="card space-y-3">
+        <p className="text-sm font-semibold text-white">Import from CSV</p>
+        <p className="text-xs text-white/60">
+          Upload a CSV export (e.g., from MyFitnessPal) with columns like food_name, weight_g,
+          calories, protein, carbs, fat. We will map what we can and ignore the rest.
+        </p>
+        <form
+          action="/api/import"
+          className="flex flex-col gap-3 sm:flex-row sm:items-center"
+          encType="multipart/form-data"
+          method="post"
+        >
+          <input
+            accept=".csv,text/csv"
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none sm:w-auto"
+            name="file"
+            required
+            type="file"
+          />
+          <button className="btn" type="submit">
+            Import CSV
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
