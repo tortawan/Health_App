@@ -1,30 +1,7 @@
 import { redirect } from "next/navigation";
 import HomeClient from "./home-client";
 import { createSupabaseServerClient } from "@/lib/supabase";
-
-type UserProfile = {
-  user_id: string;
-  height: number | null;
-  weight: number | null;
-  age: number | null;
-  activity_level: string | null;
-  goal_type: string | null;
-  macro_split: Record<string, unknown> | null;
-  daily_calorie_target: number | null;
-  daily_protein_target: number | null;
-};
-
-type MealTemplate = {
-  id: string;
-  name: string;
-  items: unknown;
-};
-
-type PortionMemoryRow = {
-  food_name: string;
-  weight_g: number;
-  count: number;
-};
+import { MealTemplate, PortionMemoryRow, UserProfile } from "@/types/food";
 
 function parseDateParam(dateValue?: string | string[]) {
   if (!dateValue || Array.isArray(dateValue)) return new Date();
@@ -146,9 +123,31 @@ export default async function HomePage({
     .order("created_at", { ascending: false })
     .limit(20);
 
-  // FIX 2: Removed invalid .group() call. 
-  // We initialize as empty array for now to prevent crash.
-  const portionMemory: PortionMemoryRow[] = [];
+  const { data: portionMemoryRaw } = await supabase
+    .from("food_logs")
+    .select("food_name, weight_g")
+    .eq("user_id", session.user.id)
+    .order("consumed_at", { ascending: false })
+    .limit(500);
+
+  const portionMemoryAggregated = (portionMemoryRaw ?? []).reduce((acc, row) => {
+    const key = (row.food_name as string).toLowerCase();
+    const existing = acc.get(key) ?? { total: 0, count: 0, label: row.food_name as string };
+    acc.set(key, {
+      total: existing.total + Number(row.weight_g ?? 0),
+      count: existing.count + 1,
+      label: existing.label,
+    });
+    return acc;
+  }, new Map<string, { total: number; count: number; label: string }>());
+
+  const portionMemory: PortionMemoryRow[] = Array.from(portionMemoryAggregated.values())
+    .map((entry) => ({
+      food_name: entry.label,
+      weight_g: entry.count ? entry.total / entry.count : 0,
+      count: entry.count,
+    }))
+    .sort((a, b) => b.count - a.count);
 
   const { data: recentFoods } = await supabase
     .from("food_logs")

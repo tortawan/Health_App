@@ -97,27 +97,30 @@ export async function POST(request: Request) {
         user_id: session?.user.id ?? null,
       });
 
-      const top = Array.isArray(matches) ? matches[0] : null;
+      const mappedMatches = Array.isArray(matches)
+        ? matches.map((top) => ({
+            description: top.description,
+            kcal_100g: top.kcal_100g,
+            protein_100g: top.protein_100g,
+            carbs_100g: top.carbs_100g,
+            fat_100g: top.fat_100g,
+            fiber_100g: top.fiber_100g,
+            sugar_100g: top.sugar_100g,
+            sodium_100g: top.sodium_100g,
+            similarity:
+              top.similarity ??
+              (typeof top.distance === "number" ? 1 - top.distance : null) ??
+              null,
+            text_rank: top.text_rank ?? null,
+          }))
+        : [];
+
+      const top = mappedMatches[0] ?? null;
 
       return {
         ...item,
-        match: top
-          ? {
-              description: top.description,
-              kcal_100g: top.kcal_100g,
-              protein_100g: top.protein_100g,
-              carbs_100g: top.carbs_100g,
-              fat_100g: top.fat_100g,
-              fiber_100g: top.fiber_100g,
-              sugar_100g: top.sugar_100g,
-              sodium_100g: top.sodium_100g,
-              similarity:
-                top.similarity ??
-                (typeof top.distance === "number" ? 1 - top.distance : null) ??
-                null,
-              text_rank: top.text_rank ?? null,
-            }
-          : undefined,
+        match: top ?? undefined,
+        matches: mappedMatches.slice(0, 3),
       };
     }),
   );

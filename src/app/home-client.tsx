@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import toast from "react-hot-toast";
@@ -17,70 +16,24 @@ import {
   copyDay,
   logWater,
   reportLogIssue,
-  type MealTemplateItem,
 } from "./actions";
+import { CameraCapture } from "@/components/scanner/CameraCapture";
+import { DailyLogList } from "@/components/dashboard/DailyLogList";
+import { DraftReview } from "@/components/logging/DraftReview";
+import { ManualSearchModal } from "@/components/logging/ManualSearchModal";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { adjustedMacros, type ActivityLevel, type GoalType } from "@/lib/nutrition";
-type MacroMatch = {
-  description: string;
-  kcal_100g: number | null;
-  protein_100g: number | null;
-  carbs_100g: number | null;
-  fat_100g: number | null;
-  fiber_100g?: number | null;
-  sugar_100g?: number | null;
-  sodium_100g?: number | null;
-  similarity?: number | null;
-  text_rank?: number | null;
-};
-
-type DraftLog = {
-  food_name: string;
-  quantity_estimate: string;
-  search_term: string;
-  match?: MacroMatch;
-  weight: number;
-};
-
-type FoodLogRecord = {
-  id: string;
-  food_name: string;
-  weight_g: number;
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fat: number | null;
-   fiber?: number | null;
-   sugar?: number | null;
-   sodium?: number | null;
-  consumed_at: string;
-  image_path?: string | null;
-};
-
-type UserProfile = {
-  user_id: string;
-  height: number | null;
-  weight: number | null;
-  age: number | null;
-  activity_level: string | null;
-  goal_type: string | null;
-  macro_split: Record<string, unknown> | null;
-  daily_calorie_target: number | null;
-  daily_protein_target: number | null;
-  is_public?: boolean | null;
-} | null;
-
-type MealTemplate = {
-  id: string;
-  name: string;
-  items: MealTemplateItem[];
-};
-
-type PortionMemoryRow = {
-  food_name: string;
-  weight_g: number;
-  count: number;
-};
+import {
+  DraftLog,
+  FoodLogRecord,
+  MacroMatch,
+  MealTemplate,
+  MealTemplateItem,
+  PortionMemoryRow,
+  RecentFood,
+  UserProfile,
+} from "@/types/food";
+import { formatNumber } from "@/lib/format";
 
 type Html5QrcodeInstance = {
   start(
@@ -127,6 +80,8 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
+type ClientMealTemplate = MealTemplate & { items: MealTemplateItem[] };
+
 function extractWeight(estimate: string) {
   const parsed = estimate.match(/(\d+(?:\.\d+)?)\s*g?/i);
   if (parsed?.[1]) return Number(parsed[1]);
@@ -154,13 +109,6 @@ function formatDateParam(date: Date) {
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function formatNumber(value: number | null | undefined, digits = 1) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return "—";
-  }
-  return Number(value).toFixed(digits);
 }
 
 function buildRingStyle(progress: number, isOver: boolean) {
@@ -348,7 +296,7 @@ export default function HomeClient({
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [templateList, setTemplateList] = useState<MealTemplate[]>(templates);
+  const [templateList, setTemplateList] = useState<ClientMealTemplate[]>(templates as ClientMealTemplate[]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(templates[0]?.id ?? null);
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
   const [templateScale, setTemplateScale] = useState(1);
@@ -614,6 +562,7 @@ export default function HomeClient({
             quantity_estimate: "1 serving",
             search_term: macroMatch.description,
             match: macroMatch,
+            matches: [macroMatch],
             weight: 100,
           },
         ]);
@@ -621,7 +570,7 @@ export default function HomeClient({
         setDraft((prev) =>
           prev.map((item, idx) =>
             idx === 0
-              ? { ...item, match: macroMatch, food_name: macroMatch.description }
+              ? { ...item, match: macroMatch, matches: [macroMatch, ...(item.matches ?? [])], food_name: macroMatch.description }
               : item,
           ),
         );
@@ -831,6 +780,7 @@ export default function HomeClient({
         const memoryWeight = portionMemoryMap.get(item.food_name.toLowerCase());
         return {
           ...item,
+          matches: item.matches ?? (item.match ? [item.match] : []),
           weight: memoryWeight ?? fallbackWeight,
         };
       });
@@ -900,7 +850,16 @@ export default function HomeClient({
     if (manualOpenIndex === null) return;
     setDraft((prev) =>
       prev.map((item, idx) =>
-        idx === manualOpenIndex ? { ...item, match: result } : item,
+        idx === manualOpenIndex
+          ? {
+              ...item,
+              match: result,
+              matches: [result, ...(item.matches ?? [])].filter(
+                (candidate, candidateIdx, list) =>
+                  list.findIndex((entry) => entry.description === candidate.description) === candidateIdx,
+              ),
+            }
+          : item,
       ),
     );
     setManualOpenIndex(null);
@@ -1122,7 +1081,7 @@ export default function HomeClient({
       });
 
       const saved = await saveMealTemplate(name, items);
-      const newTemplate: MealTemplate = {
+      const newTemplate: ClientMealTemplate = {
         id: saved.id as string,
         name: saved.name as string,
         items: saved.items as MealTemplateItem[],
@@ -1613,95 +1572,21 @@ export default function HomeClient({
           </div>
 
           {captureMode === "photo" ? (
-            <>
-              <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm uppercase tracking-wide text-emerald-200">Quick load</p>
-                    <p className="text-xs text-white/60">Drop in a saved meal template to insert multiple entries.</p>
-                  </div>
-                  <span className="pill bg-white/10 text-white/60">
-                    {templateList.length} saved
-                  </span>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <select
-                    className="min-w-[200px] rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
-                    value={selectedTemplateId ?? ""}
-                    onChange={(e) => setSelectedTemplateId(e.target.value || null)}
-                  >
-                    {templateList.length === 0 && <option value="">No templates yet</option>}
-                    {templateList.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </select>
-                  <label className="flex items-center gap-2 text-sm text-white/70">
-                    <span>Scale</span>
-                    <input
-                      className="w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
-                      min={0.1}
-                      step={0.1}
-                      type="number"
-                      value={templateScale}
-                      onChange={(e) => setTemplateScale(e.target.value ? Number(e.target.value) : 1)}
-                    />
-                  </label>
-                  <button
-                    className="btn"
-                    disabled={!selectedTemplateId || isApplyingTemplate}
-                    onClick={handleApplyTemplate}
-                    type="button"
-                  >
-                    {isApplyingTemplate ? "Loading..." : "Quick load meal"}
-                  </button>
-                  <button
-                    className="btn bg-white/10 text-white hover:bg-white/20"
-                    onClick={() => setShowTemplateManager(true)}
-                    type="button"
-                  >
-                    Manage templates
-                  </button>
-                </div>
-              </div>
-              <label className="btn cursor-pointer">
-                <input
-                  accept="image/*"
-                  className="hidden"
-                  type="file"
-                  onChange={(event) => onFileChange(event.target.files?.[0])}
-                />
-                {isUploading ? "Scanning..." : "Take Photo"}
-              </label>
-              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40">
-                {filePreview ? (
-                  <Image
-                    alt="Uploaded meal preview"
-                    className="h-80 w-full object-cover"
-                    height={320}
-                    src={filePreview}
-                    width={640}
-                  />
-                ) : (
-                  <div className="flex h-80 items-center justify-center text-white/40">
-                    Upload a photo to start the Visual RAG flow.
-                  </div>
-                )}
-                {isUploading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-                    <div className="flex flex-col items-center gap-2 text-sm text-white/80">
-                      <span className="h-8 w-8 animate-ping rounded-full bg-emerald-400/60" />
-                      <p>
-                        {isImageUploading
-                          ? "Uploading photo to Supabase..."
-                          : "Scanning with Gemini..."}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
+            <CameraCapture
+              captureMode={captureMode}
+              filePreview={filePreview}
+              isApplyingTemplate={isApplyingTemplate}
+              isImageUploading={isImageUploading}
+              isUploading={isUploading}
+              onApplyTemplate={handleApplyTemplate}
+              onFileChange={(file) => void onFileChange(file)}
+              onOpenTemplateManager={() => setShowTemplateManager(true)}
+              onTemplateChange={(value) => setSelectedTemplateId(value)}
+              onTemplateScaleChange={(value) => setTemplateScale(value)}
+              selectedTemplateId={selectedTemplateId}
+              templateList={templateList}
+              templateScale={templateScale}
+            />
           ) : (
             <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
               <p className="text-sm text-white/70">
@@ -1810,209 +1695,26 @@ export default function HomeClient({
           )}
         </div>
 
-        <div className="card space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-wide text-emerald-200">
-                Verification
-              </p>
-              <h2 className="text-xl font-semibold text-white">
-                Draft entries
-              </h2>
-              <p className="text-sm text-white/60">
-                We never auto-save. Confirm or adjust the AI guess before
-                logging.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!draft.length || isConfirmingAll || isImageUploading}
-                onClick={handleConfirmAll}
-                type="button"
-              >
-                {isConfirmingAll ? "Saving all..." : "Confirm all"}
-              </button>
-              <span className="pill bg-emerald-500/20 text-emerald-100">
-                {confidenceLabel}
-              </span>
-            </div>
-          </div>
-
-          {draft.length > 0 && (
-            <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-white/80">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-medium text-white">Save as meal template</p>
-                <span className="text-xs text-white/60">
-                  Store this draft for faster future logging.
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <input
-                  className="min-w-[200px] flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
-                  placeholder="e.g., Chicken and Rice"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                />
-                <button
-                  className="btn"
-                  disabled={isSavingTemplate}
-                  onClick={handleSaveTemplate}
-                  type="button"
-                >
-                  {isSavingTemplate ? "Saving..." : "Save as meal"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!draft.length ? (
-            <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-4 text-sm text-white/60">
-              No draft yet. Upload an image to generate a structured suggestion.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {draft.map((item, index) => {
-                const adjusted = adjustedMacros(item.match, item.weight);
-                return (
-                  <div
-                    className="rounded-xl border border-white/10 bg-slate-900/60 p-4"
-                    key={`${item.food_name}-${index}`}
-                  >
-                    <div className="flex flex-col gap-1">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="text-lg font-semibold text-white">
-                          {item.food_name}
-                        </h3>
-                        <button
-                          className="pill bg-white/10 text-white/70 hover:bg-white/20"
-                          onClick={() =>
-                            setEditingWeightIndex(
-                              editingWeightIndex === index ? null : index,
-                            )
-                          }
-                          type="button"
-                        >
-                          {item.quantity_estimate} ({item.weight}g)
-                        </button>
-                      </div>
-                      <p className="text-sm text-white/60">
-                        Search term: {item.search_term}
-                      </p>
-                      {editingWeightIndex === index && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/80">
-                          <label className="text-white/60" htmlFor={`weight-${index}`}>
-                            Adjust weight (g):
-                          </label>
-                          <input
-                            className="w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white focus:border-emerald-400 focus:outline-none"
-                            id={`weight-${index}`}
-                            min={1}
-                            type="number"
-                            value={item.weight}
-                            onChange={(e) => updateWeight(index, Number(e.target.value))}
-                          />
-                          <button
-                            className="btn bg-white/10 text-white hover:bg-white/20"
-                            type="button"
-                            onClick={() => setEditingWeightIndex(null)}
-                          >
-                            Done
-                          </button>
-                        </div>
-                      )}
-                      {item.match ? (
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-white/80">
-                          <div className="rounded-lg bg-white/5 p-2">
-                            <p className="text-xs uppercase text-white/50">
-                              Match ({formatNumber(item.match.similarity, 2)} similarity)
-                            </p>
-                            <p>{item.match.description}</p>
-                          </div>
-                          <div className="rounded-lg bg-white/5 p-2">
-                            <p className="text-xs uppercase text-white/50">
-                              Macros / 100g
-                            </p>
-                            <p className="flex flex-wrap gap-2">
-                              <span>Kcal {formatNumber(item.match.kcal_100g)}</span>
-                              <span>
-                                Protein {formatNumber(item.match.protein_100g)}g
-                              </span>
-                              <span>Carbs {formatNumber(item.match.carbs_100g)}g</span>
-                              <span>Fat {formatNumber(item.match.fat_100g)}g</span>
-                            </p>
-                          </div>
-                          <div className="col-span-2 rounded-lg bg-emerald-500/10 p-2">
-                            <p className="text-xs uppercase text-emerald-100/70">
-                              Adjusted macros ({item.weight}g)
-                            </p>
-                            {adjusted ? (
-                              <p className="flex flex-wrap gap-2 text-emerald-50">
-                                <span>
-                                  Kcal {formatNumber(adjusted.calories)}
-                                </span>
-                                <span>
-                                  Protein {formatNumber(adjusted.protein)}g
-                                </span>
-                                <span>Carbs {formatNumber(adjusted.carbs)}g</span>
-                                <span>Fat {formatNumber(adjusted.fat)}g</span>
-                              </p>
-                            ) : (
-                              <p className="text-emerald-100/80">
-                                Add a manual match to calculate macros.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-amber-100/80">
-                          No confident match found. Try manual search to select the right food.
-                        </p>
-                      )}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                      <button
-                        className="btn disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={
-                          !item.match ||
-                          loggingIndex === index ||
-                          isImageUploading ||
-                          isConfirmingAll
-                        }
-                        onClick={() => handleConfirm(index)}
-                        type="button"
-                      >
-                        {loggingIndex === index
-                          ? "Saving..."
-                          : isImageUploading
-                            ? "Uploading photo..."
-                            : "Confirm"}
-                      </button>
-                      <button
-                        className="btn bg-white/10 text-white hover:bg-white/20"
-                        onClick={() =>
-                          setEditingWeightIndex(
-                            editingWeightIndex === index ? null : index,
-                          )
-                        }
-                        type="button"
-                      >
-                        Adjust weight
-                      </button>
-                      <button
-                        className="btn bg-white/10 text-white hover:bg-white/20"
-                        onClick={() => openManualSearch(index)}
-                        type="button"
-                      >
-                        Manual search
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <DraftReview
+          confidenceLabel={confidenceLabel}
+          draft={draft}
+          editingWeightIndex={editingWeightIndex}
+          isConfirmingAll={isConfirmingAll}
+          isImageUploading={isImageUploading}
+          loggingIndex={loggingIndex}
+          onApplyMatch={(index, match) =>
+            setDraft((prev) => prev.map((item, idx) => (idx === index ? { ...item, match } : item)))
+          }
+          onConfirm={handleConfirm}
+          onConfirmAll={handleConfirmAll}
+          onManualSearch={openManualSearch}
+          onSaveTemplate={handleSaveTemplate}
+          onTemplateNameChange={setTemplateName}
+          onToggleWeightEdit={(index) => setEditingWeightIndex(editingWeightIndex === index ? null : index)}
+          onUpdateWeight={updateWeight}
+          templateName={templateName}
+          isSavingTemplate={isSavingTemplate}
+        />
       </section>
 
       <section className="card grid gap-6 lg:grid-cols-3">
@@ -2043,196 +1745,25 @@ export default function HomeClient({
         </div>
       </section>
 
-      <section className="card space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="space-y-2">
-            <p className="text-sm uppercase tracking-wide text-emerald-200">
-              Daily log
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <h3 className="text-xl font-semibold text-white">{todayLabel}</h3>
-              <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/70">
-                <button
-                  aria-label="Previous day"
-                  className="rounded px-2 py-1 hover:bg-white/10"
-                  onClick={() => shiftDate(-1)}
-                  type="button"
-                >
-                  ←
-                </button>
-                <input
-                  className="rounded bg-transparent px-2 py-1 outline-none"
-                  max={new Date().toISOString().slice(0, 10)}
-                  type="date"
-                  value={selectedDate}
-                  onChange={(event) => navigateToDate(event.target.value)}
-                />
-                <button
-                  aria-label="Next day"
-                  className="rounded px-2 py-1 hover:bg-white/10"
-                  onClick={() => shiftDate(1)}
-                  type="button"
-                >
-                  →
-                </button>
-              </div>
-              <button
-                className="btn bg-white/10 text-white hover:bg-white/20"
-                disabled={isCopyingDay}
-                onClick={handleCopyYesterday}
-                type="button"
-              >
-                {isCopyingDay ? "Copying..." : "Copy yesterday"}
-              </button>
-            </div>
-            <p className="text-sm text-white/60">
-              Totals are summed from your food_logs entries for the selected date.
-            </p>
-          </div>
-          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-50">
-            <p className="font-semibold">Daily Total</p>
-            <p className="flex flex-wrap gap-3">
-              <span>Kcal {formatNumber(dailyTotals.calories, 0)}</span>
-              <span>Protein {formatNumber(dailyTotals.protein)}g</span>
-              <span>Carbs {formatNumber(dailyTotals.carbs)}g</span>
-              <span>Fat {formatNumber(dailyTotals.fat)}g</span>
-            </p>
-          </div>
-        </div>
-
-        {!dailyLogs.length ? (
-          <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-4 text-sm text-white/60">
-            No logs yet for today. Confirm a draft entry to see it here.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {dailyLogs.map((log) => (
-              <div
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm"
-                key={log.id}
-              >
-                <div className="space-y-1">
-                  {editingLogId === log.id ? (
-                    <div className="grid grid-cols-2 gap-2 text-xs text-white/70 sm:grid-cols-3">
-                      <input
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
-                        value={editForm.food_name ?? ""}
-                        onChange={(e) =>
-                          setEditForm((prev) => ({ ...prev, food_name: e.target.value }))
-                        }
-                      />
-                      <input
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
-                        type="number"
-                        value={editForm.weight_g ?? 0}
-                        onChange={(e) =>
-                          setEditForm((prev) => ({ ...prev, weight_g: Number(e.target.value) }))
-                        }
-                      />
-                      <input
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
-                        type="number"
-                        value={editForm.calories ?? 0}
-                        onChange={(e) =>
-                          setEditForm((prev) => ({ ...prev, calories: Number(e.target.value) }))
-                        }
-                      />
-                      <input
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
-                        type="number"
-                        value={editForm.protein ?? 0}
-                        onChange={(e) =>
-                          setEditForm((prev) => ({ ...prev, protein: Number(e.target.value) }))
-                        }
-                      />
-                      <input
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
-                        type="number"
-                        value={editForm.carbs ?? 0}
-                        onChange={(e) =>
-                          setEditForm((prev) => ({ ...prev, carbs: Number(e.target.value) }))
-                        }
-                      />
-                      <input
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
-                        type="number"
-                        value={editForm.fat ?? 0}
-                        onChange={(e) =>
-                          setEditForm((prev) => ({ ...prev, fat: Number(e.target.value) }))
-                        }
-                      />
-                      <div className="col-span-2 flex gap-2 sm:col-span-3">
-                        <button className="btn" onClick={saveLogEdits} type="button">
-                          Save
-                        </button>
-                        <button
-                          className="btn bg-white/10 text-white hover:bg-white/20"
-                          onClick={() => setEditingLogId(null)}
-                          type="button"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-base font-semibold text-white">
-                        {log.food_name}
-                      </p>
-                      <p className="text-white/60">
-                        {log.weight_g}g •{" "}
-                        {new Date(log.consumed_at).toLocaleTimeString([], {
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-white/80">
-                  <span className="pill bg-white/10">
-                    Kcal {formatNumber(log.calories, 0)}
-                  </span>
-                  <span className="pill bg-white/10">
-                    Protein {formatNumber(log.protein)}g
-                  </span>
-                  <span className="pill bg-white/10">
-                    Carbs {formatNumber(log.carbs)}g
-                  </span>
-                  <span className="pill bg-white/10">
-                    Fat {formatNumber(log.fat)}g
-                  </span>
-                  <button
-                    aria-label="Edit entry"
-                    className="pill bg-white/10 text-white hover:bg-white/20"
-                    onClick={() => beginEditLog(log)}
-                    type="button"
-                  >
-                    ✏️ Edit
-                  </button>
-                  <button
-                    aria-label="Report issue"
-                    className="pill bg-amber-500/20 text-amber-100 hover:bg-amber-500/30"
-                    onClick={() => openFlagModal(log)}
-                    type="button"
-                  >
-                    🚩 Report
-                  </button>
-                  <button
-                    aria-label="Delete entry"
-                    className="pill bg-red-500/20 text-red-100 hover:bg-red-500/30"
-                    disabled={deletingId === log.id}
-                    onClick={() => removeLog(log.id)}
-                    type="button"
-                  >
-                    {deletingId === log.id ? "Deleting..." : "🗑️ Delete"}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <DailyLogList
+        dailyLogs={dailyLogs}
+        dailyTotals={dailyTotals}
+        deletingId={deletingId}
+        editForm={editForm}
+        editingLogId={editingLogId}
+        isCopyingDay={isCopyingDay}
+        onBeginEdit={beginEditLog}
+        onCancelEdit={() => setEditingLogId(null)}
+        onCopyYesterday={handleCopyYesterday}
+        onDeleteLog={removeLog}
+        onEditField={(field, value) => setEditForm((prev) => ({ ...prev, [field]: value }))}
+        onFlagLog={openFlagModal}
+        onNavigateToDate={navigateToDate}
+        onSaveEdits={saveLogEdits}
+        onShiftDate={shiftDate}
+        selectedDate={selectedDate}
+        todayLabel={todayLabel}
+      />
 
       {showTemplateManager && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -2266,7 +1797,7 @@ export default function HomeClient({
                     <div>
                       <p className="text-white">{template.name}</p>
                       <p className="text-xs text-white/60">
-                        {template.items.length} items
+                        {Array.isArray(template.items) ? template.items.length : 0} items
                       </p>
                     </div>
                     <button
@@ -2408,114 +1939,18 @@ export default function HomeClient({
         </div>
       )}
 
-      {manualOpenIndex !== null && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm uppercase tracking-wide text-emerald-200">
-                  Manual search
-                </p>
-                <h4 className="text-lg font-semibold text-white">
-                  Override the AI match
-                </h4>
-              </div>
-              <button
-                className="text-white/70 hover:text-white"
-                onClick={() => setManualOpenIndex(null)}
-                type="button"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="mt-4 space-y-3">
-              <input
-                autoFocus
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
-                placeholder="Search for a food (e.g., grilled chicken)"
-                type="text"
-                value={manualQuery}
-                onChange={(e) => setManualQuery(e.target.value)}
-              />
-              <div className="flex items-center gap-2">
-                <button
-                  className="btn"
-                  disabled={isSearching}
-                  onClick={runManualSearch}
-                  type="button"
-                >
-                  {isSearching ? "Searching..." : "Search"}
-                </button>
-                <p className="text-xs text-white/60">
-                  Uses the same embedding model + match_foods RPC as the AI path.
-                </p>
-              </div>
-              <div className="max-h-64 space-y-2 overflow-y-auto">
-                {!manualResults.length && !manualQuery && recentFoods.length ? (
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-wide text-white/50">
-                      Recent picks
-                    </p>
-                    {recentFoods.map((result, idx) => (
-                      <button
-                        className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-left hover:border-emerald-400/70"
-                        key={`${result.description}-recent-${idx}`}
-                        onClick={() => applyManualResult(result)}
-                        type="button"
-                      >
-                        <p className="text-white">{result.description}</p>
-                        <p className="text-sm text-white/70">
-                          Kcal {formatNumber(result.kcal_100g)} • Protein{" "}
-                          {formatNumber(result.protein_100g)}g • Carbs{" "}
-                          {formatNumber(result.carbs_100g)}g • Fat{" "}
-                          {formatNumber(result.fat_100g)}g
-                        </p>
-                        <p className="text-xs text-white/60">
-                          Fiber {formatNumber(result.fiber_100g)}g • Sugar{" "}
-                          {formatNumber(result.sugar_100g)}g • Sodium{" "}
-                          {formatNumber(result.sodium_100g)}mg
-                        </p>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                {manualResults.length ? (
-                  manualResults.map((result, idx) => (
-                    <button
-                      className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-left hover:border-emerald-400/70"
-                      key={`${result.description}-${idx}`}
-                      onClick={() => applyManualResult(result)}
-                      type="button"
-                      >
-                        <p className="text-white">{result.description}</p>
-                        <p className="text-xs text-white/60">
-                        Similarity {formatNumber(result.similarity, 2)} • Text rank{" "}
-                          {formatNumber(result.text_rank, 2)}
-                      </p>
-                      <p className="text-sm text-white/70">
-                        Kcal {formatNumber(result.kcal_100g)} • Protein{" "}
-                        {formatNumber(result.protein_100g)}g • Carbs{" "}
-                        {formatNumber(result.carbs_100g)}g • Fat{" "}
-                        {formatNumber(result.fat_100g)}g
-                      </p>
-                      <p className="text-xs text-white/60">
-                        Fiber {formatNumber(result.fiber_100g)}g • Sugar{" "}
-                        {formatNumber(result.sugar_100g)}g • Sodium{" "}
-                        {formatNumber(result.sodium_100g)}mg
-                      </p>
-                    </button>
-                  ))
-                ) : manualQuery || !recentFoods.length ? (
-                  <p className="text-sm text-white/60">
-                    {isLoadingRecentFoods ? "Loading recent foods..." : "No results yet. Enter a query to search."}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ManualSearchModal
+        isLoadingRecentFoods={isLoadingRecentFoods}
+        isSearching={isSearching}
+        onChangeQuery={setManualQuery}
+        onClose={() => setManualOpenIndex(null)}
+        onSearch={runManualSearch}
+        onSelect={applyManualResult}
+        openIndex={manualOpenIndex}
+        query={manualQuery}
+        recentFoods={recentFoods}
+        results={manualResults}
+      />
       </main>
     </AppErrorBoundary>
   );
