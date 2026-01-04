@@ -17,7 +17,12 @@ const supabase = createClient(url, serviceKey);
 const cutoff = new Date();
 cutoff.setDate(cutoff.getDate() - 30);
 
-async function listAll(prefix = "") {
+async function listAll(prefix = "", depth = 0) {
+  if (depth > 10) {
+    console.warn(`Max depth reached at ${prefix}`);
+    return [];
+  }
+
   const files = [];
   let from = 0;
   const size = 100;
@@ -35,7 +40,7 @@ async function listAll(prefix = "") {
     for (const entry of data) {
       if (entry.name === ".emptyFolderPlaceholder") continue;
       if (entry.metadata?.mimetype === "folder") {
-        const nested = await listAll(`${prefix}${entry.name}/`);
+        const nested = await listAll(`${prefix}${entry.name}/`, depth + 1);
         files.push(...nested);
       } else {
         files.push({ ...entry, path: `${prefix}${entry.name}` });

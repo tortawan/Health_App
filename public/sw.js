@@ -3,7 +3,7 @@ const QUEUE_STORE = "requests";
 let lunchReminderTimeout = null;
 
 function openQueue() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const request = indexedDB.open(QUEUE_DB, 1);
     request.onupgradeneeded = () => {
       request.result.createObjectStore(QUEUE_STORE, { keyPath: "id", autoIncrement: true });
@@ -132,12 +132,16 @@ self.addEventListener("message", (event) => {
       return; // Already logged today
     }
 
-    lunchReminderTimeout = setTimeout(() => {
-      if (Notification.permission === "granted") {
-        self.registration.showNotification("Don't forget to log lunch!", {
-          body: "We haven't seen a meal yet today. Quick add lunch now.",
-          icon: "/icons/icon-192.svg",
-        });
+    lunchReminderTimeout = setTimeout(async () => {
+      try {
+        if (Notification.permission === "granted") {
+          await self.registration.showNotification("Don't forget to log lunch!", {
+            body: "We haven't seen a meal yet today. Quick add lunch now.",
+            icon: "/icons/icon-192.svg",
+          });
+        }
+      } catch (err) {
+        console.error("Failed to show notification:", err);
       }
     }, target.getTime() - now.getTime());
   }

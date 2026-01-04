@@ -11,6 +11,9 @@ alter table if exists public.food_logs
   add column if not exists sodium numeric;
 
 -- Personalized hybrid match: boost foods a user has logged before
+-- FIX: Drop the old 4-argument version to avoid function overloading conflicts
+drop function if exists match_foods(vector(384), text, float, int);
+
 create or replace function match_foods (
   query_embedding vector(384),
   query_text text,

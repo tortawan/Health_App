@@ -20,13 +20,11 @@ const limiter = redis
   : null;
 
 function getUserKey(request: NextRequest) {
-  const rawToken =
-    request.cookies.get("sb-access-token")?.value ??
-    request.cookies.get("supabase-auth-token")?.value;
+  const authCookie = request.cookies.getAll().find((c) => c.name.includes("auth-token"));
 
-  if (rawToken) {
+  if (authCookie?.value) {
     try {
-      const parts = rawToken.split(".");
+      const parts = authCookie.value.split(".");
       if (parts.length === 3) {
         const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         const decoded = atob(normalized);
