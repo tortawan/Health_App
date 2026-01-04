@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import React, { useEffect, useMemo, useState, useTransition } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import toast from "react-hot-toast";
 import {
   deleteFoodLog,
@@ -16,6 +16,7 @@ import {
   deleteMealTemplate,
   copyDay,
   logWater,
+  reportLogIssue,
   type MealTemplateItem,
 } from "./actions";
 import { supabaseBrowser } from "@/lib/supabase-browser";
@@ -80,6 +81,25 @@ type PortionMemoryRow = {
   weight_g: number;
   count: number;
 };
+
+type Html5QrcodeInstance = {
+  start(
+    camera: { facingMode: string } | string,
+    config: Record<string, unknown>,
+    onSuccess: (decodedText: string) => void,
+    onError?: (error: unknown) => void,
+  ): Promise<void>;
+  stop(): Promise<void>;
+  clear(): Promise<void>;
+};
+
+type Html5QrcodeConstructor = new (elementId: string) => Html5QrcodeInstance;
+
+declare global {
+  interface Window {
+    Html5Qrcode?: Html5QrcodeConstructor;
+  }
+}
 
 type RecentFood = {
   food_name: string;
@@ -331,6 +351,7 @@ export default function HomeClient({
   const [templateList, setTemplateList] = useState<MealTemplate[]>(templates);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(templates[0]?.id ?? null);
   const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [templateScale, setTemplateScale] = useState(1);
   const [templateName, setTemplateName] = useState("");
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [showTemplateManager, setShowTemplateManager] = useState(false);
@@ -366,6 +387,15 @@ export default function HomeClient({
   const [waterIntake, setWaterIntake] = useState(initialWater);
   const [isLoggingWater, setIsLoggingWater] = useState(false);
   const [isCopyingDay, setIsCopyingDay] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [isScanningBarcode, setIsScanningBarcode] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const scannerRef = useRef<Html5QrcodeInstance | null>(null);
+  const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
+  const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
+  const [flagForm, setFlagForm] = useState<Partial<FoodLogRecord>>({});
+  const [flagNotes, setFlagNotes] = useState("");
+  const [isFlagging, setIsFlagging] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -436,6 +466,24 @@ export default function HomeClient({
     };
   }, [calorieTarget, proteinTarget, profileForm.macroSplit]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (selectedDate !== todayKey) return;
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+
+    navigator.serviceWorker?.ready
+      .then((registration) => {
+        registration.active?.postMessage({
+          type: "scheduleLunchReminder",
+          lastLogAt: dailyLogs[0]?.consumed_at ?? null,
+        });
+      })
+      .catch(() => {});
+  }, [dailyLogs, selectedDate, todayKey]);
+
   const bumpPortionMemory = (foodName: string, weight: number) => {
     setPortionMemoryList((prev) => {
       const existingIndex = prev.findIndex(
@@ -494,6 +542,168 @@ export default function HomeClient({
     adjusted.setDate(adjusted.getDate() + delta);
     navigateToDate(formatDateParam(adjusted));
   };
+
+  const ensureScannerScript = () =>
+    new Promise<void>((resolve, reject) => {
+      if (typeof window === "undefined") {
+        reject(new Error("Browser required for scanning."));
+        return;
+      }
+      if (window.Html5Qrcode) {
+        resolve();
+        return;
+      }
+      const existing = document.getElementById("html5-qrcode-script");
+      if (existing) {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener(
+          "error",
+          () => reject(new Error("Unable to load scanner script")),
+          {
+            once: true,
+          },
+        );
+        return;
+      }
+      const script = document.createElement("script");
+      script.id = "html5-qrcode-script";
+      script.src = "https://unpkg.com/html5-qrcode@2.3.11/html5-qrcode.min.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Unable to load scanner script"));
+      document.body.appendChild(script);
+    });
+
+  const handleBarcodeMatch = useCallback(async (code: string) => {
+    setScannerError(null);
+    setIsScanningBarcode(true);
+    try {
+      const response = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`,
+      );
+      if (!response.ok) {
+        throw new Error("OpenFoodFacts lookup failed");
+      }
+      const payload = await response.json();
+      const product = payload.product;
+      if (!product) {
+        throw new Error("No product found for that barcode.");
+      }
+      const nutriments = product.nutriments ?? {};
+      const macroMatch: MacroMatch = {
+        description: product.product_name || code,
+        kcal_100g:
+          nutriments["energy-kcal_100g"] ??
+          nutriments.energy_kcal_100g ??
+          nutriments.energy_value ??
+          null,
+        protein_100g: nutriments.proteins_100g ?? null,
+        carbs_100g: nutriments.carbohydrates_100g ?? null,
+        fat_100g: nutriments.fat_100g ?? null,
+        fiber_100g: nutriments.fiber_100g ?? null,
+        sugar_100g: nutriments.sugars_100g ?? null,
+        sodium_100g: nutriments.sodium_100g ?? null,
+      };
+
+      setManualResults([macroMatch]);
+      setManualQuery(product.product_name || code);
+      if (!draft.length) {
+        setDraft([
+          {
+            food_name: macroMatch.description,
+            quantity_estimate: "1 serving",
+            search_term: macroMatch.description,
+            match: macroMatch,
+            weight: 100,
+          },
+        ]);
+      } else {
+        setDraft((prev) =>
+          prev.map((item, idx) =>
+            idx === 0
+              ? { ...item, match: macroMatch, food_name: macroMatch.description }
+              : item,
+          ),
+        );
+      }
+      setManualOpenIndex(0);
+      toast.success(`Loaded ${macroMatch.description} from barcode`);
+    } catch (err) {
+      console.error(err);
+      setScannerError(
+        err instanceof Error ? err.message : "Unable to load barcode information.",
+      );
+      toast.error("Unable to load barcode");
+    } finally {
+      setIsScanningBarcode(false);
+      setShowScanner(false);
+    }
+  }, [draft.length]);
+
+  useEffect(() => {
+    if (!showScanner) {
+      if (scannerRef.current) {
+        scannerRef.current
+          .stop()
+          .catch(() => {})
+          .finally(() => {
+            scannerRef.current?.clear?.();
+            scannerRef.current = null;
+          });
+      }
+      return;
+    }
+    let cancelled = false;
+    const startScanner = async () => {
+      setScannerError(null);
+      setIsScanningBarcode(true);
+      try {
+        await ensureScannerScript();
+        if (cancelled) return;
+        const Html5Qrcode = window.Html5Qrcode;
+        if (!Html5Qrcode) {
+          throw new Error("html5-qrcode is unavailable.");
+        }
+        const scanner = new Html5Qrcode("barcode-reader");
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 8, qrbox: 250 },
+          (decodedText: string) => {
+            if (!decodedText || decodedText === lastScannedCode) return;
+            setLastScannedCode(decodedText);
+            void handleBarcodeMatch(decodedText);
+          },
+          () => {},
+        );
+      } catch (err) {
+        console.error(err);
+        setScannerError(
+          err instanceof Error
+            ? err.message
+            : "Unable to start the barcode scanner.",
+        );
+        setShowScanner(false);
+      } finally {
+        setIsScanningBarcode(false);
+      }
+    };
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+      if (scannerRef.current) {
+        scannerRef.current
+          .stop()
+          .catch(() => {})
+          .finally(() => {
+            scannerRef.current?.clear?.();
+            scannerRef.current = null;
+          });
+      }
+    };
+  }, [showScanner, lastScannedCode, handleBarcodeMatch]);
 
   const onFileChange = async (file?: File) => {
     if (!file) return;
@@ -867,7 +1077,7 @@ export default function HomeClient({
     setIsApplyingTemplate(true);
     setError(null);
     try {
-      const inserted = await applyMealTemplate(selectedTemplateId);
+      const inserted = await applyMealTemplate(selectedTemplateId, templateScale);
       setDailyLogs((prev) => {
         const combined = [...(inserted as FoodLogRecord[]), ...prev];
         return combined.sort(
@@ -978,6 +1188,19 @@ export default function HomeClient({
     });
   };
 
+  const openFlagModal = (log: FoodLogRecord) => {
+    setFlaggingLog(log);
+    setFlagForm({
+      food_name: log.food_name,
+      weight_g: log.weight_g,
+      calories: log.calories,
+      protein: log.protein,
+      carbs: log.carbs,
+      fat: log.fat,
+    });
+    setFlagNotes("");
+  };
+
   const saveLogEdits = async () => {
     if (!editingLogId) return;
     try {
@@ -1013,6 +1236,30 @@ export default function HomeClient({
         err instanceof Error ? err.message : "Unable to update this entry.",
       );
       toast.error("Unable to update entry");
+    }
+  };
+
+  const submitFlaggedLog = async () => {
+    if (!flaggingLog) return;
+    setIsFlagging(true);
+    try {
+      await reportLogIssue(flaggingLog.id, {
+        corrected_food_name: flagForm.food_name,
+        corrected_weight_g: flagForm.weight_g ?? null,
+        corrected_calories: flagForm.calories ?? null,
+        corrected_protein: flagForm.protein ?? null,
+        corrected_carbs: flagForm.carbs ?? null,
+        corrected_fat: flagForm.fat ?? null,
+        notes: flagNotes,
+      });
+      toast.success("Thanks! Added to the training dataset.");
+      setFlaggingLog(null);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Unable to submit report.");
+      toast.error("Unable to submit report");
+    } finally {
+      setIsFlagging(false);
     }
   };
 
@@ -1390,6 +1637,17 @@ export default function HomeClient({
                       </option>
                     ))}
                   </select>
+                  <label className="flex items-center gap-2 text-sm text-white/70">
+                    <span>Scale</span>
+                    <input
+                      className="w-24 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                      min={0.1}
+                      step={0.1}
+                      type="number"
+                      value={templateScale}
+                      onChange={(e) => setTemplateScale(e.target.value ? Number(e.target.value) : 1)}
+                    />
+                  </label>
                   <button
                     className="btn"
                     disabled={!selectedTemplateId || isApplyingTemplate}
@@ -1503,6 +1761,46 @@ export default function HomeClient({
               <button className="btn w-full sm:w-auto" disabled={isQuickSaving} onClick={handleQuickAdd} type="button">
                 {isQuickSaving ? "Adding..." : "Quick add entry"}
               </button>
+              <div className="rounded-xl border border-white/10 bg-slate-900/40 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Scan a barcode</p>
+                    <p className="text-xs text-white/60">html5-qrcode + OpenFoodFacts lookup.</p>
+                  </div>
+                  <button
+                    className="btn bg-white/10 text-white hover:bg-white/20"
+                    onClick={() => {
+                      setLastScannedCode(null);
+                      setShowScanner((prev) => !prev);
+                    }}
+                    type="button"
+                  >
+                    {showScanner ? "Stop scanning" : "Start scanner"}
+                  </button>
+                </div>
+                {showScanner ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">
+                      <div className="aspect-video" id="barcode-reader">
+                        {!isScanningBarcode && !scannerRef.current ? (
+                          <p className="p-4 text-center text-xs text-white/60">Initializing camera...</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    {scannerError ? (
+                      <p className="text-xs text-red-300">{scannerError}</p>
+                    ) : (
+                      <p className="text-xs text-white/60">
+                        Aim at the barcode. We will prefill macros from the public database.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-white/60">
+                    We will auto-open the manual override panel with the barcode result.
+                  </p>
+                )}
+              </div>
             </div>
           )}
           {error && (
@@ -1913,6 +2211,14 @@ export default function HomeClient({
                     ✏️ Edit
                   </button>
                   <button
+                    aria-label="Report issue"
+                    className="pill bg-amber-500/20 text-amber-100 hover:bg-amber-500/30"
+                    onClick={() => openFlagModal(log)}
+                    type="button"
+                  >
+                    🚩 Report
+                  </button>
+                  <button
                     aria-label="Delete entry"
                     className="pill bg-red-500/20 text-red-100 hover:bg-red-500/30"
                     disabled={deletingId === log.id}
@@ -1974,6 +2280,129 @@ export default function HomeClient({
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {flaggingLog && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-wide text-emerald-200">
+                  Flag for training
+                </p>
+                <h4 className="text-lg font-semibold text-white">Report an incorrect AI guess</h4>
+                <p className="text-xs text-white/60">We will store this in the training_dataset table.</p>
+              </div>
+              <button
+                className="text-white/70 hover:text-white"
+                onClick={() => setFlaggingLog(null)}
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm text-white/70 sm:col-span-2">
+                <span>Food name</span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                  value={flagForm.food_name ?? ""}
+                  onChange={(e) => setFlagForm((prev) => ({ ...prev, food_name: e.target.value }))}
+                />
+              </label>
+              <label className="space-y-1 text-sm text-white/70">
+                <span>Weight (g)</span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                  type="number"
+                  value={flagForm.weight_g ?? ""}
+                  onChange={(e) =>
+                    setFlagForm((prev) => ({
+                      ...prev,
+                      weight_g: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                />
+              </label>
+              <label className="space-y-1 text-sm text-white/70">
+                <span>Calories</span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                  type="number"
+                  value={flagForm.calories ?? ""}
+                  onChange={(e) =>
+                    setFlagForm((prev) => ({
+                      ...prev,
+                      calories: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                />
+              </label>
+              <label className="space-y-1 text-sm text-white/70">
+                <span>Protein (g)</span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                  type="number"
+                  value={flagForm.protein ?? ""}
+                  onChange={(e) =>
+                    setFlagForm((prev) => ({
+                      ...prev,
+                      protein: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                />
+              </label>
+              <label className="space-y-1 text-sm text-white/70">
+                <span>Carbs (g)</span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                  type="number"
+                  value={flagForm.carbs ?? ""}
+                  onChange={(e) =>
+                    setFlagForm((prev) => ({
+                      ...prev,
+                      carbs: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                />
+              </label>
+              <label className="space-y-1 text-sm text-white/70">
+                <span>Fat (g)</span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                  type="number"
+                  value={flagForm.fat ?? ""}
+                  onChange={(e) =>
+                    setFlagForm((prev) => ({
+                      ...prev,
+                      fat: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                />
+              </label>
+              <label className="space-y-1 text-sm text-white/70 sm:col-span-2">
+                <span>Notes</span>
+                <textarea
+                  className="min-h-[80px] w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                  value={flagNotes}
+                  onChange={(e) => setFlagNotes(e.target.value)}
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex items-center gap-2">
+              <button className="btn" disabled={isFlagging} onClick={submitFlaggedLog} type="button">
+                {isFlagging ? "Sending..." : "Submit report"}
+              </button>
+              <button
+                className="btn bg-white/10 text-white hover:bg-white/20"
+                onClick={() => setFlaggingLog(null)}
+                type="button"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

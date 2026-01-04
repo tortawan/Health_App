@@ -1,5 +1,6 @@
 const QUEUE_DB = "logFoodQueue";
 const QUEUE_STORE = "requests";
+let lunchReminderTimeout = null;
 
 function openQueue() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -111,6 +112,34 @@ self.addEventListener("sync", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data === "retryQueuedLogs") {
     event.waitUntil(replayQueued());
+  }
+  if (event.data?.type === "scheduleLunchReminder") {
+    const { lastLogAt } = event.data;
+    if (lunchReminderTimeout) {
+      clearTimeout(lunchReminderTimeout);
+      lunchReminderTimeout = null;
+    }
+
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const target = new Date(todayStart);
+    target.setHours(14, 0, 0, 0);
+    if (now.getTime() >= target.getTime()) return;
+
+    const lastLogDate = lastLogAt ? new Date(lastLogAt) : null;
+    if (lastLogDate && lastLogDate.toDateString() === todayStart.toDateString()) {
+      return; // Already logged today
+    }
+
+    lunchReminderTimeout = setTimeout(() => {
+      if (Notification.permission === "granted") {
+        self.registration.showNotification("Don't forget to log lunch!", {
+          body: "We haven't seen a meal yet today. Quick add lunch now.",
+          icon: "/icons/icon-192.svg",
+        });
+      }
+    }, target.getTime() - now.getTime());
   }
 });
 
