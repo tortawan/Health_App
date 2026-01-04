@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import toast from "react-hot-toast";
 import {
   deleteFoodLog,
@@ -17,12 +17,14 @@ import {
   logWater,
   reportLogIssue,
 } from "./actions";
+import { useProfileForm } from "./hooks/useProfileForm";
+import { useScanner } from "./hooks/useScanner";
 import { CameraCapture } from "@/components/scanner/CameraCapture";
 import { DailyLogList } from "@/components/dashboard/DailyLogList";
 import { DraftReview } from "@/components/logging/DraftReview";
 import { ManualSearchModal } from "@/components/logging/ManualSearchModal";
 import { supabaseBrowser } from "@/lib/supabase-browser";
-import { adjustedMacros, type ActivityLevel, type GoalType } from "@/lib/nutrition";
+import { adjustedMacros } from "@/lib/nutrition";
 import {
   DraftLog,
   FoodLogRecord,
@@ -35,25 +37,6 @@ import {
 } from "@/types/food";
 import { formatNumber } from "@/lib/format";
 
-type Html5QrcodeInstance = {
-  start(
-    camera: { facingMode: string } | string,
-    config: Record<string, unknown>,
-    onSuccess: (decodedText: string) => void,
-    onError?: (error: unknown) => void,
-  ): Promise<void>;
-  stop(): Promise<void>;
-  clear(): Promise<void>;
-};
-
-type Html5QrcodeConstructor = new (elementId: string) => Html5QrcodeInstance;
-
-declare global {
-  interface Window {
-    Html5Qrcode?: Html5QrcodeConstructor;
-  }
-}
-
 type RecentFood = {
   food_name: string;
   calories: number | null;
@@ -64,15 +47,6 @@ type RecentFood = {
   sugar?: number | null;
   sodium?: number | null;
   weight_g: number;
-};
-
-type ProfileFormState = {
-  height: number;
-  weight: number;
-  age: number;
-  activityLevel: ActivityLevel;
-  goalType: GoalType;
-  macroSplit: Record<string, number>;
 };
 
 type BeforeInstallPromptEvent = Event & {
@@ -324,7 +298,6 @@ export default function HomeClient({
   const [quickFat, setQuickFat] = useState<number | null>(null);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
-  const [savingProfile, setSavingProfile] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [templateList, setTemplateList] = useState<ClientMealTemplate[]>(templates as ClientMealTemplate[]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(templates[0]?.id ?? null);
@@ -348,33 +321,60 @@ export default function HomeClient({
     })),
   );
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
-  const [profileForm, setProfileForm] = useState<ProfileFormState>({
-    height: profile?.height ?? 170,
-    weight: profile?.weight ?? 70,
-    age: profile?.age ?? 30,
-    activityLevel: (profile?.activity_level as ActivityLevel | undefined) ?? "light",
-    goalType: (profile?.goal_type as GoalType | undefined) ?? "maintain",
-    macroSplit: (profile?.macro_split as Record<string, number> | null) ?? {
-      protein: 30,
-      carbs: 40,
-      fat: 30,
-    },
-  });
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isConfirmingAll, setIsConfirmingAll] = useState(false);
   const [waterIntake, setWaterIntake] = useState(initialWater);
   const [isLoggingWater, setIsLoggingWater] = useState(false);
   const [isCopyingDay, setIsCopyingDay] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
-  const [isScanningBarcode, setIsScanningBarcode] = useState(false);
-  const [scannerError, setScannerError] = useState<string | null>(null);
-  const scannerRef = useRef<Html5QrcodeInstance | null>(null);
-  const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
   const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
   const [flagForm, setFlagForm] = useState<Partial<FoodLogRecord>>({});
   const [flagNotes, setFlagNotes] = useState("");
   const [isFlagging, setIsFlagging] = useState(false);
   const router = useRouter();
+  const { profileForm, saveProfile, savingProfile, setProfileForm } = useProfileForm(
+    profile,
+    (message) => setError(message),
+  );
+  const handleBarcodeProduct = useCallback((macroMatch: MacroMatch) => {
+    setManualResults([macroMatch]);
+    setManualQuery(macroMatch.description);
+    setDraft((prev) => {
+      if (!prev.length) {
+        return [
+          {
+            food_name: macroMatch.description,
+            quantity_estimate: "1 serving",
+            search_term: macroMatch.description,
+            match: macroMatch,
+            matches: [macroMatch],
+            weight: 100,
+          },
+        ];
+      }
+
+      return prev.map((item, idx) =>
+        idx === 0
+          ? {
+              ...item,
+              match: macroMatch,
+              matches: [macroMatch, ...(item.matches ?? [])].filter(
+                (candidate, candidateIdx, list) =>
+                  list.findIndex(
+                    (entry) => entry.description === candidate.description,
+                  ) === candidateIdx,
+              ),
+              food_name: macroMatch.description,
+            }
+          : item,
+      );
+    });
+    setManualOpenIndex(0);
+  }, []);
+  const { hasScannerInstance, isScanningBarcode, scannerError, showScanner, toggleScanner } =
+    useScanner({
+      onProductLoaded: handleBarcodeProduct,
+      onError: (message) => setError(message),
+    });
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -520,169 +520,6 @@ export default function HomeClient({
     adjusted.setDate(adjusted.getDate() + delta);
     navigateToDate(formatDateParam(adjusted));
   };
-
-  const ensureScannerScript = () =>
-    new Promise<void>((resolve, reject) => {
-      if (typeof window === "undefined") {
-        reject(new Error("Browser required for scanning."));
-        return;
-      }
-      if (window.Html5Qrcode) {
-        resolve();
-        return;
-      }
-      const existing = document.getElementById("html5-qrcode-script");
-      if (existing) {
-        existing.addEventListener("load", () => resolve(), { once: true });
-        existing.addEventListener(
-          "error",
-          () => reject(new Error("Unable to load scanner script")),
-          {
-            once: true,
-          },
-        );
-        return;
-      }
-      const script = document.createElement("script");
-      script.id = "html5-qrcode-script";
-      script.src = "https://unpkg.com/html5-qrcode@2.3.11/html5-qrcode.min.js";
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Unable to load scanner script"));
-      document.body.appendChild(script);
-    });
-
-  const handleBarcodeMatch = useCallback(async (code: string) => {
-    setScannerError(null);
-    setIsScanningBarcode(true);
-    try {
-      const response = await fetch(
-        `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`,
-      );
-      if (!response.ok) {
-        throw new Error("OpenFoodFacts lookup failed");
-      }
-      const payload = await response.json();
-      const product = payload.product;
-      if (!product) {
-        throw new Error("No product found for that barcode.");
-      }
-      const nutriments = product.nutriments ?? {};
-      const macroMatch: MacroMatch = {
-        description: product.product_name || code,
-        kcal_100g:
-          nutriments["energy-kcal_100g"] ??
-          nutriments.energy_kcal_100g ??
-          nutriments.energy_value ??
-          null,
-        protein_100g: nutriments.proteins_100g ?? null,
-        carbs_100g: nutriments.carbohydrates_100g ?? null,
-        fat_100g: nutriments.fat_100g ?? null,
-        fiber_100g: nutriments.fiber_100g ?? null,
-        sugar_100g: nutriments.sugars_100g ?? null,
-        sodium_100g: nutriments.sodium_100g ?? null,
-      };
-
-      setManualResults([macroMatch]);
-      setManualQuery(product.product_name || code);
-      if (!draft.length) {
-        setDraft([
-          {
-            food_name: macroMatch.description,
-            quantity_estimate: "1 serving",
-            search_term: macroMatch.description,
-            match: macroMatch,
-            matches: [macroMatch],
-            weight: 100,
-          },
-        ]);
-      } else {
-        setDraft((prev) =>
-          prev.map((item, idx) =>
-            idx === 0
-              ? { ...item, match: macroMatch, matches: [macroMatch, ...(item.matches ?? [])], food_name: macroMatch.description }
-              : item,
-          ),
-        );
-      }
-      setManualOpenIndex(0);
-      toast.success(`Loaded ${macroMatch.description} from barcode`);
-    } catch (err) {
-      console.error(err);
-      setScannerError(
-        err instanceof Error ? err.message : "Unable to load barcode information.",
-      );
-      toast.error("Unable to load barcode");
-    } finally {
-      setIsScanningBarcode(false);
-      setShowScanner(false);
-    }
-  }, [draft.length]);
-
-  useEffect(() => {
-    if (!showScanner) {
-      if (scannerRef.current) {
-        scannerRef.current
-          .stop()
-          .catch(() => {})
-          .finally(() => {
-            scannerRef.current?.clear?.();
-            scannerRef.current = null;
-          });
-      }
-      return;
-    }
-    let cancelled = false;
-    const startScanner = async () => {
-      setScannerError(null);
-      setIsScanningBarcode(true);
-      try {
-        await ensureScannerScript();
-        if (cancelled) return;
-        const Html5Qrcode = window.Html5Qrcode;
-        if (!Html5Qrcode) {
-          throw new Error("html5-qrcode is unavailable.");
-        }
-        const scanner = new Html5Qrcode("barcode-reader");
-        scannerRef.current = scanner;
-        await scanner.start(
-          { facingMode: "environment" },
-          { fps: 8, qrbox: 250 },
-          (decodedText: string) => {
-            if (!decodedText || decodedText === lastScannedCode) return;
-            setLastScannedCode(decodedText);
-            void handleBarcodeMatch(decodedText);
-          },
-          () => {},
-        );
-      } catch (err) {
-        console.error(err);
-        setScannerError(
-          err instanceof Error
-            ? err.message
-            : "Unable to start the barcode scanner.",
-        );
-        setShowScanner(false);
-      } finally {
-        setIsScanningBarcode(false);
-      }
-    };
-
-    void startScanner();
-
-    return () => {
-      cancelled = true;
-      if (scannerRef.current) {
-        scannerRef.current
-          .stop()
-          .catch(() => {})
-          .finally(() => {
-            scannerRef.current?.clear?.();
-            scannerRef.current = null;
-          });
-      }
-    };
-  }, [showScanner, lastScannedCode, handleBarcodeMatch]);
 
   const onFileChange = async (file?: File) => {
     if (!file) return;
@@ -1684,10 +1521,7 @@ export default function HomeClient({
                   </div>
                   <button
                     className="btn bg-white/10 text-white hover:bg-white/20"
-                    onClick={() => {
-                      setLastScannedCode(null);
-                      setShowScanner((prev) => !prev);
-                    }}
+                    onClick={toggleScanner}
                     type="button"
                   >
                     {showScanner ? "Stop scanning" : "Start scanner"}
@@ -1697,7 +1531,7 @@ export default function HomeClient({
                   <div className="mt-3 space-y-2">
                     <div className="overflow-hidden rounded-lg border border-white/10 bg-black/40">
                       <div className="aspect-video" id="barcode-reader">
-                        {!isScanningBarcode && !scannerRef.current ? (
+                        {!isScanningBarcode && !hasScannerInstance ? (
                           <p className="p-4 text-center text-xs text-white/60">Initializing camera...</p>
                         ) : null}
                       </div>

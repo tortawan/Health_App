@@ -2,6 +2,13 @@
 
 This repository follows the **Main Project Plan** and **Technical Blueprint**: Gemini 1.5 Flash for perception, pgvector-powered Supabase for the nutrition “truth”, and a Next.js App Router UI focused on the trust-but-verify flow.
 
+## Current status
+
+The Phase 2 tracker experience is live:
+- **Draft verification**: Camera capture renders a draft and routes it through the Draft Review + Manual Search flow for trust-but-verify logging.
+- **Portion memory**: Past portions are remembered and prefilled in new drafts, and you can save templates for rapid reuse.
+- **Hybrid search**: Camera + manual text search + barcode scan (OpenFoodFacts) all feed into the same logging pipeline, with Gemini + pgvector backing the AI results.
+
 ## Quickstart
 
 1. Duplicate `.env.example` to `.env.local` and fill in your keys:
