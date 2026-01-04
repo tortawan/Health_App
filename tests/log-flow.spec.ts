@@ -52,3 +52,28 @@ test("image draft to confirmed log flow", async ({ page }) => {
   await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
   await expect(page.getByRole("heading", { name: "Mock Chicken Bowl" })).toBeVisible();
 });
+
+test("manual search fallback flow", async ({ page }) => {
+  await page.goto("/");
+
+  // Login if needed
+  if (page.url().includes("/login")) {
+    await page.fill('input[name="email"]', TEST_EMAIL);
+    await page.fill('input[name="password"]', TEST_PASSWORD);
+    await page.click('button:has-text("Sign in")');
+  }
+
+  // 1. Switch to Manual Mode
+  await page.click('button:has-text("Text / Manual")');
+
+  // 2. Enter a search term
+  await page.fill('input[placeholder="Oreo cookie"]', "Greek Yogurt");
+  await page.fill('input[type="number"]', "120"); // Calories
+
+  // 3. Quick Add
+  await page.click('button:has-text("Quick add entry")');
+
+  // 4. Verify Toast and List
+  await expect(page.getByText("Entry added")).toBeVisible();
+  await expect(page.getByText("Greek Yogurt")).toBeVisible();
+});
