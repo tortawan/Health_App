@@ -249,6 +249,36 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
+class ComponentErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Component error", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-100">
+          Something went wrong loading this section.
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function HomeClient({
   initialLogs,
   userEmail,
@@ -1695,26 +1725,28 @@ export default function HomeClient({
           )}
         </div>
 
-        <DraftReview
-          confidenceLabel={confidenceLabel}
-          draft={draft}
-          editingWeightIndex={editingWeightIndex}
-          isConfirmingAll={isConfirmingAll}
-          isImageUploading={isImageUploading}
-          loggingIndex={loggingIndex}
-          onApplyMatch={(index, match) =>
-            setDraft((prev) => prev.map((item, idx) => (idx === index ? { ...item, match } : item)))
-          }
-          onConfirm={handleConfirm}
-          onConfirmAll={handleConfirmAll}
-          onManualSearch={openManualSearch}
-          onSaveTemplate={handleSaveTemplate}
-          onTemplateNameChange={setTemplateName}
-          onToggleWeightEdit={(index) => setEditingWeightIndex(editingWeightIndex === index ? null : index)}
-          onUpdateWeight={updateWeight}
-          templateName={templateName}
-          isSavingTemplate={isSavingTemplate}
-        />
+        <ComponentErrorBoundary>
+          <DraftReview
+            confidenceLabel={confidenceLabel}
+            draft={draft}
+            editingWeightIndex={editingWeightIndex}
+            isConfirmingAll={isConfirmingAll}
+            isImageUploading={isImageUploading}
+            loggingIndex={loggingIndex}
+            onApplyMatch={(index, match) =>
+              setDraft((prev) => prev.map((item, idx) => (idx === index ? { ...item, match } : item)))
+            }
+            onConfirm={handleConfirm}
+            onConfirmAll={handleConfirmAll}
+            onManualSearch={openManualSearch}
+            onSaveTemplate={handleSaveTemplate}
+            onTemplateNameChange={setTemplateName}
+            onToggleWeightEdit={(index) => setEditingWeightIndex(editingWeightIndex === index ? null : index)}
+            onUpdateWeight={updateWeight}
+            templateName={templateName}
+            isSavingTemplate={isSavingTemplate}
+          />
+        </ComponentErrorBoundary>
       </section>
 
       <section className="card grid gap-6 lg:grid-cols-3">

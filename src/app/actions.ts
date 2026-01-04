@@ -6,6 +6,15 @@ import { getEmbedder } from "@/lib/embedder";
 import { calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
+function isMealTemplateItem(item: unknown): item is MealTemplateItem {
+  return (
+    typeof item === "object" &&
+    item !== null &&
+    "food_name" in item &&
+    "weight_g" in item
+  );
+}
+
 type MacroMatch = {
   description: string;
   kcal_100g: number | null;
@@ -334,8 +343,12 @@ export async function applyMealTemplate(
 
   const now = new Date();
   const factor = Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
-  const payload =
-    (template.items as MealTemplateItem[] | null)?.map((item, index) => ({
+  const items = template.items;
+  if (!Array.isArray(items) || !items.every(isMealTemplateItem)) {
+    throw new Error("Template data is corrupted or invalid.");
+  }
+
+  const payload = items.map((item, index) => ({
       user_id: session.user.id,
       food_name: item.food_name,
       weight_g: Math.round(item.weight_g * factor * 1000) / 1000,

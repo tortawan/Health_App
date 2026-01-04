@@ -1,3 +1,30 @@
+-- FIX: Create base tables if they don't exist
+create table if not exists public.user_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  height numeric,
+  weight numeric,
+  age integer,
+  activity_level text,
+  goal_type text,
+  macro_split jsonb,
+  daily_calorie_target numeric,
+  daily_protein_target numeric,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.food_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  food_name text not null,
+  weight_g numeric not null,
+  image_path text,
+  calories numeric,
+  protein numeric,
+  carbs numeric,
+  fat numeric,
+  consumed_at timestamptz default now()
+);
+
 -- Enable required extensions
 create extension if not exists "pgcrypto";
 
