@@ -112,7 +112,6 @@ export async function manualSearch(searchTerm: string) {
     query_text: query,
     match_threshold: 0.6,
     match_count: 5,
-    user_id: session.user.id,
   });
 
   if (error) {
