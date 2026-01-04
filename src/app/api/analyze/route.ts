@@ -24,9 +24,6 @@ const FALLBACK: GeminiItem[] = [
 
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
   const formData = await request.formData();
   if ([...formData.keys()].length === 0) {
     return NextResponse.json(
@@ -94,7 +91,6 @@ export async function POST(request: Request) {
         query_text: item.search_term,
         match_threshold: 0.6,
         match_count: 3,
-        user_id: session?.user.id ?? null,
       });
 
       const mappedMatches = Array.isArray(matches)
