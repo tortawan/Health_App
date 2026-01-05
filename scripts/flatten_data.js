@@ -89,10 +89,21 @@ function flattenFoods(foodRows, macroMap) {
 }
 
 async function main() {
-  const foodRows = loadJson(RAW_FOOD_FILE);
-  console.log(`Loaded ${foodRows.length} food items.`);
+  // 1. Load all foods
+  const allFoodRows = loadJson(RAW_FOOD_FILE);
+  console.log(`Loaded ${allFoodRows.length} total food items.`);
 
+  // 2. FILTER: Keep only Foundation Foods (and SR Legacy for variety)
+  // This matches your "Truth Database" blueprint and removes the 2M branded items.
+  const allowedTypes = new Set(["foundation_food", "sr_legacy_food", "survey_fndds_food"]);
+  const foodRows = allFoodRows.filter((row) => allowedTypes.has(row.data_type));
+  
+  console.log(`Filtered down to ${foodRows.length} high-quality validation foods.`);
+
+  // 3. Build macro map (Streamed)
   const macroMap = await buildMacroMap();
+  
+  // 4. Flatten only the filtered foods
   const flattened = flattenFoods(foodRows, macroMap);
 
   fs.writeFileSync(OUTPUT_FILE, JSON.stringify(flattened, null, 2));

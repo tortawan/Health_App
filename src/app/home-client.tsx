@@ -1123,27 +1123,7 @@ export default function HomeClient({
     }
   };
 
-  const saveProfile = async () => {
-    setSavingProfile(true);
-    try {
-      await upsertUserProfile({
-        height: profileForm.height,
-        weight: profileForm.weight,
-        age: profileForm.age,
-        activityLevel: profileForm.activityLevel,
-        goalType: profileForm.goalType,
-        macroSplit: profileForm.macroSplit,
-      });
-      toast.success("Goals updated");
-      router.refresh();
-    } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : "Unable to save profile.");
-      toast.error("Unable to save profile");
-    } finally {
-      setSavingProfile(false);
-    }
-  };
+  
 
   const todayLabel = useMemo(() => {
     return selectedDateObj.toLocaleDateString(undefined, {

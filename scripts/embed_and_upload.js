@@ -7,20 +7,29 @@
  * 2) Run `node scripts/flatten_data.js`
  *
  * Required env vars:
- * - NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL)
- * - SUPABASE_SERVICE_ROLE_KEY (write access for inserts)
- * - EMBEDDING_MODEL (optional, defaults to Xenova/all-MiniLM-L6-v2)
+ * - NEXT_PUBLIC_SUPABASE_URL
+ * - SUPABASE_SERVICE_ROLE_KEY
+ * - EMBEDDING_MODEL (optional)
  */
-const fs = require("fs");
 const path = require("path");
+
+// Load environment variables immediately so Supabase client can find them
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+require("dotenv").config({ path: path.join(__dirname, "..", ".env.local") });
+
+const fs = require("fs");
 
 const BATCH_SIZE = Number(process.env.BATCH_SIZE ?? 250);
 const DATA_PATH = path.join(__dirname, "data", "flattened.json");
 
 async function getSupabaseClient() {
   const { createClient } = await import("@supabase/supabase-js");
+  
+  // Try to find the URL in various common env var names
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  
+  // Try to find the Service Role Key (preferred) or Anon Key
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
@@ -28,7 +37,7 @@ async function getSupabaseClient() {
 
   if (!supabaseUrl || !supabaseKey) {
     throw new Error(
-      "Missing Supabase credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      "Missing Supabase credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your .env file.",
     );
   }
 
@@ -40,6 +49,7 @@ async function getSupabaseClient() {
 async function getEmbedder() {
   const { pipeline } = await import("@xenova/transformers");
   const modelId = process.env.EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2";
+  
   if (!process.env.EMBEDDING_MODEL) {
     console.warn(
       "EMBEDDING_MODEL not set. Defaulting to Xenova/all-MiniLM-L6-v2 — ensure this matches your API runtime.",
@@ -81,7 +91,9 @@ async function main() {
     const payload = [];
 
     for (const item of batch) {
+      // Generate the vector for the food description
       const embedding = await embed(item.description);
+      
       payload.push({
         id: item.id,
         description: item.description,
@@ -96,6 +108,7 @@ async function main() {
       });
     }
 
+    // Upsert into Supabase
     const { error } = await supabase.from("usda_library").upsert(payload, {
       onConflict: "id",
     });
