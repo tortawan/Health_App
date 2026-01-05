@@ -1,10 +1,7 @@
 /* eslint-disable no-console */
 /**
- * Downloads the USDA Foundation Foods CSV bundle, unzips it, and writes
- * structured JSON versions of `food.csv` and `food_nutrient.csv` to disk.
- *
- * Usage:
- *   USDA_DATA_URL="https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_csv_2024-10-24.zip" node scripts/download_usda.js
+ * Downloads the USDA Foundation Foods CSV bundle, extracts it,
+ * writes `food.json`, and copies `food_nutrient.csv` for streaming later.
  */
 const fs = require("fs");
 const path = require("path");
@@ -13,7 +10,7 @@ const { parse } = require("csv-parse/sync");
 
 const DATA_URL =
   process.env.USDA_DATA_URL ||
-  "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_csv_2024-10-24.zip";
+  "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_csv_2024-10-31.zip";
 const OUTPUT_DIR = path.join(__dirname, "data");
 const ZIP_PATH = path.join(OUTPUT_DIR, "usda.zip");
 const EXTRACT_DIR = path.join(OUTPUT_DIR, "usda");
@@ -36,6 +33,7 @@ async function downloadZip() {
 }
 
 function findFile(rootDir, targetName) {
+  if (!fs.existsSync(rootDir)) return null;
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
 
   for (const entry of entries) {
@@ -47,7 +45,6 @@ function findFile(rootDir, targetName) {
       return fullPath;
     }
   }
-
   return null;
 }
 
@@ -61,7 +58,7 @@ function extractZip() {
 
   if (!foodPath || !foodNutrientPath) {
     throw new Error(
-      `Could not locate food.csv (${foodPath}) or food_nutrient.csv (${foodNutrientPath}).`,
+      `Could not locate food.csv or food_nutrient.csv in ${EXTRACT_DIR}`,
     );
   }
 
@@ -79,24 +76,31 @@ function parseCsv(filePath) {
 
 async function main() {
   await ensureDir(OUTPUT_DIR);
-  await downloadZip();
+  
+  // Only download if we don't have the zip yet (optional optimization)
+  if (!fs.existsSync(ZIP_PATH)) {
+    await downloadZip();
+  } else {
+    console.log("Zip already exists, skipping download.");
+  }
+
   const { foodPath, foodNutrientPath } = extractZip();
 
-  console.log("Parsing CSV files (this may take a moment)...");
+  console.log("Parsing food.csv...");
   const foodRows = parseCsv(foodPath);
-  const nutrientRows = parseCsv(foodNutrientPath);
-
   await fs.promises.writeFile(
     path.join(OUTPUT_DIR, "food.json"),
     JSON.stringify(foodRows, null, 2),
   );
-  await fs.promises.writeFile(
-    path.join(OUTPUT_DIR, "food_nutrient.json"),
-    JSON.stringify(nutrientRows, null, 2),
-  );
+
+  // FIX: Do NOT parse food_nutrient.csv into JSON. It is too big.
+  // Instead, copy it to a known location so the next script can stream it.
+  console.log("Copying food_nutrient.csv (large file)...");
+  const destNutrientPath = path.join(OUTPUT_DIR, "food_nutrient.csv");
+  await fs.promises.copyFile(foodNutrientPath, destNutrientPath);
 
   console.log(
-    `Done. Parsed ${foodRows.length} foods and ${nutrientRows.length} nutrient rows.`,
+    `Done. Processed ${foodRows.length} foods. Nutrient data copied to ${destNutrientPath} for streaming.`,
   );
 }
 

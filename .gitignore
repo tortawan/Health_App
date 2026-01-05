@@ -1,6 +1,7 @@
 .next/
 .turbo/
 node_modules/
+scripts/data/
 
 package-lock.json
 pnpm-lock.yaml
