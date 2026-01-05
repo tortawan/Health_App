@@ -279,6 +279,8 @@ export default function HomeClient({
   const [imagePublicUrl, setImagePublicUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isImageUploading, setIsImageUploading] = useState(false);
+  const [analysisNotice, setAnalysisNotice] = useState<string | null>(null);
+  const [showDraftModal, setShowDraftModal] = useState(false);
   const [draft, setDraft] = useState<DraftLog[]>([]);
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
   const [error, setError] = useState<string | null>(null);
@@ -528,6 +530,8 @@ export default function HomeClient({
     setIsUploading(true);
     setIsImageUploading(true);
     setImagePublicUrl(null);
+    setAnalysisNotice(null);
+    setShowDraftModal(false);
     setDraft([]);
 
     let processed = file;
@@ -551,7 +555,7 @@ export default function HomeClient({
       }
 
       const bucket =
-        process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? "food-photos";
+        process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? "user-images";
       const extension =
         processed.name.split(".").pop() || processed.type.split("/")[1] || "jpg";
       const path = `uploads/${new Date()
@@ -622,6 +626,7 @@ export default function HomeClient({
             const payload = (await response.json()) as {
               draft: DraftLog[];
               imagePath?: string;
+              usedFallback?: boolean;
             };
             return payload;
           } catch (attemptError) {
@@ -652,6 +657,19 @@ export default function HomeClient({
         };
       });
       setDraft(enhanced);
+      if (payload.usedFallback) {
+        setAnalysisNotice("AI couldn't identify this photo. Please double-check or search manually.");
+        toast.error("Gemini fell back — verify before saving.");
+        if (payload.draft?.length) {
+          setManualOpenIndex(0);
+          setManualQuery(payload.draft[0]?.search_term ?? "");
+        }
+      } else {
+        setAnalysisNotice(null);
+      }
+      if (enhanced.length) {
+        setShowDraftModal(true);
+      }
       if (payload.imagePath) setFilePreview(payload.imagePath);
     } catch (err) {
       console.error(err);
@@ -677,6 +695,7 @@ export default function HomeClient({
       ]);
       setManualOpenIndex(0);
       setCaptureMode("manual");
+      setAnalysisNotice("AI couldn't identify this photo. Please try manual search.");
     } finally {
       await uploadPromise;
       setIsUploading(false);
@@ -1134,74 +1153,120 @@ export default function HomeClient({
     });
   }, [selectedDateObj]);
 
+  const draftReviewProps = {
+    confidenceLabel,
+    draft,
+    editingWeightIndex,
+    isConfirmingAll,
+    isImageUploading,
+    loggingIndex,
+    onApplyMatch: (index: number, match: MacroMatch) =>
+      setDraft((prev) => prev.map((item, idx) => (idx === index ? { ...item, match } : item))),
+    onConfirm: handleConfirm,
+    onConfirmAll: handleConfirmAll,
+    onManualSearch: openManualSearch,
+    onSaveTemplate: handleSaveTemplate,
+    onTemplateNameChange: setTemplateName,
+    onToggleWeightEdit: (index: number) => setEditingWeightIndex(editingWeightIndex === index ? null : index),
+    onUpdateWeight: updateWeight,
+    templateName,
+    isSavingTemplate,
+  };
+
   return (
     <AppErrorBoundary>
       <main className="space-y-8">
-      <header className="card flex flex-col gap-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="pill border border-emerald-500/40 bg-emerald-500/10 text-emerald-200">
-              Phase 2 – Tracker Mode
-            </div>
-            <div className="pill bg-white/5 text-white/70">
-              Gemini + Supabase + pgvector
+        {showDraftModal && draft.length ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+            <div className="relative w-full max-w-5xl rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm uppercase tracking-wide text-emerald-200">Is this correct?</p>
+                  <p className="text-base text-white/70">
+                    Review the AI draft, adjust weights, or run manual search before saving.
+                  </p>
+                </div>
+                <button
+                  className="pill bg-white/10 text-white hover:bg-white/20"
+                  onClick={() => setShowDraftModal(false)}
+                  type="button"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+                <ComponentErrorBoundary>
+                  <DraftReview {...draftReviewProps} />
+                </ComponentErrorBoundary>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-sm text-white/70">
-            <div className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100">
-              🔥 {streak} day streak
+        ) : null}
+        <header className="card flex flex-col gap-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="pill border border-emerald-500/40 bg-emerald-500/10 text-emerald-200">
+                Phase 2 – Tracker Mode
+              </div>
+              <div className="pill bg-white/5 text-white/70">
+                Gemini + Supabase + pgvector
+              </div>
             </div>
-            {installPrompt ? (
-              <button
-                className="btn bg-emerald-500 text-white hover:bg-emerald-600"
-                onClick={handleInstallClick}
-                type="button"
+            <div className="flex items-center gap-3 text-sm text-white/70">
+              <div className="rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100">
+                🔥 {streak} day streak
+              </div>
+              {installPrompt ? (
+                <button
+                  className="btn bg-emerald-500 text-white hover:bg-emerald-600"
+                  onClick={handleInstallClick}
+                  type="button"
+                >
+                  Install App
+                </button>
+              ) : null}
+              <a
+                className="btn bg-white/10 text-white hover:bg-white/20"
+                href="/stats"
               >
-                Install App
-              </button>
-            ) : null}
-            <a
-              className="btn bg-white/10 text-white hover:bg-white/20"
-              href="/stats"
-            >
-              Stats
-            </a>
-            <a
-              className="btn bg-white/10 text-white hover:bg-white/20"
-              href="/settings"
-            >
-              Settings
-            </a>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-wide text-white/40">
-                Signed in
-              </p>
-              <p className="font-medium text-white">
-                {userEmail ?? "Authenticated"}
-              </p>
+                Stats
+              </a>
+              <a
+                className="btn bg-white/10 text-white hover:bg-white/20"
+                href="/settings"
+              >
+                Settings
+              </a>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-wide text-white/40">
+                  Signed in
+                </p>
+                <p className="font-medium text-white">
+                  {userEmail ?? "Authenticated"}
+                </p>
+              </div>
+              <form action={signOutAction}>
+                <button className="btn bg-white/10 text-white hover:bg-white/20" type="submit">
+                  Sign out
+                </button>
+              </form>
             </div>
-            <form action={signOutAction}>
-              <button className="btn bg-white/10 text-white hover:bg-white/20" type="submit">
-                Sign out
-              </button>
-            </form>
           </div>
-        </div>
-        <div className="flex flex-col gap-3">
-          <h1 className="text-3xl font-bold text-white">
-            Snap → Verify → Log (Trust-but-Verify)
-          </h1>
-          <p className="max-w-3xl text-lg text-white/70">
-            Upload a meal photo or quick-add calories. We calculate goals from your profile and keep you on track with streaks, targets, and edits.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3 text-sm text-white/60">
-          <span className="pill">Optimistic UI</span>
-          <span className="pill">Manual override</span>
-          <span className="pill">Progress rings</span>
-          <span className="pill">Weekly trends</span>
-        </div>
-      </header>
+          <div className="flex flex-col gap-3">
+            <h1 className="text-3xl font-bold text-white">
+              Snap → Verify → Log (Trust-but-Verify)
+            </h1>
+            <p className="max-w-3xl text-lg text-white/70">
+              Upload a meal photo or quick-add calories. We calculate goals from your profile and keep you on track with streaks, targets, and edits.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3 text-sm text-white/60">
+            <span className="pill">Optimistic UI</span>
+            <span className="pill">Manual override</span>
+            <span className="pill">Progress rings</span>
+            <span className="pill">Weekly trends</span>
+          </div>
+        </header>
 
       <section className="card grid gap-6 lg:grid-cols-[1.2fr,0.8fr]">
         <div className="space-y-3">
@@ -1557,29 +1622,15 @@ export default function HomeClient({
               {error}
             </div>
           )}
+          {analysisNotice ? (
+            <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-50">
+              {analysisNotice}
+            </div>
+          ) : null}
         </div>
 
         <ComponentErrorBoundary>
-          <DraftReview
-            confidenceLabel={confidenceLabel}
-            draft={draft}
-            editingWeightIndex={editingWeightIndex}
-            isConfirmingAll={isConfirmingAll}
-            isImageUploading={isImageUploading}
-            loggingIndex={loggingIndex}
-            onApplyMatch={(index, match) =>
-              setDraft((prev) => prev.map((item, idx) => (idx === index ? { ...item, match } : item)))
-            }
-            onConfirm={handleConfirm}
-            onConfirmAll={handleConfirmAll}
-            onManualSearch={openManualSearch}
-            onSaveTemplate={handleSaveTemplate}
-            onTemplateNameChange={setTemplateName}
-            onToggleWeightEdit={(index) => setEditingWeightIndex(editingWeightIndex === index ? null : index)}
-            onUpdateWeight={updateWeight}
-            templateName={templateName}
-            isSavingTemplate={isSavingTemplate}
-          />
+          <DraftReview {...draftReviewProps} />
         </ComponentErrorBoundary>
       </section>
 

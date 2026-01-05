@@ -40,6 +40,11 @@ async function getSupabaseClient() {
 async function getEmbedder() {
   const { pipeline } = await import("@xenova/transformers");
   const modelId = process.env.EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2";
+  if (!process.env.EMBEDDING_MODEL) {
+    console.warn(
+      "EMBEDDING_MODEL not set. Defaulting to Xenova/all-MiniLM-L6-v2 — ensure this matches your API runtime.",
+    );
+  }
   const pipe = await pipeline("feature-extraction", modelId);
 
   return async (text) => {

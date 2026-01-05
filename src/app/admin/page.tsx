@@ -29,7 +29,7 @@ async function getMetrics() {
     .gte("consumed_at", start.toISOString())
     .lt("consumed_at", end.toISOString());
 
-  const bucket = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? "food-photos";
+  const bucket = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ?? "user-images";
 
   const listAll = async (prefix = ""): Promise<number> => {
     const { data, error } = await service.storage.from(bucket).list(prefix, {
