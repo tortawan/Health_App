@@ -13,7 +13,7 @@ const redis =
 const limiter = redis
   ? new Ratelimit({
       redis,
-      limiter: Ratelimit.slidingWindow(10, "1 h"),
+      limiter: Ratelimit.slidingWindow(5, "1 m"),
       analytics: true,
       prefix: "ratelimit:analyze",
     })
