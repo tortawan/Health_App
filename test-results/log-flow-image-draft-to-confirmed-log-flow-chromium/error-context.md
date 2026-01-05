@@ -1,0 +1,289 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - main [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - paragraph [ref=e8]: Is this correct?
+          - paragraph [ref=e9]: Review the AI draft, adjust weights, or run manual search before saving.
+        - button "Close" [ref=e10] [cursor=pointer]
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]:
+            - paragraph [ref=e15]: Verification
+            - heading "Draft entries" [level=2] [ref=e16]
+            - paragraph [ref=e17]: We never auto-save. Confirm or adjust the AI guess before logging.
+          - generic [ref=e18]:
+            - button "Confirm all" [ref=e19] [cursor=pointer]
+            - generic [ref=e20]: High confidence
+        - generic [ref=e21]:
+          - generic [ref=e22]:
+            - paragraph [ref=e23]: Save as meal template
+            - generic [ref=e24]: Store this draft for faster future logging.
+          - generic [ref=e25]:
+            - textbox "e.g., Chicken and Rice" [ref=e26]
+            - button "Save as meal" [ref=e27] [cursor=pointer]
+        - generic [ref=e29]:
+          - generic [ref=e30]:
+            - generic [ref=e31]:
+              - heading "Mock Chicken Bowl" [level=3] [ref=e32]
+              - button "200g (200g)" [ref=e33] [cursor=pointer]
+            - paragraph [ref=e34]: "Search term: chicken bowl"
+            - generic [ref=e35]:
+              - generic [ref=e36]:
+                - paragraph [ref=e37]: Match (0.92 similarity)
+                - paragraph [ref=e38]: Grilled chicken breast
+              - generic [ref=e39]:
+                - paragraph [ref=e40]: Macros / 100g
+                - paragraph [ref=e41]:
+                  - generic [ref=e42]: Kcal 165.0
+                  - generic [ref=e43]: Protein 31.0g
+                  - generic [ref=e44]: Carbs 0.0g
+                  - generic [ref=e45]: Fat 3.6g
+              - generic [ref=e46]:
+                - paragraph [ref=e47]: Adjusted macros (200g)
+                - paragraph [ref=e48]:
+                  - generic [ref=e49]: Kcal 330.0
+                  - generic [ref=e50]: Protein 62.0g
+                  - generic [ref=e51]: Carbs 0.0g
+                  - generic [ref=e52]: Fat 7.2g
+          - generic [ref=e53]:
+            - button "Confirm" [ref=e54] [cursor=pointer]
+            - button "Adjust weight" [ref=e55] [cursor=pointer]
+            - button "Manual search" [ref=e56] [cursor=pointer]
+    - generic [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]: Phase 2 – Tracker Mode
+          - generic [ref=e61]: Gemini + Supabase + pgvector
+        - generic [ref=e62]:
+          - generic [ref=e63]: 🔥 0 day streak
+          - link "Stats" [ref=e64] [cursor=pointer]:
+            - /url: /stats
+          - link "Settings" [ref=e65] [cursor=pointer]:
+            - /url: /settings
+          - generic [ref=e66]:
+            - paragraph [ref=e67]: Signed in
+            - paragraph [ref=e68]: tortawan@gmail.com
+          - button "Sign out" [ref=e70] [cursor=pointer]
+      - generic [ref=e71]:
+        - heading "Snap → Verify → Log (Trust-but-Verify)" [level=1] [ref=e72]
+        - paragraph [ref=e73]: Upload a meal photo or quick-add calories. We calculate goals from your profile and keep you on track with streaks, targets, and edits.
+      - generic [ref=e74]:
+        - generic [ref=e75]: Optimistic UI
+        - generic [ref=e76]: Manual override
+        - generic [ref=e77]: Progress rings
+        - generic [ref=e78]: Weekly trends
+    - generic [ref=e79]:
+      - generic [ref=e80]:
+        - paragraph [ref=e81]: Target
+        - heading "Personalize your calorie + protein goals" [level=2] [ref=e82]
+        - paragraph [ref=e83]: We use Mifflin-St Jeor (assumes male constant) with your activity level and goal to calculate daily calorie and protein targets. Macro split is stored for future breakdowns.
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - text: Height (cm)
+            - spinbutton "Height (cm)" [ref=e86]: "175"
+          - generic [ref=e87]:
+            - text: Weight (kg)
+            - spinbutton "Weight (kg)" [ref=e88]: "200"
+          - generic [ref=e89]:
+            - text: Age
+            - spinbutton "Age" [ref=e90]: "45"
+          - generic [ref=e91]:
+            - text: Activity level
+            - combobox "Activity level" [ref=e92]:
+              - option "Sedentary"
+              - option "Light" [selected]
+              - option "Moderate"
+              - option "Active"
+              - option "Very Active"
+          - generic [ref=e93]:
+            - text: Goal
+            - combobox "Goal" [ref=e94]:
+              - option "Lose"
+              - option "Maintain" [selected]
+              - option "Gain"
+          - generic [ref=e95]:
+            - paragraph [ref=e96]: Macro split (%)
+            - generic [ref=e97]:
+              - generic [ref=e98]:
+                - text: protein
+                - spinbutton "protein" [ref=e99]: "30"
+              - generic [ref=e100]:
+                - text: carbs
+                - spinbutton "carbs" [ref=e101]: "40"
+              - generic [ref=e102]:
+                - text: fat
+                - spinbutton "fat" [ref=e103]: "30"
+        - button "Save goals" [ref=e104] [cursor=pointer]
+      - generic [ref=e105]:
+        - paragraph [ref=e106]: Today
+        - generic [ref=e107]:
+          - generic "Calorie progress" [ref=e108]:
+            - generic [ref=e109]:
+              - generic [ref=e110]: Calories
+              - generic [ref=e111]: 0 / 3951
+          - generic [ref=e112]:
+            - generic [ref=e113]:
+              - generic "Protein progress" [ref=e114]:
+                - generic [ref=e115]:
+                  - generic [ref=e116]: 0g
+                  - generic [ref=e117]: / 296g
+              - generic [ref=e118]:
+                - paragraph [ref=e119]: Protein
+                - paragraph [ref=e120]: 0.0 / 296g
+            - generic [ref=e121]:
+              - generic "Carbs progress" [ref=e122]:
+                - generic [ref=e123]:
+                  - generic [ref=e124]: 0g
+                  - generic [ref=e125]: / 395g
+              - generic [ref=e126]:
+                - paragraph [ref=e127]: Carbs
+                - paragraph [ref=e128]: 0.0 / 395g
+            - generic [ref=e129]:
+              - generic "Fat progress" [ref=e130]:
+                - generic [ref=e131]:
+                  - generic [ref=e132]: 0g
+                  - generic [ref=e133]: / 132g
+              - generic [ref=e134]:
+                - paragraph [ref=e135]: Fat
+                - paragraph [ref=e136]: 0.0 / 132g
+          - generic [ref=e137]:
+            - generic [ref=e138]:
+              - paragraph [ref=e139]: Water
+              - generic [ref=e140]: Goal 2000ml
+            - paragraph [ref=e141]: 0 ml
+            - button "+ 250ml" [ref=e142] [cursor=pointer]
+    - generic [ref=e143]:
+      - generic [ref=e144]:
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - paragraph [ref=e147]: Capture
+            - heading "Upload a meal photo or quick add" [level=2] [ref=e148]
+            - paragraph [ref=e149]: We immediately render the image while the backend runs Gemini + Supabase searches in parallel, or you can bypass AI with manual text entry.
+          - generic [ref=e150]:
+            - button "Photo" [ref=e151] [cursor=pointer]
+            - button "Text / Manual" [ref=e152] [cursor=pointer]
+        - generic [ref=e153]:
+          - generic [ref=e154]:
+            - generic [ref=e155]:
+              - paragraph [ref=e156]: Quick load
+              - paragraph [ref=e157]: Drop in a saved meal template to insert multiple entries.
+            - generic [ref=e158]: 0 saved
+          - generic [ref=e159]:
+            - combobox [ref=e160]:
+              - option "No templates yet" [selected]
+            - generic [ref=e161]:
+              - generic [ref=e162]: Scale
+              - spinbutton "Scale" [ref=e163]: "1"
+            - button "Quick load meal" [disabled] [ref=e164]
+            - button "Manage templates" [ref=e165] [cursor=pointer]
+        - generic [ref=e166] [cursor=pointer]: Take Photo
+        - img "Uploaded meal preview" [ref=e168]
+        - generic [ref=e169]: Bucket not found
+      - generic [ref=e170]:
+        - generic [ref=e171]:
+          - generic [ref=e172]:
+            - paragraph [ref=e173]: Verification
+            - heading "Draft entries" [level=2] [ref=e174]
+            - paragraph [ref=e175]: We never auto-save. Confirm or adjust the AI guess before logging.
+          - generic [ref=e176]:
+            - button "Confirm all" [ref=e177] [cursor=pointer]
+            - generic [ref=e178]: High confidence
+        - generic [ref=e179]:
+          - generic [ref=e180]:
+            - paragraph [ref=e181]: Save as meal template
+            - generic [ref=e182]: Store this draft for faster future logging.
+          - generic [ref=e183]:
+            - textbox "e.g., Chicken and Rice" [ref=e184]
+            - button "Save as meal" [ref=e185] [cursor=pointer]
+        - generic [ref=e187]:
+          - generic [ref=e188]:
+            - generic [ref=e189]:
+              - heading "Mock Chicken Bowl" [level=3] [ref=e190]
+              - button "200g (200g)" [ref=e191] [cursor=pointer]
+            - paragraph [ref=e192]: "Search term: chicken bowl"
+            - generic [ref=e193]:
+              - generic [ref=e194]:
+                - paragraph [ref=e195]: Match (0.92 similarity)
+                - paragraph [ref=e196]: Grilled chicken breast
+              - generic [ref=e197]:
+                - paragraph [ref=e198]: Macros / 100g
+                - paragraph [ref=e199]:
+                  - generic [ref=e200]: Kcal 165.0
+                  - generic [ref=e201]: Protein 31.0g
+                  - generic [ref=e202]: Carbs 0.0g
+                  - generic [ref=e203]: Fat 3.6g
+              - generic [ref=e204]:
+                - paragraph [ref=e205]: Adjusted macros (200g)
+                - paragraph [ref=e206]:
+                  - generic [ref=e207]: Kcal 330.0
+                  - generic [ref=e208]: Protein 62.0g
+                  - generic [ref=e209]: Carbs 0.0g
+                  - generic [ref=e210]: Fat 7.2g
+          - generic [ref=e211]:
+            - button "Confirm" [ref=e212] [cursor=pointer]
+            - button "Adjust weight" [ref=e213] [cursor=pointer]
+            - button "Manual search" [ref=e214] [cursor=pointer]
+    - generic [ref=e215]:
+      - generic [ref=e216]:
+        - heading "Prompting" [level=3] [ref=e217]
+        - paragraph [ref=e218]: The API uses a constrained JSON prompt to Gemini 1.5 Flash to avoid hallucinated nutrition values. Only names + quantities are returned.
+      - generic [ref=e219]:
+        - heading "Vector search" [level=3] [ref=e220]
+        - paragraph [ref=e221]:
+          - text: We embed the Gemini search term locally with transformers.js using
+          - code [ref=e222]: Xenova/all-MiniLM-L6-v2
+          - text: to match the pgvector data stored in Supabase.
+      - generic [ref=e223]:
+        - heading "Supabase policies" [level=3] [ref=e224]
+        - paragraph [ref=e225]: USDA data stays public (select only), while user food logs are RLS protected. The code anticipates the SQL policies defined in the blueprint.
+    - generic [ref=e226]:
+      - generic [ref=e227]:
+        - generic [ref=e228]:
+          - paragraph [ref=e229]: Daily log
+          - generic [ref=e230]:
+            - heading "Monday, Jan 5" [level=3] [ref=e231]
+            - generic [ref=e232]:
+              - button "Previous day" [ref=e233] [cursor=pointer]: ←
+              - textbox [ref=e234]: 2026-01-05
+              - button "Next day" [ref=e235] [cursor=pointer]: →
+            - button "Copy yesterday" [ref=e236] [cursor=pointer]
+          - paragraph [ref=e237]: Totals are summed from your food_logs entries for the selected date.
+        - generic [ref=e238]:
+          - generic [ref=e239]:
+            - img [ref=e242]
+            - generic:
+              - generic: 0%
+              - generic: macro mix
+          - generic [ref=e243]:
+            - paragraph [ref=e244]: Macro donut
+            - generic [ref=e245]:
+              - paragraph [ref=e248]: "Protein: 0g / 296g"
+              - paragraph [ref=e251]: "Carbs: 0g / 395g"
+              - paragraph [ref=e254]: "Fat: 0g / 132g"
+            - paragraph [ref=e255]: "Protein goal: 0 / 296g"
+          - generic [ref=e256]:
+            - paragraph [ref=e257]: Daily Total
+            - paragraph [ref=e258]:
+              - generic [ref=e259]: Kcal 0 / 3951
+              - generic [ref=e260]: Protein 0.0g
+              - generic [ref=e261]: Carbs 0.0g
+              - generic [ref=e262]: Fat 0.0g
+      - generic [ref=e263]: Track your first meal to see it here. Confirm a draft entry to start your daily streak.
+  - contentinfo [ref=e264]: Food images are processed by Google AI.
+  - generic [ref=e269] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e270]:
+      - img [ref=e271]
+    - generic [ref=e274]:
+      - button "Open issues overlay" [ref=e275]:
+        - generic [ref=e276]:
+          - generic [ref=e277]: "0"
+          - generic [ref=e278]: "1"
+        - generic [ref=e279]: Issue
+      - button "Collapse issues badge" [ref=e280]:
+        - img [ref=e281]
+  - alert [ref=e283]
+```
