@@ -1,27 +1,9 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase";
 import { FOOD_PROMPT, geminiClient } from "@/lib/gemini";
 import { getEmbedder } from "@/lib/embedder";
-
-// --- Rate Limiting Setup ---
-// Create a new ratelimiter that allows 5 requests per 1 minute
-// This protects your 1,500/day Gemini quota from being drained by a single script.
-const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-  ? Redis.fromEnv()
-  : null;
-
-const ratelimit = redis
-  ? new Ratelimit({
-      redis: redis,
-      limiter: Ratelimit.slidingWindow(5, "60 s"),
-      analytics: true,
-      prefix: "health_app_analyze",
-    })
-  : null;
-// ---------------------------
+import { analyzeLimiter, rateLimitRedis } from "@/lib/ratelimit";
 
 type GeminiItem = {
   food_name: string;
@@ -42,11 +24,99 @@ const FALLBACK: GeminiItem[] = [
   },
 ];
 
+const MATCH_THRESHOLD_BASE = 0.6;
+let adaptiveThresholdCache = {
+  value: MATCH_THRESHOLD_BASE,
+  expiresAt: 0,
+};
+
+function cosineSimilarity(a: number[], b: number[]) {
+  const length = Math.min(a.length, b.length);
+  if (!length) return 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < length; i += 1) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom ? dot / denom : 0;
+}
+
+async function deriveMatchThreshold(embed: Awaited<ReturnType<typeof getEmbedder>>) {
+  const now = Date.now();
+  if (adaptiveThresholdCache.expiresAt > now) {
+    return adaptiveThresholdCache.value;
+  }
+
+  const service = createSupabaseServiceClient();
+  if (!service) {
+    adaptiveThresholdCache = {
+      value: MATCH_THRESHOLD_BASE,
+      expiresAt: now + 5 * 60 * 1000,
+    };
+    return MATCH_THRESHOLD_BASE;
+  }
+
+  const { data, error } = await service
+    .from("ai_corrections")
+    .select("original_search, final_match_desc")
+    .not("original_search", "is", null)
+    .not("final_match_desc", "is", null)
+    .order("logged_at", { ascending: false })
+    .limit(25);
+
+  if (error || !data?.length) {
+    adaptiveThresholdCache = {
+      value: MATCH_THRESHOLD_BASE,
+      expiresAt: now + 5 * 60 * 1000,
+    };
+    return MATCH_THRESHOLD_BASE;
+  }
+
+  const similarities: number[] = [];
+  for (const entry of data) {
+    const [search, final] = await Promise.all([
+      embed(entry.original_search ?? ""),
+      embed(entry.final_match_desc ?? ""),
+    ]);
+
+    const similarity = cosineSimilarity(search.data, final.data);
+    if (Number.isFinite(similarity)) {
+      similarities.push(similarity);
+    }
+  }
+
+  if (!similarities.length) {
+    adaptiveThresholdCache = {
+      value: MATCH_THRESHOLD_BASE,
+      expiresAt: now + 5 * 60 * 1000,
+    };
+    return MATCH_THRESHOLD_BASE;
+  }
+
+  const sorted = [...similarities].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const lowestAccepted = sorted[0];
+  const tuned = Math.max(0.55, Math.min(0.85, (median ?? MATCH_THRESHOLD_BASE) - 0.05));
+  const buffered = Math.max(0.55, Math.min(0.8, (lowestAccepted ?? MATCH_THRESHOLD_BASE) - 0.02));
+  const value = Math.max(0.55, Math.min(0.8, Math.min(tuned, buffered)));
+
+  adaptiveThresholdCache = {
+    value,
+    expiresAt: now + 10 * 60 * 1000,
+  };
+
+  return value;
+}
+
 export async function POST(request: Request) {
   // 1. Rate Limit Check
-  if (ratelimit) {
+  if (analyzeLimiter) {
     const ip = (await headers()).get("x-forwarded-for") ?? "127.0.0.1";
-    const { success } = await ratelimit.limit(ip);
+    const { success } = await analyzeLimiter.limit(ip);
     
     if (!success) {
       return NextResponse.json(
@@ -54,7 +124,7 @@ export async function POST(request: Request) {
         { status: 429 }
       );
     }
-  } else if (!redis && process.env.NODE_ENV === "production") {
+  } else if (!rateLimitRedis && process.env.NODE_ENV === "production") {
     console.warn("Rate limiting is disabled. Configure UPSTASH_REDIS_REST_URL.");
   }
 
@@ -138,6 +208,7 @@ export async function POST(request: Request) {
   }
 
   const embed = await getEmbedder();
+  const matchThreshold = await deriveMatchThreshold(embed);
 
   const drafts = await Promise.all(
     items.map(async (item) => {
@@ -146,7 +217,7 @@ export async function POST(request: Request) {
       const { data: matches } = await supabase.rpc("match_foods", {
         query_embedding: embedding,
         query_text: item.search_term,
-        match_threshold: 0.6,
+        match_threshold: matchThreshold,
         match_count: 3,
       });
 

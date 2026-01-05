@@ -1,7 +1,4 @@
-{
-type: "uploaded file",
-fileName: "tortawan/health_app/Health_App-bda602805d5b6e1df7033b03b4932486e8988f73/src/components/logging/DraftReview.tsx",
-fullContent: `"use client";
+"use client";
 
 import React, { useEffect, useRef } from "react";
 import { adjustedMacros } from "@/lib/nutrition";
@@ -73,7 +70,7 @@ export function DraftReview({
     draft.forEach((item, index) => {
       const hasMatches = Array.isArray(item.matches) && item.matches.length > 0;
       if (hasMatches) return;
-      const key = \`\${item.food_name}-\${item.search_term}-\${index}\`;
+      const key = `${item.food_name}-${item.search_term}-${index}`;
       if (autoManualTriggered.current.has(key)) return;
       autoManualTriggered.current.add(key);
       onManualSearch(index);
@@ -91,6 +88,11 @@ export function DraftReview({
     const matchChanged = original.match?.description !== final.match?.description;
 
     if (weightChanged || matchChanged) {
+      const canSend =
+        typeof navigator === "undefined" ? true : navigator.onLine !== false;
+
+      if (!canSend) return;
+
       try {
         await fetch("/api/log-correction", {
           method: "POST",
@@ -102,6 +104,10 @@ export function DraftReview({
           }),
         });
       } catch (err) {
+        const message = err instanceof Error ? err.message.toLowerCase() : "";
+        if (message.includes("network")) {
+          return;
+        }
         console.error("Failed to log correction", err);
       }
     }
@@ -124,10 +130,17 @@ export function DraftReview({
         <div>
           <p className="text-sm uppercase tracking-wide text-emerald-200">Verification</p>
           <h2 className="text-xl font-semibold text-white">Draft entries</h2>
-          <p className="text-sm text-white/60">We never auto-save. Confirm or adjust the AI guess before logging.</p>
+          <p className="text-sm text-white/60">
+            We never auto-save. Confirm or adjust the AI guess before logging.
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60" disabled={!draft.length || isConfirmingAll || isImageUploading} onClick={handleConfirmAll} type="button">
+          <button
+            className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!draft.length || isConfirmingAll || isImageUploading}
+            onClick={handleConfirmAll}
+            type="button"
+          >
             {isConfirmingAll ? "Saving all..." : "Confirm all"}
           </button>
           <span className="pill bg-emerald-500/20 text-emerald-100">{confidenceLabel}</span>
@@ -162,27 +175,38 @@ export function DraftReview({
         <div className="space-y-3">
           {draft.map((item, index) => {
             const adjusted = adjustedMacros(item.match, item.weight);
-            const shouldShowPicker = (item.match?.similarity ?? 0) >= 0.7 && (item.match?.similarity ?? 0) < 0.85 && item.matches?.length;
+            const shouldShowPicker =
+              (item.match?.similarity ?? 0) >= 0.7 &&
+              (item.match?.similarity ?? 0) < 0.85 &&
+              item.matches?.length;
             const candidates = item.matches ?? [];
 
             return (
-              <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4" key={\`\${item.food_name}-\${index}\`}>
+              <div
+                className="rounded-xl border border-white/10 bg-slate-900/60 p-4"
+                key={`${item.food_name}-${index}`}
+              >
                 <div className="flex flex-col gap-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-lg font-semibold text-white">{item.food_name}</h3>
-                    <button className="pill bg-white/10 text-white/70 hover:bg-white/20" onClick={() => onToggleWeightEdit(index)} type="button">
+                    <button
+                      className="pill bg-white/10 text-white/70 hover:bg-white/20"
+                      onClick={() => onToggleWeightEdit(index)}
+                      type="button"
+                    >
                       {item.quantity_estimate} ({item.weight}g)
                     </button>
                   </div>
                   <p className="text-sm text-white/60">Search term: {item.search_term}</p>
                   {editingWeightIndex === index && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/80">
-                      <label className="text-white/60" htmlFor={\`weight-\${index}\`}>
+                      <label className="text-white/60" htmlFor={`weight-${index}`}>
                         Adjust weight (g):
                       </label>
                       <input
+                        aria-label={`Adjust weight for ${item.food_name}`}
                         className="w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white focus:border-emerald-400 focus:outline-none"
-                        id={\`weight-\${index}\`}
+                        id={`weight-${index}`}
                         min={1}
                         type="number"
                         value={item.weight}
@@ -191,9 +215,12 @@ export function DraftReview({
                       <div className="flex flex-wrap gap-2">
                         {QUICK_MULTIPLIERS.map((preset) => (
                           <button
+                            aria-label={`Set weight to ${preset.label} of ${item.food_name}`}
                             className="pill bg-white/10 text-white hover:bg-white/20"
                             key={preset.label}
-                            onClick={() => onUpdateWeight(index, Math.max(1, Math.round(item.weight * preset.factor)))}
+                            onClick={() =>
+                              onUpdateWeight(index, Math.max(1, Math.round(item.weight * preset.factor)))
+                            }
                             type="button"
                           >
                             {preset.label}
@@ -201,6 +228,7 @@ export function DraftReview({
                         ))}
                         {QUICK_PRESETS.map((preset) => (
                           <button
+                            aria-label={`Set weight to ${preset.value} grams for ${item.food_name}`}
                             className="pill bg-white/10 text-white hover:bg-white/20"
                             key={preset.label}
                             onClick={() => onUpdateWeight(index, preset.value)}
@@ -210,7 +238,12 @@ export function DraftReview({
                           </button>
                         ))}
                       </div>
-                      <button className="btn bg-white/10 text-white hover:bg-white/20" type="button" onClick={() => onToggleWeightEdit(index)}>
+                      <button
+                        aria-label={`Close weight adjustment for ${item.food_name}`}
+                        className="btn bg-white/10 text-white hover:bg-white/20"
+                        type="button"
+                        onClick={() => onToggleWeightEdit(index)}
+                      >
                         Done
                       </button>
                     </div>
@@ -218,7 +251,9 @@ export function DraftReview({
                   {item.match ? (
                     <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-white/80">
                       <div className="rounded-lg bg-white/5 p-2">
-                        <p className="text-xs uppercase text-white/50">Match ({formatNumber(item.match.similarity, 2)} similarity)</p>
+                        <p className="text-xs uppercase text-white/50">
+                          Match ({formatNumber(item.match.similarity, 2)} similarity)
+                        </p>
                         <p>{item.match.description}</p>
                       </div>
                       <div className="rounded-lg bg-white/5 p-2">
@@ -231,7 +266,9 @@ export function DraftReview({
                         </p>
                       </div>
                       <div className="col-span-2 rounded-lg bg-emerald-500/10 p-2">
-                        <p className="text-xs uppercase text-emerald-100/70">Adjusted macros ({item.weight}g)</p>
+                        <p className="text-xs uppercase text-emerald-100/70">
+                          Adjusted macros ({item.weight}g)
+                        </p>
                         {adjusted ? (
                           <p className="flex flex-wrap gap-2 text-emerald-50">
                             <span>Kcal {formatNumber(adjusted.calories)}</span>
@@ -245,7 +282,9 @@ export function DraftReview({
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-amber-100/80">No confident match found. Try manual search to select the right food.</p>
+                    <p className="text-sm text-amber-100/80">
+                      No confident match found. Try manual search to select the right food.
+                    </p>
                   )}
                 </div>
                 {shouldShowPicker ? (
@@ -254,15 +293,22 @@ export function DraftReview({
                     <div className="flex gap-2 overflow-x-auto pb-2">
                       {candidates.map((candidate, idx) => (
                         <button
-                          className={\`min-w-[220px] rounded-lg border px-3 py-2 text-left text-sm \${candidate.description === item.match?.description ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-50" : "border-white/10 bg-slate-900/40 text-white"}\`}
-                          key={\`\${candidate.description}-\${idx}\`}
+                          className={`min-w-[220px] rounded-lg border px-3 py-2 text-left text-sm ${
+                            candidate.description === item.match?.description
+                              ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-50"
+                              : "border-white/10 bg-slate-900/40 text-white"
+                          }`}
+                          key={`${candidate.description}-${idx}`}
                           onClick={() => onApplyMatch(index, candidate)}
                           type="button"
                         >
                           <p className="font-medium">{candidate.description}</p>
-                          <p className="text-xs text-white/60">Similarity {formatNumber(candidate.similarity, 2)}</p>
                           <p className="text-xs text-white/60">
-                            Kcal {formatNumber(candidate.kcal_100g)} • Protein {formatNumber(candidate.protein_100g)}g
+                            Similarity {formatNumber(candidate.similarity, 2)}
+                          </p>
+                          <p className="text-xs text-white/60">
+                            Kcal {formatNumber(candidate.kcal_100g)} • Protein{" "}
+                            {formatNumber(candidate.protein_100g)}g
                           </p>
                         </button>
                       ))}
@@ -276,12 +322,26 @@ export function DraftReview({
                     onClick={() => handleConfirm(index)}
                     type="button"
                   >
-                    {loggingIndex === index ? "Saving..." : isImageUploading ? "Uploading photo..." : "Confirm"}
+                    {loggingIndex === index
+                      ? "Saving..."
+                      : isImageUploading
+                        ? "Uploading photo..."
+                        : "Confirm"}
                   </button>
-                  <button className="btn bg-white/10 text-white hover:bg-white/20" onClick={() => onToggleWeightEdit(index)} type="button">
+                  <button
+                    aria-controls={`weight-${index}`}
+                    aria-expanded={editingWeightIndex === index}
+                    className="btn bg-white/10 text-white hover:bg-white/20"
+                    onClick={() => onToggleWeightEdit(index)}
+                    type="button"
+                  >
                     Adjust weight
                   </button>
-                  <button className="btn bg-white/10 text-white hover:bg-white/20" onClick={() => onManualSearch(index)} type="button">
+                  <button
+                    className="btn bg-white/10 text-white hover:bg-white/20"
+                    onClick={() => onManualSearch(index)}
+                    type="button"
+                  >
                     Manual search
                   </button>
                 </div>
@@ -292,6 +352,4 @@ export function DraftReview({
       )}
     </div>
   );
-}
-`
 }
