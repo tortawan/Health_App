@@ -1,7 +1,3 @@
-{
-type: uploaded file
-fileName: tortawan/health_app/Health_App-483b8040c23c4c68c9a066c1ec67a4779fcfbaea/tests/log-flow.spec.ts
-fullContent:
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -183,4 +179,3 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   expect(logCorrectionRequest).toBeTruthy();
   expect(correctionTriggered).toBeTruthy();
 });
-}
