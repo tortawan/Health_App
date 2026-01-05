@@ -1,7 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { ActivityLevel, GoalType } from "@/lib/nutrition";
+import { calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 import type { UserProfile } from "@/types/food";
 import { upsertUserProfile } from "../actions";
 
@@ -41,6 +41,18 @@ export function useProfileForm(
   const [savingProfile, setSavingProfile] = useState(false);
   const router = useRouter();
 
+  const targets = useMemo(
+    () =>
+      calculateTargets({
+        height: profileForm.height,
+        weight: profileForm.weight,
+        age: profileForm.age,
+        activityLevel: profileForm.activityLevel,
+        goalType: profileForm.goalType,
+      }),
+    [profileForm.activityLevel, profileForm.age, profileForm.goalType, profileForm.height, profileForm.weight],
+  );
+
   const saveProfile = useCallback(async () => {
     setSavingProfile(true);
     try {
@@ -70,5 +82,6 @@ export function useProfileForm(
     setProfileForm,
     saveProfile,
     savingProfile,
+    targets,
   };
 }

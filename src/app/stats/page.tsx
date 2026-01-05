@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import StatsClient from "./stats-client";
 import WeightLogger from "../WeightLogger";
+import WeightTrendChart from "./weight-trend-chart";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
 function formatLabel(date: Date) {
@@ -21,6 +22,10 @@ export default async function StatsPage() {
   end.setHours(23, 59, 59, 999);
   const start = new Date(end);
   start.setDate(end.getDate() - 6);
+  start.setHours(0, 0, 0, 0);
+  const weightRangeStart = new Date(end);
+  weightRangeStart.setHours(0, 0, 0, 0);
+  weightRangeStart.setDate(end.getDate() - 29);
 
   const { data: logs } = await supabase
     .from("food_logs")
@@ -81,12 +86,14 @@ export default async function StatsPage() {
     .from("weight_logs")
     .select("weight_kg, logged_at")
     .eq("user_id", session.user.id)
-    .gte("logged_at", start.toISOString())
+    .gte("logged_at", weightRangeStart.toISOString())
     .lte("logged_at", end.toISOString())
     .order("logged_at", { ascending: true });
 
   const weightByDay: Record<string, number> = {};
   weightLogs?.forEach((row) => {
+    const loggedAt = new Date(row.logged_at as string);
+    if (loggedAt < start) return;
     const key = (row.logged_at as string).slice(0, 10);
     weightByDay[key] = Number(row.weight_kg);
   });
@@ -107,9 +114,22 @@ export default async function StatsPage() {
       ? Number(weightLogs[weightLogs.length - 1].weight_kg)
       : null;
 
+  const weightChartData =
+    weightLogs?.map((row) => {
+      const loggedAt = new Date(row.logged_at as string);
+      return {
+        date: loggedAt.toISOString(),
+        label: loggedAt.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        weight: Number(row.weight_kg),
+      };
+    }) ?? [];
+
   return (
     <div className="space-y-4">
-      <StatsClient data={chartData} target={calorieTarget} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatsClient data={chartData} target={calorieTarget} />
+        <WeightTrendChart data={weightChartData} />
+      </div>
       <WeightLogger defaultWeight={latestWeight} />
     </div>
   );

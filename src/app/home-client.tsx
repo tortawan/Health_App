@@ -11,7 +11,6 @@ import {
   saveMealTemplate,
   signOutAction,
   updateFoodLog,
-  upsertUserProfile,
   deleteMealTemplate,
   copyDay,
   logWater,
@@ -333,7 +332,7 @@ export default function HomeClient({
   const [flagNotes, setFlagNotes] = useState("");
   const [isFlagging, setIsFlagging] = useState(false);
   const router = useRouter();
-  const { profileForm, saveProfile, savingProfile, setProfileForm } = useProfileForm(
+  const { profileForm, saveProfile, savingProfile, setProfileForm, targets } = useProfileForm(
     profile,
     (message) => setError(message),
   );
@@ -411,8 +410,8 @@ export default function HomeClient({
     );
   }, [dailyLogs]);
 
-  const calorieTarget = profile?.daily_calorie_target ?? 2000;
-  const proteinTarget = profile?.daily_protein_target ?? 120;
+  const calorieTarget = profile?.daily_calorie_target ?? targets.daily_calorie_target;
+  const proteinTarget = profile?.daily_protein_target ?? targets.daily_protein_target;
 
   const selectedDateObj = useMemo(
     () => buildDateFromInput(selectedDate),
@@ -1660,6 +1659,8 @@ export default function HomeClient({
         onShiftDate={shiftDate}
         selectedDate={selectedDate}
         todayLabel={todayLabel}
+        calorieTarget={calorieTarget}
+        macroTargets={macroTargets}
       />
 
       {showTemplateManager && (
