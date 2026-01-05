@@ -1,3 +1,7 @@
+{
+type: uploaded file
+fileName: tortawan/health_app/Health_App-483b8040c23c4c68c9a066c1ec67a4779fcfbaea/tests/log-flow.spec.ts
+fullContent:
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -23,6 +27,21 @@ async function stubLogFood(page: Page) {
         consumed_at: new Date().toISOString(),
       }),
     }),
+  );
+}
+
+// Mock Supabase Storage to prevent "Uploading photo..." state from hanging
+async function stubStorage(page: Page) {
+  await page.route("**/storage/v1/object/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        path: "uploads/mock-image.webp",
+        id: "mock-id",
+        fullPath: "user-images/uploads/mock-image.webp",
+      }),
+    })
   );
 }
 
@@ -58,14 +77,20 @@ test("image draft to confirmed log flow", async ({ page }) => {
     }),
   );
   await stubLogFood(page);
+  await stubStorage(page);
 
   // Upload the dummy image
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
 
   // Verify UI and Confirm
-  await expect(page.getByText("Draft entries")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm" }).click();
+  // We explicitly target the modal to avoid strict mode violations (duplicate DraftReview)
+  const modal = page.locator(".fixed").filter({ hasText: "Is this correct?" });
+  await expect(modal).toBeVisible();
+  
+  await expect(modal.getByText("Draft entries")).toBeVisible();
+  // Use exact: true to avoid matching "Confirm all" which might be disabled
+  await modal.getByRole("button", { name: "Confirm", exact: true }).click();
   
   // Verify Success
   await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
@@ -83,8 +108,11 @@ test("manual search fallback flow", async ({ page }) => {
   await page.click('button:has-text("Text / Manual")');
 
   // 2. Enter a search term
-  await page.fill('input[placeholder="Oreo cookie"]', "Greek Yogurt");
-  await page.fill('input[type="number"]', "120"); // Calories
+  await page.getByPlaceholder("Oreo cookie").fill("Greek Yogurt");
+  
+  // Use getByLabel("Calories") to ensure we fill the correct input.
+  // Using input[type="number"] was finding the "Height" field in the profile section first.
+  await page.getByLabel("Calories").fill("120");
 
   // 3. Quick Add
   await page.click('button:has-text("Quick add entry")');
@@ -123,6 +151,7 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
     }),
   );
   await stubLogFood(page);
+  await stubStorage(page);
 
   let correctionTriggered = false;
   await page.route("**/api/log-correction", (route) => {
@@ -137,16 +166,21 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
 
-  await expect(page.getByText("Draft entries")).toBeVisible();
-  await page.getByRole("button", { name: "Adjust weight" }).click();
-  await page.getByLabel(/Adjust weight/).fill("250");
-  await page.getByRole("button", { name: "Done" }).click();
+  // Scope to modal to ensure we click the interactive element
+  const modal = page.locator(".fixed").filter({ hasText: "Is this correct?" });
+  await expect(modal).toBeVisible();
+
+  await expect(modal.getByText("Draft entries")).toBeVisible();
+  await modal.getByRole("button", { name: "Adjust weight" }).click();
+  await modal.getByLabel(/Adjust weight/).fill("250");
+  await modal.getByRole("button", { name: "Done" }).click();
 
   const [logCorrectionRequest] = await Promise.all([
     page.waitForRequest("**/api/log-correction"),
-    page.getByRole("button", { name: "Confirm" }).click(),
+    modal.getByRole("button", { name: "Confirm", exact: true }).click(),
   ]);
 
   expect(logCorrectionRequest).toBeTruthy();
   expect(correctionTriggered).toBeTruthy();
 });
+}
