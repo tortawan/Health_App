@@ -3,7 +3,7 @@
 node_modules/
 scripts/data/
 
-package-lock.json
+# package-lock.json
 pnpm-lock.yaml
 dist/
 build/
