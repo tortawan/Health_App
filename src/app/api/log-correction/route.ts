@@ -1,11 +1,24 @@
-{
-type: "uploaded file",
-fileName: "tortawan/health_app/Health_App-bda602805d5b6e1df7033b03b4932486e8988f73/src/app/api/log-correction/route.ts",
-fullContent: `import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase";
+import { logCorrectionLimiter, rateLimitRedis } from "@/lib/ratelimit";
 
 export async function POST(request: Request) {
   try {
+    if (logCorrectionLimiter) {
+      const ip = (await headers()).get("x-forwarded-for") ?? "127.0.0.1";
+      const { success } = await logCorrectionLimiter.limit(ip);
+
+      if (!success) {
+        return NextResponse.json(
+          { error: "Too many corrections. Please slow down." },
+          { status: 429 },
+        );
+      }
+    } else if (!rateLimitRedis && process.env.NODE_ENV === "production") {
+      console.warn("Rate limiting is disabled for log-correction. Configure UPSTASH_REDIS_REST_URL.");
+    }
+
     const supabase = await createSupabaseServerClient();
     const { original, final, correctedField } = await request.json();
 
@@ -32,5 +45,4 @@ export async function POST(request: Request) {
     console.error("Failed to log correction:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
-}`
 }

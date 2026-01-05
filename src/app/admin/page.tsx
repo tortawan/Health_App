@@ -59,6 +59,43 @@ async function getMetrics() {
   };
 }
 
+type CorrectionEntry = {
+  id?: number;
+  original_food: string | null;
+  original_search: string | null;
+  original_match_desc: string | null;
+  final_match_desc: string | null;
+  final_weight: number | null;
+  correction_type: string | null;
+  logged_at: string | null;
+};
+
+async function getCorrections(): Promise<{
+  entries: CorrectionEntry[];
+  error: string | null;
+}> {
+  const service = createSupabaseServiceClient();
+  if (!service) {
+    return {
+      entries: [],
+      error: "Set SUPABASE_SERVICE_ROLE_KEY to enable admin metrics.",
+    };
+  }
+
+  const { data, error } = await service
+    .from("ai_corrections")
+    .select(
+      "id, original_food, original_search, original_match_desc, final_match_desc, final_weight, correction_type, logged_at",
+    )
+    .order("logged_at", { ascending: false })
+    .limit(50);
+
+  return {
+    entries: data ?? [],
+    error: error ? error.message : null,
+  };
+}
+
 function formatBytes(bytes: number | null) {
   if (bytes === null) return "Unknown";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -83,6 +120,7 @@ export default async function AdminPage() {
   }
 
   const metrics = await getMetrics();
+  const corrections = await getCorrections();
 
   return (
     <div className="space-y-6">
@@ -117,6 +155,59 @@ export default async function AdminPage() {
         <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
           <p className="text-xs uppercase tracking-wide text-white/60">Storage usage</p>
           <p className="text-3xl font-semibold text-white">{formatBytes(metrics.storageBytes)}</p>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-white/10 bg-slate-900/60 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-white/60">Feedback</p>
+            <h2 className="text-lg font-semibold text-white">Latest corrections</h2>
+            <p className="text-sm text-white/60">Showing the 50 most recent ai_corrections entries.</p>
+          </div>
+          {corrections.error ? (
+            <span className="pill bg-amber-500/20 text-amber-100">{corrections.error}</span>
+          ) : (
+            <span className="pill bg-white/5 text-white/70">{corrections.entries.length} rows</span>
+          )}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm text-white/80">
+            <thead>
+              <tr className="border-b border-white/10 text-xs uppercase text-white/60">
+                <th className="px-2 py-2">When</th>
+                <th className="px-2 py-2">Search</th>
+                <th className="px-2 py-2">Original match</th>
+                <th className="px-2 py-2">Final match</th>
+                <th className="px-2 py-2">Weight</th>
+                <th className="px-2 py-2">Type</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {corrections.entries.map((entry) => (
+                <tr key={entry.id ?? `${entry.logged_at}-${entry.original_search}`}>
+                  <td className="whitespace-nowrap px-2 py-2 text-white/70">
+                    {entry.logged_at ? new Date(entry.logged_at).toLocaleString() : "—"}
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="font-medium text-white">{entry.original_food || "—"}</div>
+                    <div className="text-xs text-white/60">{entry.original_search}</div>
+                  </td>
+                  <td className="px-2 py-2">{entry.original_match_desc || "—"}</td>
+                  <td className="px-2 py-2 text-emerald-100/80">{entry.final_match_desc || "—"}</td>
+                  <td className="px-2 py-2">{entry.final_weight ? `${entry.final_weight}g` : "—"}</td>
+                  <td className="px-2 py-2 uppercase text-white/60">{entry.correction_type ?? "—"}</td>
+                </tr>
+              ))}
+              {!corrections.entries.length ? (
+                <tr>
+                  <td className="px-2 py-3 text-white/60" colSpan={6}>
+                    No corrections logged yet.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
