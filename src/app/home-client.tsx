@@ -336,6 +336,24 @@ export default function HomeClient({
     profile,
     (message) => setError(message),
   );
+
+  // --- NEW: Macro Split Validation Logic ---
+  const handleSaveProfile = async () => {
+    const { protein = 0, carbs = 0, fat = 0 } = profileForm.macroSplit;
+    const total = protein + carbs + fat;
+
+    if (total !== 100) {
+      const msg = `Macro split must add up to 100% (Current: ${total}%)`;
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    setError(null);
+    await saveProfile();
+  };
+  // ----------------------------------------
+
   const handleBarcodeProduct = useCallback((macroMatch: MacroMatch) => {
     setManualResults([macroMatch]);
     setManualQuery(macroMatch.description);
@@ -1349,7 +1367,8 @@ export default function HomeClient({
               </div>
             </div>
           </div>
-          <button className="btn" disabled={savingProfile} onClick={saveProfile} type="button">
+          {/* UPDATED: Changed onClick to handleSaveProfile */}
+          <button className="btn" disabled={savingProfile} onClick={handleSaveProfile} type="button">
             {savingProfile ? "Saving..." : "Save goals"}
           </button>
         </div>

@@ -1,3 +1,9 @@
+import { Database } from "./supabase";
+
+// Shortcut to Tables
+type Tables<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Row"];
+
 export type MealTemplateItem = {
   food_name: string;
   weight_g: number;
@@ -7,6 +13,7 @@ export type MealTemplateItem = {
   fat: number | null;
 };
 
+// Extends the RPC return type but makes fields nullable to match UI needs
 export type MacroMatch = {
   description: string;
   kcal_100g: number | null;
@@ -29,37 +36,14 @@ export type DraftLog = {
   weight: number;
 };
 
-export type FoodLogRecord = {
-  id: string;
-  food_name: string;
-  weight_g: number;
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fat: number | null;
-  fiber?: number | null;
-  sugar?: number | null;
-  sodium?: number | null;
-  consumed_at: string;
-  image_path?: string | null;
-};
+// Directly inherit from Supabase 'food_logs' table
+export type FoodLogRecord = Tables<"food_logs">;
 
-export type UserProfile = {
-  user_id: string;
-  height: number | null;
-  weight: number | null;
-  age: number | null;
-  activity_level: string | null;
-  goal_type: string | null;
-  macro_split: Record<string, unknown> | null;
-  daily_calorie_target: number | null;
-  daily_protein_target: number | null;
-  is_public?: boolean | null;
-} | null;
+// Directly inherit from Supabase 'user_profiles' table
+export type UserProfile = Tables<"user_profiles"> | null;
 
-export type MealTemplate = {
-  id: string;
-  name: string;
+// Inherit basics from 'meal_templates' but strictly type the JSON 'items'
+export type MealTemplate = Omit<Tables<"meal_templates">, "items"> & {
   items: MealTemplateItem[];
 };
 

@@ -1,5 +1,8 @@
+// src/app/hooks/useScanner.ts
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { manualSearch } from "../actions"; // Import server action for USDA fallback
 import type { MacroMatch } from "@/types/food";
 
 type Html5QrcodeInstance = {
@@ -70,6 +73,7 @@ export function useScanner({ onProductLoaded, onError }: UseScannerOptions) {
       setScannerError(null);
       setIsScanningBarcode(true);
       try {
+        // 1. Primary Lookup: OpenFoodFacts (UPC -> Product)
         const response = await fetch(
           `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`,
         );
@@ -81,9 +85,12 @@ export function useScanner({ onProductLoaded, onError }: UseScannerOptions) {
         if (!product) {
           throw new Error("No product found for that barcode.");
         }
+
         const nutriments = product.nutriments ?? {};
-        const macroMatch: MacroMatch = {
-          description: product.product_name || code,
+        
+        // Normalize OpenFoodFacts data
+        let macroMatch: MacroMatch = {
+          description: product.product_name || `Barcode: ${code}`,
           kcal_100g:
             nutriments["energy-kcal_100g"] ??
             nutriments.energy_kcal_100g ??
@@ -97,8 +104,28 @@ export function useScanner({ onProductLoaded, onError }: UseScannerOptions) {
           sodium_100g: nutriments.sodium_100g ?? null,
         };
 
+        // 2. Smart Fallback: If OFF has name but NO calories, check USDA
+        if ((macroMatch.kcal_100g === null || macroMatch.kcal_100g === 0) && macroMatch.description) {
+          try {
+            const usdaMatches = await manualSearch(macroMatch.description);
+            if (usdaMatches.length > 0) {
+              const bestFit = usdaMatches[0];
+              // Merge: Keep the specific brand name, but use the validated USDA macros
+              macroMatch = {
+                ...bestFit,
+                description: `${macroMatch.description} (USDA Estimate)`, // Visual cue to user
+              };
+              toast.success("Found brand name; macros estimated from USDA.");
+            }
+          } catch (fallbackError) {
+            console.warn("USDA Fallback failed:", fallbackError);
+            // Swallow error, proceed with the partial OFF data
+          }
+        } else {
+           toast.success(`Loaded ${macroMatch.description} from barcode`);
+        }
+
         await onProductLoaded(macroMatch);
-        toast.success(`Loaded ${macroMatch.description} from barcode`);
       } catch (err) {
         console.error(err);
         const message =
