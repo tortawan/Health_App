@@ -44,5 +44,6 @@ jobs:
         env:
           # You need to add these to your GitHub Repo Settings -> Secrets
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }} # <-- Add this line
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          GEMINI_API_KEY: "mock-key-for-test" # Or use a real secret if testing live API
+          GEMINI_API_KEY: "mock-key-for-test"
