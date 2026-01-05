@@ -1,11 +1,14 @@
-import type { NextConfig } from "next";
+{
+type: "uploaded file",
+fileName: "tortawan/health_app/Health_App-bda602805d5b6e1df7033b03b4932486e8988f73/next.config.ts",
+fullContent: `import type { NextConfig } from "next";
 import createNextPWA from "next-pwa";
 
 const isProd = process.env.NODE_ENV === "production";
 
 const runtimeCaching = [
   {
-    urlPattern: /^https:\/\/fonts\.(gstatic|googleapis)\.com\/.*/i,
+    urlPattern: /^https:\\/\\/fonts\\.(gstatic|googleapis)\\.com\\/.* /i,
     handler: "CacheFirst",
     options: {
       cacheName: "google-fonts",
@@ -13,7 +16,7 @@ const runtimeCaching = [
     },
   },
   {
-    urlPattern: /^https?:\/\/.*/i,
+    urlPattern: /^https?:\\/\\/.* /i,
     handler: "NetworkFirst",
     options: {
       cacheName: "offline-cache",
@@ -34,6 +37,8 @@ const withPWA = createNextPWA({
 
 const nextConfig: NextConfig = withPWA({
   reactStrictMode: true,
+  // Fix: Prevent bundling of transformers.js binaries to avoid cold-start re-downloads and size limits
+  serverExternalPackages: ["@xenova/transformers"],
   experimental: {
     serverActions: {
       allowedOrigins: ["*"],
@@ -72,4 +77,5 @@ const nextConfig: NextConfig = withPWA({
   },
 });
 
-export default nextConfig;
+export default nextConfig;`
+}

@@ -1,4 +1,7 @@
-"use client";
+{
+type: "uploaded file",
+fileName: "tortawan/health_app/Health_App-bda602805d5b6e1df7033b03b4932486e8988f73/src/components/logging/DraftReview.tsx",
+fullContent: `"use client";
 
 import React, { useEffect, useRef } from "react";
 import { adjustedMacros } from "@/lib/nutrition";
@@ -54,17 +57,66 @@ export function DraftReview({
   onApplyMatch,
 }: Props) {
   const autoManualTriggered = useRef<Set<string>>(new Set());
+  // Track the initial state of the draft to compare against for RLHF logging
+  const initialDraftRef = useRef<DraftLog[] | null>(null);
 
   useEffect(() => {
+    // Only set initial draft if it's currently empty and we have incoming data
+    if (draft.length > 0 && !initialDraftRef.current) {
+      initialDraftRef.current = JSON.parse(JSON.stringify(draft));
+    }
+    // If draft is cleared (e.g. after confirming), reset the ref
+    if (draft.length === 0) {
+      initialDraftRef.current = null;
+    }
+
     draft.forEach((item, index) => {
       const hasMatches = Array.isArray(item.matches) && item.matches.length > 0;
       if (hasMatches) return;
-      const key = `${item.food_name}-${item.search_term}-${index}`;
+      const key = \`\${item.food_name}-\${item.search_term}-\${index}\`;
       if (autoManualTriggered.current.has(key)) return;
       autoManualTriggered.current.add(key);
       onManualSearch(index);
     });
   }, [draft, onManualSearch]);
+
+  const handleLogCorrection = async (index: number) => {
+    const final = draft[index];
+    const original = initialDraftRef.current ? initialDraftRef.current[index] : null;
+
+    if (!original) return;
+
+    // Detect changes
+    const weightChanged = original.weight !== final.weight;
+    const matchChanged = original.match?.description !== final.match?.description;
+
+    if (weightChanged || matchChanged) {
+      try {
+        await fetch("/api/log-correction", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            original,
+            final,
+            correctedField: matchChanged ? "match" : "weight",
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to log correction", err);
+      }
+    }
+  };
+
+  const handleConfirm = (index: number) => {
+    handleLogCorrection(index);
+    onConfirm(index);
+  };
+
+  const handleConfirmAll = () => {
+    // Log all items that changed
+    draft.forEach((_, index) => handleLogCorrection(index));
+    onConfirmAll();
+  };
 
   return (
     <div className="card space-y-4">
@@ -75,7 +127,7 @@ export function DraftReview({
           <p className="text-sm text-white/60">We never auto-save. Confirm or adjust the AI guess before logging.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60" disabled={!draft.length || isConfirmingAll || isImageUploading} onClick={onConfirmAll} type="button">
+          <button className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60" disabled={!draft.length || isConfirmingAll || isImageUploading} onClick={handleConfirmAll} type="button">
             {isConfirmingAll ? "Saving all..." : "Confirm all"}
           </button>
           <span className="pill bg-emerald-500/20 text-emerald-100">{confidenceLabel}</span>
@@ -114,7 +166,7 @@ export function DraftReview({
             const candidates = item.matches ?? [];
 
             return (
-              <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4" key={`${item.food_name}-${index}`}>
+              <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4" key={\`\${item.food_name}-\${index}\`}>
                 <div className="flex flex-col gap-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-lg font-semibold text-white">{item.food_name}</h3>
@@ -125,12 +177,12 @@ export function DraftReview({
                   <p className="text-sm text-white/60">Search term: {item.search_term}</p>
                   {editingWeightIndex === index && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/80">
-                      <label className="text-white/60" htmlFor={`weight-${index}`}>
+                      <label className="text-white/60" htmlFor={\`weight-\${index}\`}>
                         Adjust weight (g):
                       </label>
                       <input
                         className="w-28 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white focus:border-emerald-400 focus:outline-none"
-                        id={`weight-${index}`}
+                        id={\`weight-\${index}\`}
                         min={1}
                         type="number"
                         value={item.weight}
@@ -202,8 +254,8 @@ export function DraftReview({
                     <div className="flex gap-2 overflow-x-auto pb-2">
                       {candidates.map((candidate, idx) => (
                         <button
-                          className={`min-w-[220px] rounded-lg border px-3 py-2 text-left text-sm ${candidate.description === item.match?.description ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-50" : "border-white/10 bg-slate-900/40 text-white"}`}
-                          key={`${candidate.description}-${idx}`}
+                          className={\`min-w-[220px] rounded-lg border px-3 py-2 text-left text-sm \${candidate.description === item.match?.description ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-50" : "border-white/10 bg-slate-900/40 text-white"}\`}
+                          key={\`\${candidate.description}-\${idx}\`}
                           onClick={() => onApplyMatch(index, candidate)}
                           type="button"
                         >
@@ -221,7 +273,7 @@ export function DraftReview({
                   <button
                     className="btn disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!item.match || loggingIndex === index || isImageUploading || isConfirmingAll}
-                    onClick={() => onConfirm(index)}
+                    onClick={() => handleConfirm(index)}
                     type="button"
                   >
                     {loggingIndex === index ? "Saving..." : isImageUploading ? "Uploading photo..." : "Confirm"}
@@ -240,4 +292,6 @@ export function DraftReview({
       )}
     </div>
   );
+}
+`
 }
