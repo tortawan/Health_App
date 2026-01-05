@@ -1,7 +1,27 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 import { createSupabaseServerClient } from "@/lib/supabase";
 import { FOOD_PROMPT, geminiClient } from "@/lib/gemini";
 import { getEmbedder } from "@/lib/embedder";
+
+// --- Rate Limiting Setup ---
+// Create a new ratelimiter that allows 5 requests per 1 minute
+// This protects your 1,500/day Gemini quota from being drained by a single script.
+const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+  ? Redis.fromEnv()
+  : null;
+
+const ratelimit = redis
+  ? new Ratelimit({
+      redis: redis,
+      limiter: Ratelimit.slidingWindow(5, "60 s"),
+      analytics: true,
+      prefix: "health_app_analyze",
+    })
+  : null;
+// ---------------------------
 
 type GeminiItem = {
   food_name: string;
@@ -23,6 +43,21 @@ const FALLBACK: GeminiItem[] = [
 ];
 
 export async function POST(request: Request) {
+  // 1. Rate Limit Check
+  if (ratelimit) {
+    const ip = (await headers()).get("x-forwarded-for") ?? "127.0.0.1";
+    const { success } = await ratelimit.limit(ip);
+    
+    if (!success) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again in a minute." },
+        { status: 429 }
+      );
+    }
+  } else if (!redis && process.env.NODE_ENV === "production") {
+    console.warn("Rate limiting is disabled. Configure UPSTASH_REDIS_REST_URL.");
+  }
+
   const supabase = await createSupabaseServerClient();
   const formData = await request.formData();
   if ([...formData.keys()].length === 0) {
@@ -38,6 +73,14 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Image file is required" },
       { status: 400 },
+    );
+  }
+
+  // Basic security check for file size (prevent OOM attacks)
+  if (file.size > 5 * 1024 * 1024) {
+    return NextResponse.json(
+      { error: "Image too large. Please upload an image under 5MB." },
+      { status: 413 }
     );
   }
 
@@ -74,8 +117,13 @@ export async function POST(request: Request) {
         },
       });
 
-      const parsed = JSON.parse(result.response.text());
+      const responseText = result.response.text();
+      // Gemini might wrap JSON in markdown code blocks, strip them if needed
+      const cleanJson = responseText.replace(/```json|```/g, "").trim();
+      
+      const parsed = JSON.parse(cleanJson);
       const parsedItems: GeminiItem[] = parsed.items ?? parsed ?? [];
+      
       if (Array.isArray(parsedItems) && parsedItems.length) {
         items = parsedItems;
         usedFallback = false;
