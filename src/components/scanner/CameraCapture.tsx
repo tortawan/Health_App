@@ -93,9 +93,22 @@ export function CameraCapture({
         )}
         {isUploading && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-2 text-sm text-white/80">
-              <span className="h-8 w-8 animate-ping rounded-full bg-emerald-400/60" />
-              <p>{isImageUploading ? "Uploading photo to Supabase..." : "Scanning with Gemini..."}</p>
+            <div className="flex w-full max-w-lg flex-col gap-3 rounded-xl border border-white/10 bg-slate-900/70 p-4 text-sm text-white/80 shadow-lg">
+              <div className="flex items-center gap-2 text-base font-semibold text-white">
+                <span className="h-3 w-3 animate-ping rounded-full bg-emerald-400" />
+                Scanning...
+              </div>
+              <div className="grid gap-2">
+                <div className="h-3 w-3/4 animate-pulse rounded bg-white/10" />
+                <div className="h-3 w-1/2 animate-pulse rounded bg-white/10" />
+                <div className="h-24 animate-pulse rounded-lg bg-white/5" />
+              </div>
+              <p className="text-xs text-white/60">
+                Captured image locked in — we are uploading it and running Gemini + Supabase matches.
+              </p>
+              <p className="text-xs text-white/60">
+                {isImageUploading ? "Uploading to Supabase Storage..." : "Matching against USDA vectors..."}
+              </p>
             </div>
           </div>
         )}

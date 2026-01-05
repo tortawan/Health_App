@@ -6,7 +6,7 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const bucket =
   process.env.SUPABASE_STORAGE_BUCKET ||
   process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET ||
-  "food-photos";
+  "user-images";
 
 if (!url || !serviceKey) {
   console.warn("Cleanup cron missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");

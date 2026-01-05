@@ -15,7 +15,7 @@ The Phase 2 tracker experience is live:
    - `GEMINI_API_KEY`
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET` (defaults to `food-photos`, must be public for uploads)
+   - `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET` (defaults to `user-images`, must be public for uploads)
    - `EMBEDDING_MODEL=Xenova/all-MiniLM-L6-v2`
    - Optional rate limiting: `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
 2. Install dependencies and run the dev server:

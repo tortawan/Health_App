@@ -46,6 +46,7 @@ export async function POST(request: Request) {
   const mimeType = file.type || "image/jpeg";
 
   let items: GeminiItem[] = FALLBACK;
+  let usedFallback = true;
 
   if (geminiClient) {
     try {
@@ -74,9 +75,17 @@ export async function POST(request: Request) {
       });
 
       const parsed = JSON.parse(result.response.text());
-      items = parsed.items ?? parsed ?? FALLBACK;
+      const parsedItems: GeminiItem[] = parsed.items ?? parsed ?? [];
+      if (Array.isArray(parsedItems) && parsedItems.length) {
+        items = parsedItems;
+        usedFallback = false;
+      } else {
+        items = FALLBACK;
+        usedFallback = true;
+      }
     } catch (error) {
       console.warn("Gemini call failed, using fallback:", error);
+      usedFallback = true;
     }
   }
 
@@ -124,5 +133,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     draft: drafts,
     imagePath: `data:${mimeType};base64,${imageData}`,
+    usedFallback,
   });
 }
