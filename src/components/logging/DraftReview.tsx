@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { adjustedMacros } from "@/lib/nutrition";
 import { formatNumber } from "@/lib/format";
 import { DraftLog, MacroMatch } from "@/types/food";
@@ -53,6 +53,19 @@ export function DraftReview({
   onManualSearch,
   onApplyMatch,
 }: Props) {
+  const autoManualTriggered = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    draft.forEach((item, index) => {
+      const hasMatches = Array.isArray(item.matches) && item.matches.length > 0;
+      if (hasMatches) return;
+      const key = `${item.food_name}-${item.search_term}-${index}`;
+      if (autoManualTriggered.current.has(key)) return;
+      autoManualTriggered.current.add(key);
+      onManualSearch(index);
+    });
+  }, [draft, onManualSearch]);
+
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between">

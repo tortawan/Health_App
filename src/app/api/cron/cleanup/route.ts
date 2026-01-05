@@ -69,8 +69,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const { data: logs, error: logsError } = await supabase
     .from("food_logs")
