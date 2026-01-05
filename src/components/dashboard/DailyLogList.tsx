@@ -174,7 +174,7 @@ export function DailyLogList({
 
       {!dailyLogs.length ? (
         <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-4 text-sm text-white/60">
-          No logs yet for today. Confirm a draft entry to see it here.
+          Track your first meal to see it here. Confirm a draft entry to start your daily streak.
         </div>
       ) : (
         <div className="space-y-3">

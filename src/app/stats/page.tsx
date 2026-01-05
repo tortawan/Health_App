@@ -36,7 +36,7 @@ export default async function StatsPage() {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("daily_calorie_target")
+    .select("daily_calorie_target, daily_protein_target")
     .eq("user_id", session.user.id)
     .maybeSingle();
 
@@ -45,6 +45,7 @@ export default async function StatsPage() {
   }
 
   const calorieTarget = profile?.daily_calorie_target ?? 2000;
+  const proteinTarget = profile?.daily_protein_target ?? 120;
 
   const days: {
     [key: string]: {
@@ -127,7 +128,7 @@ export default async function StatsPage() {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
-        <StatsClient data={chartData} target={calorieTarget} />
+        <StatsClient data={chartData} targets={{ calories: calorieTarget, protein: proteinTarget }} />
         <WeightTrendChart data={weightChartData} />
       </div>
       <WeightLogger defaultWeight={latestWeight} />
