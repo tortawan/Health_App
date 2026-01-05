@@ -1,12 +1,64 @@
-.next/
-.turbo/
-node_modules/
-scripts/data/
-# package-lock.json
-dist/
-build/
-.vercel/
-.env*
-!.env.example
-*.log
+# dependencies
+
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+
+/coverage
+
+# next.js
+
+/.next/
+/out
+
+# production
+
+/build
+
+# misc
+
 .DS_Store
+*.pem
+
+# debug
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+
+.env*.local
+.env
+.env.development
+.env.test
+.env.production
+
+# allow the example file
+
+!.env.example
+
+# vercel
+
+.vercel
+
+# typescript
+
+*.tsbuildinfo
+next-env.d.ts
+
+# Lockfiles
+
+# package-lock.json
+# yarn.lock
+
+   
+# Supabase generated types (optional)
+
+# src/types/supabase.ts
+
+# Scripts data
+
+scripts/data/
