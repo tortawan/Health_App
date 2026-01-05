@@ -9,7 +9,7 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
 }));
 
-let insertPayloads: any[] = [];
+let insertPayloads: Record<string, unknown>[] = [];
 
 vi.mock("@/lib/supabase", () => {
   const supabaseMock = {
@@ -19,7 +19,7 @@ vi.mock("@/lib/supabase", () => {
       })),
     },
     from: vi.fn(() => ({
-      insert: (payload: any) => {
+      insert: (payload: Record<string, unknown>) => {
         insertPayloads.push(payload);
         return {
           select: () => ({
