@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useMemo } from "react";
 import toast from "react-hot-toast";
 import {
   manualSearch,
@@ -46,6 +46,35 @@ export default function HomeClient({
 
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
 
+  // --- NEW STATE for DailyLogList V2 ---
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
+  const [isCopying, setIsCopying] = useState(false);
+  const [deletingId, setDeletingLogId] = useState<string | null>(null);
+
+  // Calculate Daily Totals (Fixes the Crash)
+  const dailyTotals = useMemo(() => {
+    return dailyLogs.reduce(
+      (acc, log) => ({
+        calories: acc.calories + (log.calories || 0),
+        protein: acc.protein + (log.protein || 0),
+        carbs: acc.carbs + (log.carbs || 0),
+        fat: acc.fat + (log.fat || 0),
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+  }, [dailyLogs]);
+
+  // Derive Targets from Profile
+  const macroTargets = useMemo(() => ({
+    protein: initialProfile?.protein_target || 150,
+    carbs: initialProfile?.carbs_target || 200,
+    fat: initialProfile?.fat_target || 70,
+  }), [initialProfile]);
+  
+  const calorieTarget = initialProfile?.calorie_target || 2500;
+
   // Scanner Hook
   const {
     showScanner,
@@ -77,11 +106,7 @@ export default function HomeClient({
 
   // Template Saving State
   const [templateName, setTemplateName] = useState("");
-  const [isSavingTemplate] = useState(false); // Setter was unused
-
-  // Editing / Deleting Log
-  const [, setEditingLog] = useState<FoodLogRecord | null>(null); // Value unused
-  const [, setDeletingLogId] = useState<number | null>(null); // Value unused
+  const [isSavingTemplate] = useState(false); 
 
   // Flagging
   const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
@@ -102,7 +127,6 @@ export default function HomeClient({
   }, []);
 
   const bumpPortionMemory = (foodName: string, weight: number) => {
-    // Optimistic update
     setPortionMemories((prev) => {
       const existing = prev.findIndex(
         (p) => p.food_name.toLowerCase() === foodName.toLowerCase(),
@@ -117,6 +141,46 @@ export default function HomeClient({
         { id: -1, user_id: "", food_name: foodName, last_weight_g: weight, usages: 1, created_at: "" },
       ];
     });
+  };
+
+  // --- New Handlers for Daily Log List ---
+  const handleEditField = (field: keyof FoodLogRecord, value: any) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleBeginEdit = (log: FoodLogRecord) => {
+    setEditingLogId(log.id);
+    setEditForm(log);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLogId(null);
+    setEditForm({});
+  };
+
+  const handleSaveEdits = async () => {
+     // Placeholder: In a real app, call a server action here
+     if (!editingLogId) return;
+     setDailyLogs(prev => prev.map(log => 
+        log.id === editingLogId ? { ...log, ...editForm } as FoodLogRecord : log
+     ));
+     toast.success("Log updated");
+     setEditingLogId(null);
+  };
+  
+  const handleDeleteLog = async (id: string) => {
+      setDeletingLogId(id);
+      // Simulate API delay
+      await new Promise(r => setTimeout(r, 500));
+      setDailyLogs(prev => prev.filter(l => l.id !== id));
+      toast.success("Entry deleted");
+      setDeletingLogId(null);
+  }
+
+  const handleShiftDate = (delta: number) => {
+      const date = new Date(selectedDate);
+      date.setDate(date.getDate() + delta);
+      setSelectedDate(date.toISOString().split("T")[0]);
   };
 
   // --- Actions ---
@@ -140,10 +204,7 @@ export default function HomeClient({
         toast.success("Offline — queued for sync once you reconnect");
       } else if (result.data) {
         setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
-        
-        // ✅ CRITICAL FIX: Remove item from draft so it doesn't duplicate in the UI
         setDraft((prev) => prev.filter((_, i) => i !== index));
-        
         bumpPortionMemory(item.food_name, item.weight);
         toast.success("Food log saved");
       } else {
@@ -175,13 +236,13 @@ export default function HomeClient({
 
     for (let i = 0; i < draft.length; i++) {
       const item = draft[i];
-      if (!item.match) continue; // skip un-matched items
+      if (!item.match) continue; 
       try {
         const result = await submitLogFood({
           foodName: item.food_name,
           weight: item.weight,
           match: item.match,
-          imageUrl: imagePublicUrl, // attach same image to all? or only first?
+          imageUrl: imagePublicUrl, 
         });
         if (result.data || result.queued) {
           if (result.data) {
@@ -197,7 +258,7 @@ export default function HomeClient({
 
     if (successCount > 0) {
       toast.success(`Saved ${successCount} items`);
-      setDraft([]); // Clear all drafts
+      setDraft([]); 
       setShowScanner(false);
       refreshRecentFoods();
     } else {
@@ -270,10 +331,6 @@ export default function HomeClient({
 
   return (
     <div className="min-h-screen bg-black text-white pb-24">
-      {/* Header / Profile / Scanner Toggle / Feed */}
-      {/* ... (Render code for header, stats, etc.) ... */}
-      
-      {/* Main Content Area */}
       <main className="mx-auto max-w-md px-4 pt-6 space-y-8">
         
         {/* If Scanner Open OR Draft Exists */}
@@ -289,7 +346,7 @@ export default function HomeClient({
               />
             ) : (
               <DraftReview
-                confidenceLabel="High confidence" // simplified
+                confidenceLabel="High confidence" 
                 draft={draft}
                 editingWeightIndex={editingWeightIndex}
                 isConfirmingAll={isConfirmingAll}
@@ -307,9 +364,7 @@ export default function HomeClient({
                   setManualOpenIndex(idx);
                   setManualQuery(draft[idx].search_term || draft[idx].food_name);
                 }}
-                onSaveTemplate={() => {
-                  // ... impl ...
-                }}
+                onSaveTemplate={() => {}}
                 onTemplateNameChange={setTemplateName}
                 onToggleWeightEdit={(idx) => {
                   setEditingWeightIndex(editingWeightIndex === idx ? null : idx);
@@ -326,13 +381,26 @@ export default function HomeClient({
         ) : (
           /* Dashboard View */
           <>
-             {/* ... Stats Cards ... */}
-             
              <DailyLogList
-               logs={dailyLogs}
-               onDelete={(id) => setDeletingLogId(id)}
-               onEdit={(log) => setEditingLog(log)}
-               onFlag={(log) => setFlaggingLog(log)}
+               dailyLogs={dailyLogs}
+               dailyTotals={dailyTotals}
+               macroTargets={macroTargets}
+               calorieTarget={calorieTarget}
+               todayLabel={selectedDate === new Date().toISOString().split("T")[0] ? "Today" : selectedDate}
+               selectedDate={selectedDate}
+               onShiftDate={handleShiftDate}
+               onNavigateToDate={setSelectedDate}
+               isCopyingDay={isCopying}
+               onCopyYesterday={() => toast("Copy not implemented in demo")}
+               editingLogId={editingLogId}
+               editForm={editForm}
+               onEditField={handleEditField}
+               onBeginEdit={handleBeginEdit}
+               onSaveEdits={handleSaveEdits}
+               onCancelEdit={handleCancelEdit}
+               onFlagLog={setFlaggingLog}
+               deletingId={deletingId}
+               onDeleteLog={handleDeleteLog}
              />
              
              {/* FAB or "Add Log" buttons */}
@@ -344,11 +412,10 @@ export default function HomeClient({
                 >
                   <span className="text-2xl">+</span>
                 </button>
-                {/* Secondary "Manual" button just for test flow visibility if needed */}
                 <button
                    className="rounded-full bg-white/10 p-3 text-sm font-medium text-white backdrop-blur-md"
                    onClick={() => {
-                     setManualOpenIndex(null); // mode = new item
+                     setManualOpenIndex(null); 
                      setManualQuery("");
                    }}
                 >
@@ -359,8 +426,6 @@ export default function HomeClient({
         )}
       </main>
 
-      {/* Modals (Manual Search, Edit, Flag) */}
-      
       {/* Flag Modal */}
       {flaggingLog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
@@ -407,8 +472,6 @@ export default function HomeClient({
         recentFoods={recentFoods}
         results={searchResults}
       />
-      
-      {/* ... Edit Modal ... */}
     </div>
   );
 }
