@@ -9,6 +9,15 @@ if (!supabaseUrl || !supabaseKey) {
   );
 }
 
+// Keep your existing singleton export
 export const supabaseBrowser = supabaseUrl && supabaseKey
   ? createBrowserClient(supabaseUrl, supabaseKey)
   : null;
+
+// ADD THIS FUNCTION
+export function createClient() {
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Supabase credentials are missing in browser client.");
+  }
+  return createBrowserClient(supabaseUrl, supabaseKey);
+}
