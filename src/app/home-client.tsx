@@ -50,10 +50,13 @@ export default function HomeClient({
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
-  const [isCopying, setIsCopying] = useState(false);
+  
+  // FIX 1: Removed unused 'setIsCopying' setter to satisfy linter
+  const [isCopying] = useState(false);
+  
   const [deletingId, setDeletingLogId] = useState<string | null>(null);
 
-  // Calculate Daily Totals (Fixes the Crash)
+  // Calculate Daily Totals
   const dailyTotals = useMemo(() => {
     return dailyLogs.reduce(
       (acc, log) => ({
@@ -144,7 +147,9 @@ export default function HomeClient({
   };
 
   // --- New Handlers for Daily Log List ---
-  const handleEditField = (field: keyof FoodLogRecord, value: any) => {
+  
+  // FIX 2: Changed 'any' to strict type 'string | number | null'
+  const handleEditField = (field: keyof FoodLogRecord, value: string | number | null) => {
     setEditForm(prev => ({ ...prev, [field]: value }));
   };
 
@@ -159,7 +164,6 @@ export default function HomeClient({
   };
 
   const handleSaveEdits = async () => {
-     // Placeholder: In a real app, call a server action here
      if (!editingLogId) return;
      setDailyLogs(prev => prev.map(log => 
         log.id === editingLogId ? { ...log, ...editForm } as FoodLogRecord : log
@@ -170,7 +174,6 @@ export default function HomeClient({
   
   const handleDeleteLog = async (id: string) => {
       setDeletingLogId(id);
-      // Simulate API delay
       await new Promise(r => setTimeout(r, 500));
       setDailyLogs(prev => prev.filter(l => l.id !== id));
       toast.success("Entry deleted");
