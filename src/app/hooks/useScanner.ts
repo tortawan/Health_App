@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { manualSearch } from "../actions";
+// Removed unused 'manualSearch' import to fix Lint Error 1
 import type { DraftLog, MacroMatch } from "@/types/food";
-import { createClient } from "@/lib/supabase-browser"; // Ensure you have this or standard supabase client
+import { createClient } from "@/lib/supabase-browser";
 
 // --- Barcode Scanner Types ---
 type Html5QrcodeInstance = {
@@ -26,7 +26,6 @@ declare global {
   }
 }
 
-// Make options optional to prevent crash if HomeClient doesn't pass them
 type UseScannerOptions = {
   onProductLoaded?: (match: MacroMatch) => Promise<void> | void;
   onError?: (message: string) => void;
@@ -64,13 +63,14 @@ const loadScannerScript = () =>
 
 export function useScanner(options: UseScannerOptions = {}) {
   const { onProductLoaded, onError } = options;
+  // Initialize Supabase client
   const supabase = createClient();
 
   // --- Shared State ---
   const [showScanner, setShowScanner] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // --- Image Analysis State (Restored) ---
+  // --- Image Analysis State ---
   const [draft, setDraft] = useState<DraftLog[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isImageUploading, setIsImageUploading] = useState(false);
@@ -82,15 +82,18 @@ export function useScanner(options: UseScannerOptions = {}) {
   const [hasScannerInstance, setHasScannerInstance] = useState(false);
   const scannerRef = useRef<Html5QrcodeInstance | null>(null);
 
-  // --- Image Handling Logic (Restored for HomeClient) ---
-  const handleImageUpload = async (file: File) => {
+  // --- Image Handling Logic ---
+  // Fix Lint Error 4: Wrapped in useCallback so it can be a dependency
+  const handleImageUpload = useCallback(async (file: File) => {
     setError(null);
     setIsImageUploading(true);
     try {
       // 1. Upload to Supabase Storage
       const fileName = `${crypto.randomUUID()}-${file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("food-images") // Adjust bucket name if needed
+      
+      // Fix Lint Error 2: Removed unused 'uploadData' variable
+      const { error: uploadError } = await supabase.storage
+        .from("food-images")
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
@@ -117,26 +120,26 @@ export function useScanner(options: UseScannerOptions = {}) {
       if (data.foods) {
         setDraft(data.foods);
       }
-    } catch (err: any) {
+    } catch (err: unknown) { // Fix Lint Error 3: Changed 'any' to 'unknown'
       console.error(err);
-      const msg = err.message || "Failed to process image";
+      const msg = err instanceof Error ? err.message : "Failed to process image";
       setError(msg);
       toast.error(msg);
     } finally {
       setIsImageUploading(false);
       setIsAnalyzing(false);
     }
-  };
+  }, [supabase]); // Added supabase dependency
 
+  // Fix Lint Error 4: Added handleImageUpload to dependency array
   const handleCapture = useCallback((blob: Blob | null) => {
      if (blob && blob instanceof File) {
          void handleImageUpload(blob);
      } else if (blob) {
-         // Convert blob to file if needed, or upload blob directly
          const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
          void handleImageUpload(file);
      }
-  }, []);
+  }, [handleImageUpload]);
 
   // --- Barcode Logic ---
   const handleBarcodeMatch = useCallback(
@@ -154,7 +157,9 @@ export function useScanner(options: UseScannerOptions = {}) {
         if (!product) throw new Error("No product found for that barcode.");
 
         const nutriments = product.nutriments ?? {};
-        let macroMatch: MacroMatch = {
+        
+        // Fix Lint Error 5: Changed 'let' to 'const' as it is never reassigned
+        const macroMatch: MacroMatch = {
           description: product.product_name || `Barcode: ${code}`,
           kcal_100g: nutriments["energy-kcal_100g"] ?? nutriments.energy_kcal_100g ?? 0,
           protein_100g: nutriments.proteins_100g ?? 0,
@@ -162,17 +167,14 @@ export function useScanner(options: UseScannerOptions = {}) {
           fat_100g: nutriments.fat_100g ?? 0,
         };
 
-        // Call the external handler if provided (HomeClient currently doesn't pass this, but it might in future)
         if (onProductLoaded) {
             await onProductLoaded(macroMatch);
         } else {
-            // If no handler, maybe add to draft directly?
-            // For now, let's just toast
             toast.success(`Scanned: ${macroMatch.description}`);
         }
-      } catch (err: any) {
+      } catch (err: unknown) { // Fix Lint Error 6: Changed 'any' to 'unknown'
         console.error(err);
-        const message = err.message || "Unable to load barcode information.";
+        const message = err instanceof Error ? err.message : "Unable to load barcode information.";
         setError(message);
         if (onError) onError(message);
         toast.error(message);
@@ -196,8 +198,6 @@ export function useScanner(options: UseScannerOptions = {}) {
       return;
     }
 
-    // Only start barcode scanner if we are NOT in "Draft Mode" (implied by image capture logic)
-    // But for now, we leave the effect running; users switch modes in UI.
     let cancelled = false;
     const startScanner = async () => {
       try {
@@ -221,12 +221,10 @@ export function useScanner(options: UseScannerOptions = {}) {
           () => {},
         );
       } catch (err) {
-        // Ignore errors if element not found (e.g. user is in Photo mode)
         console.log("Barcode scanner failed to start (normal if in Photo mode):", err);
       }
     };
     
-    // Slight delay to allow DOM to render
     const timer = setTimeout(startScanner, 100);
     return () => {
       cancelled = true;
@@ -244,16 +242,12 @@ export function useScanner(options: UseScannerOptions = {}) {
     setShowScanner((prev) => !prev);
   };
 
-  // --- Return Combined Interface ---
   return {
-    // Shared
     showScanner,
     setShowScanner,
     error,
     setError,
     toggleScanner,
-    
-    // Image / Draft Logic (Required by HomeClient)
     draft,
     setDraft,
     isAnalyzing,
@@ -261,10 +255,8 @@ export function useScanner(options: UseScannerOptions = {}) {
     imagePublicUrl,
     handleCapture,
     handleImageUpload,
-    
-    // Barcode Logic
     hasScannerInstance,
     isScanningBarcode,
-    scannerError: error, // alias for compatibility
+    scannerError: error,
   };
 }
