@@ -1,5 +1,3 @@
-// tests/log-flow.spec.ts
-
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -7,24 +5,15 @@ const TEST_EMAIL = process.env.PLAYWRIGHT_EMAIL || "tortawan@gmail.com";
 const TEST_PASSWORD = process.env.PLAYWRIGHT_PASSWORD || "password123";
 
 async function ensureLoggedIn(page: Page) {
-  // 1. CRITICAL FIX: Navigate to the app first!
   await page.goto("/");
-
-  // 2. Wait a moment to see if we get redirected to login
   try {
     await page.waitForURL(/.*\/login/, { timeout: 3000 });
-  } catch (e) {
-    // If we didn't get redirected to login, we might already be logged in.
-    // Continue to check url below.
-  }
+  } catch (e) {}
 
-  // 3. Handle Login
   if (page.url().includes("/login")) {
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', TEST_PASSWORD);
     await page.click('button:has-text("Sign in")');
-    
-    // 4. Wait for the dashboard to load after login
     await page.waitForURL("**/"); 
   }
 }
@@ -62,7 +51,6 @@ async function stubStorage(page: Page) {
 test("image draft to confirmed log flow", async ({ page }) => {
   await ensureLoggedIn(page);
 
-  // Stubbing
   await page.route("**/api/analyze", async (route) =>
     route.fulfill({
       status: 200,
@@ -89,22 +77,18 @@ test("image draft to confirmed log flow", async ({ page }) => {
   await stubLogFood(page);
   await stubStorage(page);
 
-  // --- Click the button to Open Scanner ---
+  // Click Add Log to open scanner
   await page.getByRole("button", { name: "Add Log" }).click();
 
-  // Upload
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
 
-  // Check Draft
   const modal = page.locator("section").filter({ hasText: "Capture" });
   await expect(modal.getByText("Draft entries")).toBeVisible();
   await expect(modal.getByRole("heading", { name: "Mock Chicken Bowl" })).toBeVisible();
 
-  // Confirm
   await modal.getByRole("button", { name: "Confirm", exact: true }).click();
 
-  // Verify Success
   await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
   await expect(page.getByText("Mock Chicken Bowl")).toBeVisible();
 });
@@ -113,7 +97,6 @@ test("manual search fallback flow", async ({ page }) => {
   await ensureLoggedIn(page);
   await stubLogFood(page);
 
-  // Mock search results
   await page.route("**/api/search?**", (route) =>
     route.fulfill({
       status: 200,
@@ -123,26 +106,22 @@ test("manual search fallback flow", async ({ page }) => {
           description: "Greek Yogurt Plain",
           score: 1.0,
           foodNutrients: [
-            { nutrientId: 1008, value: 59 }, // kcal
-            { nutrientId: 1003, value: 10 }, // protein
+            { nutrientId: 1008, value: 59 }, 
+            { nutrientId: 1003, value: 10 }, 
           ],
         },
       ]),
     }),
   );
 
-  // Open Menu
-  await page.getByRole("button", { name: "Add Log" }).click();
+  // FIX: Directly click "Manual Add". Do NOT click "Add Log" first.
   await page.getByRole("button", { name: "Manual Add" }).click();
 
-  // Search
   await page.getByPlaceholder("Search food...").fill("Greek Yogurt");
   await page.getByText("Greek Yogurt Plain").first().click();
 
-  // Confirm
   await page.getByRole("button", { name: "Add to log" }).click();
 
-  // Verify
   await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
   await expect(page.getByText("Greek Yogurt")).toBeVisible();
 });
@@ -150,7 +129,6 @@ test("manual search fallback flow", async ({ page }) => {
 test("logs a correction when weight changes before confirm", async ({ page }) => {
   await ensureLoggedIn(page);
 
-  // Stub partial match
   await page.route("**/api/analyze", async (route) =>
     route.fulfill({
       status: 200,
@@ -176,7 +154,6 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   await stubLogFood(page);
   await stubStorage(page);
 
-  // Mock Correction API
   let correctionTriggered = false;
   await page.route("**/api/log-correction", (route) => {
     correctionTriggered = true;
@@ -193,7 +170,6 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
 
-  // Scope to modal
   const modal = page.locator(".fixed").filter({ hasText: "Is this correct?" });
   await expect(modal).toBeVisible();
 

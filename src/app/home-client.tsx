@@ -39,6 +39,7 @@ export default function HomeClient({
   initialProfile,
   initialRecentFoods,
   initialPortionMemories,
+  initialTemplates = [], // Default to empty array
 }: Props) {
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
@@ -51,9 +52,8 @@ export default function HomeClient({
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
   
-  // FIX 1: Removed unused 'setIsCopying' setter to satisfy linter
+  // FIX: Unused state kept for linting
   const [isCopying] = useState(false);
-  
   const [deletingId, setDeletingLogId] = useState<string | null>(null);
 
   // Calculate Daily Totals
@@ -87,7 +87,7 @@ export default function HomeClient({
     isAnalyzing,
     isImageUploading,
     imagePublicUrl,
-    handleCapture,
+    handleCapture, // Unused in this version of CameraCapture but available
     handleImageUpload,
     error,
     setError,
@@ -107,9 +107,11 @@ export default function HomeClient({
   const [searchResults, setSearchResults] = useState<MacroMatch[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Template Saving State
+  // Template Saving State (Dummies for CameraCapture props)
   const [templateName, setTemplateName] = useState("");
-  const [isSavingTemplate] = useState(false); 
+  const [isSavingTemplate] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateScale, setTemplateScale] = useState(1);
 
   // Flagging
   const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
@@ -146,9 +148,7 @@ export default function HomeClient({
     });
   };
 
-  // --- New Handlers for Daily Log List ---
-  
-  // FIX 2: Changed 'any' to strict type 'string | number | null'
+  // --- Handlers ---
   const handleEditField = (field: keyof FoodLogRecord, value: string | number | null) => {
     setEditForm(prev => ({ ...prev, [field]: value }));
   };
@@ -186,8 +186,6 @@ export default function HomeClient({
       setSelectedDate(date.toISOString().split("T")[0]);
   };
 
-  // --- Actions ---
-
   const handleConfirm = async (index: number) => {
     const item = draft[index];
     if (!item || !item.match) return;
@@ -195,7 +193,6 @@ export default function HomeClient({
     setLoggingIndex(index);
 
     try {
-      // 1. Submit
       const result = await submitLogFood({
         foodName: item.food_name,
         weight: item.weight,
@@ -214,7 +211,6 @@ export default function HomeClient({
         throw new Error(result.error || "Failed to log food");
       }
 
-      // 2. If weight changed significantly
       if (item.ai_suggested_weight && Math.abs(item.weight - item.ai_suggested_weight) > 10) {
          await logCorrection({
            original: item.ai_suggested_weight,
@@ -285,14 +281,12 @@ export default function HomeClient({
 
   const applyManualResult = (match: MacroMatch) => {
     if (manualOpenIndex === null) {
-      // "Quick Add" mode (no draft item)
       const newDraftItem: DraftLog = {
         food_name: match.description,
-        weight: 100, // default
+        weight: 100, 
         match,
         search_term: manualQuery,
       };
-      // Check portion memory
       const mem = portionMemories.find(
         (p) => p.food_name.toLowerCase() === match.description.toLowerCase(),
       );
@@ -303,7 +297,6 @@ export default function HomeClient({
       setDraft([newDraftItem]);
       setShowScanner(true); 
     } else {
-      // Updating an existing draft item
       const newDraft = [...draft];
       newDraft[manualOpenIndex] = {
         ...newDraft[manualOpenIndex],
@@ -335,17 +328,24 @@ export default function HomeClient({
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       <main className="mx-auto max-w-md px-4 pt-6 space-y-8">
-        
-        {/* If Scanner Open OR Draft Exists */}
         {(showScanner || draft.length > 0) ? (
           <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
             {draft.length === 0 ? (
+              // FIX: Updated props to match your new CameraCapture.tsx
               <CameraCapture
-                isAnalyzing={isAnalyzing}
-                onCapture={handleCapture}
-                onClose={() => setShowScanner(false)}
-                onUpload={handleImageUpload}
-                error={error}
+                captureMode="photo"
+                isUploading={isAnalyzing || isImageUploading}
+                isImageUploading={isImageUploading}
+                filePreview={imagePublicUrl}
+                templateList={initialTemplates}
+                selectedTemplateId={selectedTemplateId}
+                templateScale={templateScale}
+                onTemplateChange={setSelectedTemplateId}
+                onTemplateScaleChange={setTemplateScale}
+                onApplyTemplate={() => toast("Templates not implemented in demo")}
+                onOpenTemplateManager={() => toast("Manager not implemented")}
+                isApplyingTemplate={false}
+                onFileChange={(file) => file && handleImageUpload(file)}
               />
             ) : (
               <DraftReview
@@ -382,7 +382,6 @@ export default function HomeClient({
             )}
           </div>
         ) : (
-          /* Dashboard View */
           <>
              <DailyLogList
                dailyLogs={dailyLogs}
@@ -406,7 +405,6 @@ export default function HomeClient({
                onDeleteLog={handleDeleteLog}
              />
              
-             {/* FAB or "Add Log" buttons */}
              <div className="fixed bottom-24 right-4 z-20 flex flex-col gap-3">
                 <button 
                   className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition hover:bg-emerald-400"
@@ -429,7 +427,7 @@ export default function HomeClient({
         )}
       </main>
 
-      {/* Flag Modal */}
+      {/* Flag Modal and Search Modal remain unchanged */}
       {flaggingLog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-[#1a1a1a] p-6 ring-1 ring-white/10">
