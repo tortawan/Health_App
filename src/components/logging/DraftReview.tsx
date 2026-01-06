@@ -52,7 +52,7 @@ export function DraftReview({
   onUpdateWeight,
   onConfirm: handleConfirm,
   onManualSearch,
-  onApplyMatch,
+  // onApplyMatch, // Removed to fix unused var lint error
 }: Props) {
   // We'll track which items we've already auto-opened manual search for
   const autoManualTriggered = useRef<Set<string>>(new Set());
@@ -84,7 +84,7 @@ export function DraftReview({
       autoManualTriggered.current.add(key);
       onManualSearch(index);
     });
-  }, [draft, onManualSearch, editingWeightIndex]); // ✅ Add editingWeightIndex to dependencies
+  }, [draft, onManualSearch, editingWeightIndex]);
 
   // Helper to see if user changed weight from original
   const getWeightChange = (index: number, currentWeight: number) => {

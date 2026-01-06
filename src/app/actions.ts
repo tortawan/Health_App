@@ -101,9 +101,11 @@ export async function submitLogFood(args: Parameters<typeof logFood>[0]) {
   try {
     const data = await logFood(args);
     return { data };
-  } catch (err: any) {
+  } catch (err) {
     console.error("Log food error:", err);
-    return { error: err.message };
+    // Fix: Check type instead of using 'any'
+    const message = err instanceof Error ? err.message : "An unknown error occurred";
+    return { error: message };
   }
 }
 
