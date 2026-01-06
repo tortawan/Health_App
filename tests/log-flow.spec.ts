@@ -20,8 +20,12 @@ async function stubLogFood(page: Page) {
       contentType: "application/json",
       body: JSON.stringify({
         id: crypto.randomUUID(),
-        food_name: postData.foodName, // ✅ Echo the actual name
+        food_name: postData.foodName, // ✅ Echo the actual name from request
         weight_g: postData.weight,
+        calories: postData.manualMacros?.calories || null,
+        protein: postData.manualMacros?.protein || null,
+        carbs: postData.manualMacros?.carbs || null,
+        fat: postData.manualMacros?.fat || null,
         consumed_at: new Date().toISOString(),
       }),
     });
@@ -34,40 +38,32 @@ async function stubStorage(page: Page) {
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        path: "uploads/mock-image.webp",
-        id: "mock-id",
-        fullPath: "user-images/uploads/mock-image.webp",
-      }),
-    })
+      body: JSON.stringify({ Key: "mock-image-url" }),
+    }),
   );
 }
 
 test("image draft to confirmed log flow", async ({ page }) => {
-  await page.goto("/");
-
-  // Handle login if redirected
   await ensureLoggedIn(page);
 
-  // Mock the API response to avoid hitting real Gemini/Supabase
-  await page.route("**/api/analyze", (route) =>
+  // Stubbing
+  await page.route("**/api/analyze", async (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        draft: [
+        foods: [
           {
             food_name: "Mock Chicken Bowl",
-            quantity_estimate: "200g",
-            search_term: "chicken bowl",
-            weight: 200,
+            weight: 350,
+            confidence: 0.95,
             match: {
-              description: "Grilled chicken breast",
+              description: "Grilled chicken breast with rice",
               kcal_100g: 165,
               protein_100g: 31,
               carbs_100g: 0,
               fat_100g: 3.6,
-              similarity: 0.92,
+              similarity: 0.95,
             },
           },
         ],
@@ -77,63 +73,74 @@ test("image draft to confirmed log flow", async ({ page }) => {
   await stubLogFood(page);
   await stubStorage(page);
 
-  // Upload the dummy image
+  // Upload
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
 
-  // Verify UI and Confirm
-  // We explicitly target the modal to avoid strict mode violations (duplicate DraftReview)
-  const modal = page.locator(".fixed").filter({ hasText: "Is this correct?" });
-  await expect(modal).toBeVisible();
-  
+  // Check Draft
+  const modal = page.locator("section").filter({ hasText: "Capture" });
   await expect(modal.getByText("Draft entries")).toBeVisible();
-  // Use exact: true to avoid matching "Confirm all" which might be disabled
+  await expect(modal.getByRole("heading", { name: "Mock Chicken Bowl" })).toBeVisible();
+
+  // Confirm
   await modal.getByRole("button", { name: "Confirm", exact: true }).click();
-  
+
   // Verify Success
   await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
+  // ✅ CHANGED: Expect text visibility instead of heading role, because DailyLogList renders as <p>
   await expect(page.getByText("Mock Chicken Bowl")).toBeVisible();
 });
 
 test("manual search fallback flow", async ({ page }) => {
-  await page.goto("/");
-
-  // Login if needed
   await ensureLoggedIn(page);
   await stubLogFood(page);
 
-  // 1. Switch to Manual Mode
-  await page.click('button:has-text("Text / Manual")');
+  // Mock search results
+  await page.route("**/api/search?**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          description: "Greek Yogurt Plain",
+          score: 1.0,
+          foodNutrients: [
+            { nutrientId: 1008, value: 59 }, // kcal
+            { nutrientId: 1003, value: 10 }, // protein
+          ],
+        },
+      ]),
+    }),
+  );
 
-  // 2. Enter a search term
-  await page.getByPlaceholder("Oreo cookie").fill("Greek Yogurt");
-  
-  // Use getByLabel("Calories") to ensure we fill the correct input.
-  // Using input[type="number"] was finding the "Height" field in the profile section first.
-  await page.getByLabel("Calories").fill("120");
+  await page.getByRole("button", { name: "Add Log" }).click();
+  await page.getByRole("button", { name: "Manual Add" }).click();
 
-  // 3. Quick Add
-  await page.click('button:has-text("Quick add entry")');
+  // Search
+  await page.getByPlaceholder("Search food...").fill("Greek Yogurt");
+  await page.getByText("Greek Yogurt Plain").first().click();
+
+  // Confirm
+  await page.getByRole("button", { name: "Add to log" }).click();
 
   // 4. Verify Toast and List
-  await expect(page.getByText("Entry added")).toBeVisible();
+  // This now works because stubLogFood returns the requested name
+  await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
   await expect(page.getByText("Greek Yogurt")).toBeVisible();
 });
 
 test("logs a correction when weight changes before confirm", async ({ page }) => {
-  await page.goto("/");
   await ensureLoggedIn(page);
 
-  await page.route("**/api/analyze", (route) =>
+  // Stub partial match needing correction
+  await page.route("**/api/analyze", async (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        draft: [
+        foods: [
           {
-            food_name: "Mock Chicken Bowl",
-            quantity_estimate: "200g",
-            search_term: "chicken bowl",
+            food_name: "Mystery Meat",
             weight: 200,
             match: {
               description: "Grilled chicken breast",
@@ -170,7 +177,14 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
 
   await expect(modal.getByText("Draft entries")).toBeVisible();
   await modal.getByRole("button", { name: "Adjust weight" }).click();
-  await modal.getByLabel(/Adjust weight/).fill("250");
+  
+  const weightInput = modal.getByLabel(/Adjust weight/);
+  await weightInput.fill("250");
+  
+  // ✅ CRITICAL FIX: Wait for the value to actually be "250" before clicking Done.
+  // This prevents race conditions where the UI hasn't processed the input event yet.
+  await expect(weightInput).toHaveValue("250");
+
   await modal.getByRole("button", { name: "Done" }).click();
 
   const [logCorrectionRequest] = await Promise.all([
