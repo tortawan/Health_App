@@ -6,6 +6,8 @@ import { getEmbedder } from "@/lib/embedder";
 import { calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
+// --- Types ---
+
 function isMealTemplateItem(item: unknown): item is MealTemplateItem {
   return (
     typeof item === "object" &&
@@ -27,6 +29,8 @@ type MacroMatch = {
   similarity?: number | null;
   text_rank?: number | null;
 };
+
+// --- Core Logging Action ---
 
 export async function logFood(entry: {
   foodName: string;
@@ -89,6 +93,56 @@ export async function logFood(entry: {
   revalidatePath("/");
   return data;
 }
+
+// --- Wrappers & New Actions for Client ---
+
+// Wrapper for home-client.tsx which expects { data: ... } or { error: ... }
+export async function submitLogFood(args: Parameters<typeof logFood>[0]) {
+  try {
+    const data = await logFood(args);
+    return { data };
+  } catch (err: any) {
+    console.error("Log food error:", err);
+    return { error: err.message };
+  }
+}
+
+// Correction logging action
+export async function logCorrection(payload: { 
+  original: number; 
+  corrected: number; 
+  foodName: string 
+}) {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Log to console for observability
+    console.log("[RLHF] Weight Correction:", { 
+      user: session?.user?.id,
+      ...payload 
+    });
+
+    if (session) {
+      // Attempt to store in DB (safe fail if table missing)
+      await supabase.from("ai_corrections").insert({
+        user_id: session.user.id,
+        original_weight: payload.original,
+        corrected_weight: payload.corrected,
+        food_name: payload.foodName,
+        correction_type: 'weight',
+        logged_at: new Date().toISOString()
+      });
+    }
+    
+    return { success: true };
+  } catch (err) {
+    console.error("Failed to log correction:", err);
+    return { success: false }; // Don't block UI on this failure
+  }
+}
+
+// --- Other Actions ---
 
 export async function manualSearch(searchTerm: string) {
   const supabase = await createSupabaseServerClient();
