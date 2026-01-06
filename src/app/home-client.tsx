@@ -1,19 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import React, { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import React, { useCallback, useState } from "react";
 import toast from "react-hot-toast";
 import {
-  deleteFoodLog,
   manualSearch,
-  applyMealTemplate,
   getRecentFoods,
-  saveMealTemplate,
-  signOutAction,
-  updateFoodLog,
-  deleteMealTemplate,
-  copyDay,
-  logWater,
   reportLogIssue,
   submitLogFood,
   logCorrection,
@@ -24,19 +15,15 @@ import { CameraCapture } from "@/components/scanner/CameraCapture";
 import { DailyLogList } from "@/components/dashboard/DailyLogList";
 import { DraftReview } from "@/components/logging/DraftReview";
 import { ManualSearchModal } from "@/components/logging/ManualSearchModal";
-import { supabaseBrowser } from "@/lib/supabase-browser";
-import { adjustedMacros } from "@/lib/nutrition";
 import {
   DraftLog,
   FoodLogRecord,
   MacroMatch,
   MealTemplate,
-  MealTemplateItem,
   PortionMemoryRow,
   RecentFood,
   UserProfile,
 } from "@/types/food";
-import { formatNumber } from "@/lib/format";
 
 type Props = {
   initialLogs: FoodLogRecord[];
@@ -50,20 +37,14 @@ type Props = {
 export default function HomeClient({
   initialLogs,
   initialProfile,
-  initialStreak,
-  initialTemplates,
   initialRecentFoods,
   initialPortionMemories,
 }: Props) {
-  const router = useRouter();
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
-  const [streak] = useState(initialStreak);
-  const [templates, setTemplates] = useState<MealTemplate[]>(initialTemplates);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
   const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories);
 
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
-  const [isPending, startTransition] = useTransition();
 
   // Scanner Hook
   const {
@@ -81,13 +62,7 @@ export default function HomeClient({
   } = useScanner();
 
   // Profile Hook
-  const {
-    showProfileWizard,
-    setShowProfileWizard,
-    profile,
-    saveProfile,
-    isSavingProfile,
-  } = useProfileForm(initialProfile);
+  useProfileForm(initialProfile);
 
   // Local State for Logging
   const [loggingIndex, setLoggingIndex] = useState<number | null>(null);
@@ -102,30 +77,16 @@ export default function HomeClient({
 
   // Template Saving State
   const [templateName, setTemplateName] = useState("");
-  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [isSavingTemplate] = useState(false); // Setter was unused
 
   // Editing / Deleting Log
-  const [editingLog, setEditingLog] = useState<FoodLogRecord | null>(null);
-  const [deletingLogId, setDeletingLogId] = useState<number | null>(null);
+  const [, setEditingLog] = useState<FoodLogRecord | null>(null); // Value unused
+  const [, setDeletingLogId] = useState<number | null>(null); // Value unused
 
   // Flagging
   const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
   const [flagNotes, setFlagNotes] = useState("");
   const [isFlagging, setIsFlagging] = useState(false);
-
-  // --- Derived Daily Totals ---
-  const dailyTotals = useMemo(() => {
-    return dailyLogs.reduce(
-      (acc, log) => ({
-        calories: acc.calories + (log.calories || 0),
-        protein: acc.protein + (log.protein || 0),
-        carbs: acc.carbs + (log.carbs || 0),
-        fat: acc.fat + (log.fat || 0),
-        water: acc.water + (log.water_ml || 0),
-      }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0, water: 0 },
-    );
-  }, [dailyLogs]);
 
   // --- Helpers ---
   const refreshRecentFoods = useCallback(async () => {
@@ -166,12 +127,6 @@ export default function HomeClient({
     setError(null);
     setLoggingIndex(index);
 
-    // Check if we need to log a correction (if user changed weight significantly from AI guess)
-    // We assume 'original_ai_weight' was stored if available. If not, skip.
-    // For now, let's just log the food. 
-    // Real "Correction" logic implies we diff against the AI's original guess.
-    // The simplified version just submits what is in the draft.
-
     try {
       // 1. Submit
       const result = await submitLogFood({
@@ -195,10 +150,7 @@ export default function HomeClient({
         throw new Error(result.error || "Failed to log food");
       }
 
-      // 2. If weight changed significantly from initial AI guess, log correction
-      // (This relies on us knowing the original guess. DraftLog type might need 'originalWeight')
-      // For the test "logs a correction...", we simulate this by checking if API was called.
-      // In a real app, you'd compare item.weight vs item.ai_suggested_weight
+      // 2. If weight changed significantly
       if (item.ai_suggested_weight && Math.abs(item.weight - item.ai_suggested_weight) > 10) {
          await logCorrection({
            original: item.ai_suggested_weight,
@@ -208,9 +160,9 @@ export default function HomeClient({
       }
 
       refreshRecentFoods();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err.message || "Something went wrong");
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoggingIndex(null);
     }
@@ -260,7 +212,7 @@ export default function HomeClient({
     try {
       const results = await manualSearch(manualQuery);
       setSearchResults(results);
-    } catch (err) {
+    } catch {
       toast.error("Search failed");
     } finally {
       setIsSearching(false);
@@ -270,7 +222,6 @@ export default function HomeClient({
   const applyManualResult = (match: MacroMatch) => {
     if (manualOpenIndex === null) {
       // "Quick Add" mode (no draft item)
-      // Creates a new single-item draft
       const newDraftItem: DraftLog = {
         food_name: match.description,
         weight: 100, // default
@@ -286,11 +237,6 @@ export default function HomeClient({
       }
 
       setDraft([newDraftItem]);
-      // If we are in "Manual Add" mode from dashboard, show the draft review now
-      // by "closing" the scanner but keeping draft populated? 
-      // Actually, DraftReview is rendered when `draft.length > 0` OR `showScanner` is true?
-      // In the layout, we usually show DraftReview if draft exists.
-      // Let's ensure we are in a state where DraftReview is visible.
       setShowScanner(true); 
     } else {
       // Updating an existing draft item
@@ -300,17 +246,12 @@ export default function HomeClient({
         food_name: match.description,
         match,
       };
-      // If user hasn't manually edited weight yet, maybe update weight from memory?
-      // For now, keep existing weight to avoid overwriting user input unless explicitly desired.
       setDraft(newDraft);
     }
     setManualOpenIndex(null);
     setManualQuery("");
     setSearchResults([]);
   };
-
-  // ... (Other handlers: Templates, Delete, Edit, Flagging) omitted for brevity as they are unchanged ...
-  // ... Assuming standard implementations for deleteFoodLog, updateFoodLog, etc. ...
 
   const submitFlaggedLog = async () => {
     if (!flaggingLog) return;
@@ -320,7 +261,7 @@ export default function HomeClient({
       toast.success("Report submitted. Thank you!");
       setFlaggingLog(null);
       setFlagNotes("");
-    } catch (err) {
+    } catch {
       toast.error("Failed to submit report");
     } finally {
       setIsFlagging(false);
@@ -365,8 +306,6 @@ export default function HomeClient({
                 onManualSearch={(idx) => {
                   setManualOpenIndex(idx);
                   setManualQuery(draft[idx].search_term || draft[idx].food_name);
-                  // trigger search immediately if term exists?
-                  // runManualSearch(); 
                 }}
                 onSaveTemplate={() => {
                   // ... impl ...
