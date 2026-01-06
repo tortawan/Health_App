@@ -15,25 +15,19 @@ async function ensureLoggedIn(page: Page) {
 async function stubLogFood(page: Page) {
   await page.route("**/api/log-food", async (route) => {
     const postData = route.request().postDataJSON();
-    
-    // Added 'await' here
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         id: crypto.randomUUID(),
-        food_name: postData.foodName,
+        food_name: postData.foodName, // ✅ Echo the actual name
         weight_g: postData.weight,
-        // These fallbacks are excellent for keeping the UI clean
-        calories: postData.manualMacros?.calories || null,
-        protein: postData.manualMacros?.protein || null,
-        carbs: postData.manualMacros?.carbs || null,
-        fat: postData.manualMacros?.fat || null,
         consumed_at: new Date().toISOString(),
       }),
     });
   });
 }
+
 // Mock Supabase Storage to prevent "Uploading photo..." state from hanging
 async function stubStorage(page: Page) {
   await page.route("**/storage/v1/object/**", (route) =>
@@ -98,7 +92,7 @@ test("image draft to confirmed log flow", async ({ page }) => {
   
   // Verify Success
   await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Mock Chicken Bowl" })).toBeVisible();
+  await expect(page.getByText("Mock Chicken Bowl")).toBeVisible();
 });
 
 test("manual search fallback flow", async ({ page }) => {

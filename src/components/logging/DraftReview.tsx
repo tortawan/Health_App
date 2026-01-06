@@ -68,14 +68,16 @@ export function DraftReview({
     }
 
     draft.forEach((item, index) => {
-      const hasMatches = Array.isArray(item.matches) && item.matches.length > 0;
-      if (hasMatches) return;
-      const key = `${item.food_name}-${item.search_term}-${index}`;
-      if (autoManualTriggered.current.has(key)) return;
-      autoManualTriggered.current.add(key);
-      onManualSearch(index);
-    });
-  }, [draft, onManualSearch]);
+    // ✅ CHANGED: Check for singular 'match' to prevent aggressive auto-opening
+    if (item.match) return; 
+
+    const key = `${item.food_name}-${item.search_term}-${index}`;
+    if (autoManualTriggered.current.has(key)) return;
+    
+    autoManualTriggered.current.add(key);
+    onManualSearch(index);
+  });
+}, [draft, onManualSearch]);
 
   const handleLogCorrection = async (index: number) => {
     const final = draft[index];
