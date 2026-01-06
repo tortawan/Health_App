@@ -848,6 +848,7 @@ export default function HomeClient({
         toast.success("Offline — queued for sync once you reconnect");
       } else if (result.data) {
         setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
+	setDraft((prev) => prev.filter((_, i) => i !== index));
         bumpPortionMemory(item.food_name, item.weight);
         toast.success("Food log saved");
       }
