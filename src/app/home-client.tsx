@@ -39,7 +39,7 @@ export default function HomeClient({
   initialProfile,
   initialRecentFoods,
   initialPortionMemories,
-  initialTemplates = [], // Default to empty array
+  initialTemplates = [], 
 }: Props) {
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
@@ -52,8 +52,9 @@ export default function HomeClient({
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
   
-  // FIX: Unused state kept for linting
+  // Removed unused isCopying state setter
   const [isCopying] = useState(false);
+  
   const [deletingId, setDeletingLogId] = useState<string | null>(null);
 
   // Calculate Daily Totals
@@ -69,7 +70,6 @@ export default function HomeClient({
     );
   }, [dailyLogs]);
 
-  // Derive Targets from Profile
   const macroTargets = useMemo(() => ({
     protein: initialProfile?.protein_target || 150,
     carbs: initialProfile?.carbs_target || 200,
@@ -87,16 +87,14 @@ export default function HomeClient({
     isAnalyzing,
     isImageUploading,
     imagePublicUrl,
-    handleCapture, // Unused in this version of CameraCapture but available
+    handleCapture, 
     handleImageUpload,
     error,
     setError,
   } = useScanner();
 
-  // Profile Hook
   useProfileForm(initialProfile);
 
-  // Local State for Logging
   const [loggingIndex, setLoggingIndex] = useState<number | null>(null);
   const [editingWeightIndex, setEditingWeightIndex] = useState<number | null>(null);
   const [isConfirmingAll, setIsConfirmingAll] = useState(false);
@@ -107,7 +105,7 @@ export default function HomeClient({
   const [searchResults, setSearchResults] = useState<MacroMatch[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Template Saving State (Dummies for CameraCapture props)
+  // Template State
   const [templateName, setTemplateName] = useState("");
   const [isSavingTemplate] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
@@ -118,7 +116,6 @@ export default function HomeClient({
   const [flagNotes, setFlagNotes] = useState("");
   const [isFlagging, setIsFlagging] = useState(false);
 
-  // --- Helpers ---
   const refreshRecentFoods = useCallback(async () => {
     setIsLoadingRecentFoods(true);
     try {
@@ -148,7 +145,6 @@ export default function HomeClient({
     });
   };
 
-  // --- Handlers ---
   const handleEditField = (field: keyof FoodLogRecord, value: string | number | null) => {
     setEditForm(prev => ({ ...prev, [field]: value }));
   };
@@ -280,7 +276,8 @@ export default function HomeClient({
   };
 
   const applyManualResult = (match: MacroMatch) => {
-    if (manualOpenIndex === null) {
+    // FIX: Check for -1 (New Item) or null (fallback)
+    if (manualOpenIndex === -1 || manualOpenIndex === null) {
       const newDraftItem: DraftLog = {
         food_name: match.description,
         weight: 100, 
@@ -331,7 +328,6 @@ export default function HomeClient({
         {(showScanner || draft.length > 0) ? (
           <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
             {draft.length === 0 ? (
-              // FIX: Updated props to match your new CameraCapture.tsx
               <CameraCapture
                 captureMode="photo"
                 isUploading={isAnalyzing || isImageUploading}
@@ -416,7 +412,8 @@ export default function HomeClient({
                 <button
                    className="rounded-full bg-white/10 p-3 text-sm font-medium text-white backdrop-blur-md"
                    onClick={() => {
-                     setManualOpenIndex(null); 
+                     // FIX: Use -1 to indicate "New Item" so the modal renders
+                     setManualOpenIndex(-1); 
                      setManualQuery("");
                    }}
                 >
@@ -427,7 +424,6 @@ export default function HomeClient({
         )}
       </main>
 
-      {/* Flag Modal and Search Modal remain unchanged */}
       {flaggingLog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-[#1a1a1a] p-6 ring-1 ring-white/10">

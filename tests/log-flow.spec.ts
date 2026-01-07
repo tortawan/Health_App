@@ -83,11 +83,11 @@ test("image draft to confirmed log flow", async ({ page }) => {
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
 
-  const modal = page.locator("section").filter({ hasText: "Capture" });
-  await expect(modal.getByText("Draft entries")).toBeVisible();
-  await expect(modal.getByRole("heading", { name: "Mock Chicken Bowl" })).toBeVisible();
+  // FIX: Look for "Draft entries" directly
+  await expect(page.getByText("Draft entries")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Mock Chicken Bowl" })).toBeVisible();
 
-  await modal.getByRole("button", { name: "Confirm", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
   await expect(page.getByText("Entry added").or(page.getByText("Food log saved"))).toBeVisible();
   await expect(page.getByText("Mock Chicken Bowl")).toBeVisible();
@@ -114,10 +114,11 @@ test("manual search fallback flow", async ({ page }) => {
     }),
   );
 
-  // FIX: Directly click "Manual Add". Do NOT click "Add Log" first.
+  // Open "Manual Add" - this button now sets index to -1 so modal opens
   await page.getByRole("button", { name: "Manual Add" }).click();
 
-  await page.getByPlaceholder("Search food...").fill("Greek Yogurt");
+  // FIX: Updated placeholder to match ManualSearchModal.tsx
+  await page.getByPlaceholder("Search for a food (e.g., grilled chicken)").fill("Greek Yogurt");
   await page.getByText("Greek Yogurt Plain").first().click();
 
   await page.getByRole("button", { name: "Add to log" }).click();
@@ -170,21 +171,20 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
 
-  const modal = page.locator(".fixed").filter({ hasText: "Is this correct?" });
-  await expect(modal).toBeVisible();
+  // FIX: Look for "Draft entries" directly
+  await expect(page.getByText("Draft entries")).toBeVisible();
 
-  await expect(modal.getByText("Draft entries")).toBeVisible();
-  await modal.getByRole("button", { name: "Adjust weight" }).click();
+  await page.getByRole("button", { name: "Adjust weight" }).click();
   
-  const weightInput = modal.getByLabel(/Adjust weight/);
+  const weightInput = page.getByRole("spinbutton");
   await weightInput.fill("250");
   await expect(weightInput).toHaveValue("250");
 
-  await modal.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
 
   const [logCorrectionRequest] = await Promise.all([
     page.waitForRequest("**/api/log-correction"),
-    modal.getByRole("button", { name: "Confirm", exact: true }).click(),
+    page.getByRole("button", { name: "Confirm", exact: true }).click(),
   ]);
 
   expect(logCorrectionRequest).toBeTruthy();
