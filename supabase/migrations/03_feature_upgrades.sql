@@ -53,7 +53,8 @@ begin
     select
       u.*,
       (1 - (u.embedding <=> query_embedding)) as base_similarity,
-      coalesce(ts_rank_cd(u.search_text, ts_query), 0) as text_rank,
+      -- FIX: Explicitly cast ts_rank_cd to float (double precision) to match return type
+      coalesce(ts_rank_cd(u.search_text, ts_query), 0)::float as text_rank,
       case when pf.food_name is not null then 0.1 else 0 end as familiarity_boost
     from public.usda_library u
     left join prior_foods pf on pf.food_name = lower(u.description)
