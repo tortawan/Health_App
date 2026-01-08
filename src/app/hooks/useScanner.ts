@@ -65,6 +65,8 @@ export function useScanner(options: UseScannerOptions = {}) {
   const { onProductLoaded, onError } = options;
   // Initialize Supabase client
   const supabase = createClient();
+  const storageBucket =
+    process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "food-photos";
 
   // --- Shared State ---
   const [showScanner, setShowScanner] = useState(false);
@@ -93,13 +95,13 @@ export function useScanner(options: UseScannerOptions = {}) {
       
       // Fix Lint Error 2: Removed unused 'uploadData' variable
       const { error: uploadError } = await supabase.storage
-        .from("food-photos")
+        .from(storageBucket)
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage
-        .from("food-photos")
+        .from(storageBucket)
         .getPublicUrl(fileName);
       
       const publicUrl = publicUrlData.publicUrl;
