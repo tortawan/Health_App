@@ -93,13 +93,13 @@ export function useScanner(options: UseScannerOptions = {}) {
       
       // Fix Lint Error 2: Removed unused 'uploadData' variable
       const { error: uploadError } = await supabase.storage
-        .from("food-images")
+        .from("food-photos")
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage
-        .from("food-images")
+        .from("food-photos")
         .getPublicUrl(fileName);
       
       const publicUrl = publicUrlData.publicUrl;
