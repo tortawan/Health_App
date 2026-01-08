@@ -31,14 +31,13 @@ begin
     foods.description,
     foods.brand_owner,
     foods.ingredients,
-    foods.serving_size,
+    foods.serving_size::real,               -- Explicit cast
     foods.serving_size_unit,
     foods.household_serving_fulltext,
-    foods.kcal_100g,
-    foods.protein_100g,
-    foods.carbs_100g,
-    foods.fat_100g,
-    -- FIX: Cast the similarity score to double precision to match the return type
+    foods.kcal_100g::real,                  -- Explicit cast
+    foods.protein_100g::real,               -- Explicit cast
+    foods.carbs_100g::real,                 -- Explicit cast
+    foods.fat_100g::real,                   -- Explicit cast
     (1 - (foods.embedding <=> query_embedding))::double precision as similarity
   from foods
   where 1 - (foods.embedding <=> query_embedding) > match_threshold
