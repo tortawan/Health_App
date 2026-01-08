@@ -1,8 +1,7 @@
-// src/app/hooks/useScanner.ts
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-// Removed unused 'manualSearch' import to fix Lint Error 1
 import type { DraftLog, MacroMatch } from "@/types/food";
 import { createClient } from "@/lib/supabase-browser";
 
@@ -63,10 +62,7 @@ const loadScannerScript = () =>
 
 export function useScanner(options: UseScannerOptions = {}) {
   const { onProductLoaded, onError } = options;
-  // Initialize Supabase client
   const supabase = createClient();
-  const storageBucket =
-    process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "food-photos";
 
   // --- Shared State ---
   const [showScanner, setShowScanner] = useState(false);
@@ -85,31 +81,46 @@ export function useScanner(options: UseScannerOptions = {}) {
   const scannerRef = useRef<Html5QrcodeInstance | null>(null);
 
   // --- Image Handling Logic ---
-  // Fix Lint Error 4: Wrapped in useCallback so it can be a dependency
   const handleImageUpload = useCallback(async (file: File) => {
+    console.log("📸 [DEBUG] handleImageUpload triggered");
     setError(null);
     setIsImageUploading(true);
+    
     try {
       // 1. Upload to Supabase Storage
       const fileName = `${crypto.randomUUID()}-${file.name}`;
       
-      // Fix Lint Error 2: Removed unused 'uploadData' variable
-      const { error: uploadError } = await supabase.storage
-        .from(storageBucket)
+      // 🛠️ FIX: Hardcode the bucket name to ensure it works. 
+      // The previous error showed it was trying 'food-images', which is wrong.
+      const bucketName = "food-photos";
+
+      console.log(`📦 [DEBUG] Uploading to Bucket: '${bucketName}'`);
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(bucketName)
         .upload(fileName, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("❌ [DEBUG] Upload Error:", uploadError);
+        throw uploadError;
+      }
+
+      console.log("✅ [DEBUG] Upload Success!", uploadData);
 
       const { data: publicUrlData } = supabase.storage
-        .from(storageBucket)
+        .from(bucketName)
         .getPublicUrl(fileName);
       
       const publicUrl = publicUrlData.publicUrl;
+      console.log(`🔗 [DEBUG] Public URL: ${publicUrl}`);
+      
       setImagePublicUrl(publicUrl);
       setIsImageUploading(false);
 
       // 2. Analyze Image
       setIsAnalyzing(true);
+      console.log("🧠 [DEBUG] Sending to AI analysis...");
+      
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,11 +130,13 @@ export function useScanner(options: UseScannerOptions = {}) {
       if (!response.ok) throw new Error("Analysis failed");
       
       const data = await response.json();
+      console.log("✅ [DEBUG] Analysis Results:", data);
+
       if (data.foods) {
         setDraft(data.foods);
       }
-    } catch (err: unknown) { // Fix Lint Error 3: Changed 'any' to 'unknown'
-      console.error(err);
+    } catch (err: unknown) {
+      console.error("💥 [DEBUG] Error:", err);
       const msg = err instanceof Error ? err.message : "Failed to process image";
       setError(msg);
       toast.error(msg);
@@ -131,9 +144,9 @@ export function useScanner(options: UseScannerOptions = {}) {
       setIsImageUploading(false);
       setIsAnalyzing(false);
     }
-  }, [supabase]); // Added supabase dependency
+  }, [supabase]);
 
-  // Fix Lint Error 4: Added handleImageUpload to dependency array
+  // --- Barcode Logic ---
   const handleCapture = useCallback((blob: Blob | null) => {
      if (blob && blob instanceof File) {
          void handleImageUpload(blob);
@@ -143,7 +156,6 @@ export function useScanner(options: UseScannerOptions = {}) {
      }
   }, [handleImageUpload]);
 
-  // --- Barcode Logic ---
   const handleBarcodeMatch = useCallback(
     async (code: string) => {
       setError(null);
@@ -160,7 +172,6 @@ export function useScanner(options: UseScannerOptions = {}) {
 
         const nutriments = product.nutriments ?? {};
         
-        // Fix Lint Error 5: Changed 'let' to 'const' as it is never reassigned
         const macroMatch: MacroMatch = {
           description: product.product_name || `Barcode: ${code}`,
           kcal_100g: nutriments["energy-kcal_100g"] ?? nutriments.energy_kcal_100g ?? 0,
@@ -174,7 +185,7 @@ export function useScanner(options: UseScannerOptions = {}) {
         } else {
             toast.success(`Scanned: ${macroMatch.description}`);
         }
-      } catch (err: unknown) { // Fix Lint Error 6: Changed 'any' to 'unknown'
+      } catch (err: unknown) {
         console.error(err);
         const message = err instanceof Error ? err.message : "Unable to load barcode information.";
         setError(message);
