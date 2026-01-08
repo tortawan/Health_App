@@ -1,70 +1,48 @@
--- Add micronutrient columns and search helpers for hybrid search
-alter table if exists public.usda_library
-  add column if not exists fiber_100g numeric,
-  add column if not exists sugar_100g numeric,
-  add column if not exists sodium_100g numeric;
+-- Enable the pgvector extension to work with embedding vectors
+create extension if not exists vector;
 
--- Search vector to support full-text queries alongside embeddings
-alter table if exists public.usda_library
-  add column if not exists search_text tsvector
-    generated always as (
-      to_tsvector('english', coalesce(description, ''))
-    ) stored;
-
-create index if not exists usda_library_search_idx
-  on public.usda_library using gin (search_text);
-
--- Hybrid match function: blend vector similarity + full-text rank
-create or replace function match_foods (
-  query_embedding vector(384),
+-- Create a function to search for foods
+create or replace function search_foods(
   query_text text,
+  query_embedding vector(1536),
   match_threshold float,
   match_count int
 )
 returns table (
-  id bigint,
+  id uuid,
   description text,
-  kcal_100g numeric,
-  protein_100g numeric,
-  carbs_100g numeric,
-  fat_100g numeric,
-  fiber_100g numeric,
-  sugar_100g numeric,
-  sodium_100g numeric,
-  similarity float,
-  text_rank float
+  brand_owner text,
+  ingredients text,
+  serving_size real,
+  serving_size_unit text,
+  household_serving_fulltext text,
+  kcal_100g real,
+  protein_100g real,
+  carbs_100g real,
+  fat_100g real,
+  similarity double precision
 )
 language plpgsql
 as $$
-declare
-  ts_query tsquery := null;
 begin
-  if coalesce(trim(query_text), '') <> '' then
-    ts_query := websearch_to_tsquery('english', query_text);
-  end if;
-
   return query
   select
-    u.id,
-    u.description,
-    u.kcal_100g,
-    u.protein_100g,
-    u.carbs_100g,
-    u.fat_100g,
-    u.fiber_100g,
-    u.sugar_100g,
-    u.sodium_100g,
-    1 - (u.embedding <=> query_embedding) as similarity,
-    coalesce(ts_rank_cd(u.search_text, ts_query), 0) as text_rank
-  from public.usda_library u
-  where
-    (
-      (1 - (u.embedding <=> query_embedding)) > match_threshold
-    )
-    or (ts_query is not null and ts_query @@ u.search_text)
-  order by
-    ((1 - (u.embedding <=> query_embedding)) * 0.7)
-      + (coalesce(ts_rank_cd(u.search_text, ts_query), 0) * 0.3) desc
+    foods.id,
+    foods.description,
+    foods.brand_owner,
+    foods.ingredients,
+    foods.serving_size,
+    foods.serving_size_unit,
+    foods.household_serving_fulltext,
+    foods.kcal_100g,
+    foods.protein_100g,
+    foods.carbs_100g,
+    foods.fat_100g,
+    -- FIX: Cast the similarity score to double precision to match the return type
+    (1 - (foods.embedding <=> query_embedding))::double precision as similarity
+  from foods
+  where 1 - (foods.embedding <=> query_embedding) > match_threshold
+  order by foods.embedding <=> query_embedding
   limit match_count;
 end;
 $$;
