@@ -1,109 +1,43 @@
 # Page snapshot
 
 ```yaml
-- generic [ref=e1]:
-  - generic [active]:
-    - generic [ref=e4]:
-      - generic [ref=e5]:
-        - generic [ref=e6]:
-          - navigation [ref=e7]:
-            - button "previous" [disabled] [ref=e8]:
-              - img "previous" [ref=e9]
-            - generic [ref=e11]:
-              - generic [ref=e12]: 1/
-              - text: "1"
-            - button "next" [disabled] [ref=e13]:
-              - img "next" [ref=e14]
-          - img
-        - generic [ref=e16]:
-          - link "Next.js 15.5.9 (outdated) Webpack" [ref=e17] [cursor=pointer]:
-            - /url: https://nextjs.org/docs/messages/version-staleness
-            - img [ref=e18]
-            - generic "An outdated version detected (latest is 16.1.1), upgrade is highly recommended!" [ref=e20]: Next.js 15.5.9 (outdated)
-            - generic [ref=e21]: Webpack
-          - img
-      - generic [ref=e22]:
-        - dialog "Runtime Error" [ref=e23]:
-          - generic [ref=e26]:
-            - generic [ref=e27]:
-              - generic [ref=e28]:
-                - generic [ref=e30]: Runtime Error
-                - generic [ref=e31]:
-                  - button "Copy Error Info" [ref=e32] [cursor=pointer]:
-                    - img [ref=e33]
-                  - link "Go to related documentation" [ref=e35] [cursor=pointer]:
-                    - /url: https://nextjs.org/docs/messages/next-image-unconfigured-host
-                    - img [ref=e36]
-                  - link "Learn more about enabling Node.js inspector for server code with Chrome DevTools" [ref=e38] [cursor=pointer]:
-                    - /url: https://nextjs.org/docs/app/building-your-application/configuring/debugging#server-side-code
-                    - img [ref=e39]
-              - paragraph [ref=e48]:
-                - text: "Invalid src prop (https://eypxeqldfilsvapibigm.supabase.co/storage/v1/object/public/food-images/ed020419-bfd8-4c22-903d-f9bdc20414e9-sample.png) on `next/image`, hostname \"eypxeqldfilsvapibigm.supabase.co\" is not configured under images in your `next.config.js` See more info:"
-                - link "https://nextjs.org/docs/messages/next-image-unconfigured-host" [ref=e49] [cursor=pointer]:
-                  - /url: https://nextjs.org/docs/messages/next-image-unconfigured-host
-            - generic [ref=e50]:
-              - generic [ref=e51]:
-                - paragraph [ref=e53]:
-                  - img [ref=e55]
-                  - generic [ref=e58]: src\components\scanner\CameraCapture.tsx (90:11) @ CameraCapture
-                  - button "Open in editor" [ref=e59] [cursor=pointer]:
-                    - img [ref=e61]
-                - generic [ref=e64]:
-                  - generic [ref=e65]: 88 | <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40">
-                  - generic [ref=e66]: "89 | {filePreview ? ("
-                  - generic [ref=e67]: "> 90 | <Image alt=\"Uploaded meal preview\" className=\"h-80 w-full object-cover\" height={320} src={filePreview} width={640} />"
-                  - generic [ref=e68]: "| ^"
-                  - generic [ref=e69]: "91 | ) : ("
-                  - generic [ref=e70]: 92 | <div className="flex h-80 items-center justify-center text-white/40">Upload a photo to start the Visual RAG flow.</div>
-                  - generic [ref=e71]: "93 | )}"
-              - generic [ref=e72]:
-                - generic [ref=e73]:
-                  - paragraph [ref=e74]:
-                    - text: Call Stack
-                    - generic [ref=e75]: "20"
-                  - button "Show 17 ignore-listed frame(s)" [ref=e76] [cursor=pointer]:
-                    - text: Show 17 ignore-listed frame(s)
-                    - img [ref=e77]
-                - generic [ref=e79]:
-                  - generic [ref=e80]:
-                    - text: CameraCapture
-                    - button "Open CameraCapture in editor" [ref=e81] [cursor=pointer]:
-                      - img [ref=e82]
-                  - text: src\components\scanner\CameraCapture.tsx (90:11)
-                - generic [ref=e84]:
-                  - generic [ref=e85]:
-                    - text: HomeClient
-                    - button "Open HomeClient in editor" [ref=e86] [cursor=pointer]:
-                      - img [ref=e87]
-                  - text: src\app\home-client.tsx (331:15)
-                - generic [ref=e89]:
-                  - generic [ref=e90]:
-                    - text: HomePage
-                    - button "Open HomePage in editor" [ref=e91] [cursor=pointer]:
-                      - img [ref=e92]
-                  - text: src\app\page.tsx (174:5)
-          - generic [ref=e94]:
-            - generic [ref=e95]: "1"
-            - generic [ref=e96]: "2"
-        - contentinfo [ref=e97]:
-          - region "Error feedback" [ref=e98]:
-            - paragraph [ref=e99]:
-              - link "Was this helpful?" [ref=e100] [cursor=pointer]:
-                - /url: https://nextjs.org/telemetry#error-feedback
-            - button "Mark as helpful" [ref=e101] [cursor=pointer]:
-              - img [ref=e102]
-            - button "Mark as not helpful" [ref=e105] [cursor=pointer]:
-              - img [ref=e106]
-    - generic [ref=e112] [cursor=pointer]:
-      - button "Open Next.js Dev Tools" [ref=e113]:
-        - img [ref=e114]
-      - generic [ref=e117]:
-        - button "Open issues overlay" [ref=e118]:
-          - generic [ref=e119]:
-            - generic [ref=e120]: "0"
-            - generic [ref=e121]: "1"
-          - generic [ref=e122]: Issue
-        - button "Collapse issues badge" [ref=e123]:
-          - img [ref=e124]
-  - 'heading "Application error: a client-side exception has occurred while loading localhost (see the browser console for more information)." [level=2] [ref=e128]'
+- generic [active] [ref=e1]:
+  - main [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - heading "Draft entries" [level=2] [ref=e9]
+        - paragraph [ref=e10]: High confidence
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - heading "Mock Chicken Bowl" [level=3] [ref=e15]
+          - generic [ref=e16]:
+            - generic [ref=e17]: 578kcal
+            - generic [ref=e19]: 350g
+        - generic [ref=e20]:
+          - generic [ref=e21]:
+            - generic [ref=e22]: Protein
+            - generic [ref=e23]: 108.5g
+          - generic [ref=e24]:
+            - generic [ref=e25]: Carbs
+            - generic [ref=e26]: 0.0g
+          - generic [ref=e27]:
+            - generic [ref=e28]: Fat
+            - generic [ref=e29]: 12.6g
+        - generic [ref=e30]:
+          - button "Confirm" [ref=e31] [cursor=pointer]
+          - button "Adjust weight" [ref=e32] [cursor=pointer]
+          - button "Manual search" [ref=e33] [cursor=pointer]
+  - contentinfo [ref=e34]: Food images are processed by Google AI.
+  - generic [ref=e39] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e40]:
+      - img [ref=e41]
+    - generic [ref=e44]:
+      - button "Open issues overlay" [ref=e45]:
+        - generic [ref=e46]:
+          - generic [ref=e47]: "0"
+          - generic [ref=e48]: "1"
+        - generic [ref=e49]: Issue
+      - button "Collapse issues badge" [ref=e50]:
+        - img [ref=e51]
+  - alert [ref=e53]
 ```

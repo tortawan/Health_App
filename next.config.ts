@@ -36,6 +36,19 @@ const nextConfig: NextConfig = withPWA({
   reactStrictMode: true,
   // Fix: Prevent bundling of transformers.js binaries to avoid cold-start re-downloads and size limits
   serverExternalPackages: ["@xenova/transformers"],
+  
+  // ✅ FIX: Allow images from your Supabase Project
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'eypxeqldfilsvapibigm.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
+
   experimental: {
     serverActions: {
       allowedOrigins: ["*"],
