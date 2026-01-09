@@ -124,40 +124,61 @@ export async function POST(request: Request) {
         { status: 429 }
       );
     }
-  } else if (!rateLimitRedis && process.env.NODE_ENV === "production") {
-    console.warn("Rate limiting is disabled. Configure UPSTASH_REDIS_REST_URL.");
   }
 
   const supabase = await createSupabaseServerClient();
-  const formData = await request.formData();
-  if ([...formData.keys()].length === 0) {
-    return NextResponse.json(
-      { error: "No form data received" },
-      { status: 400 },
-    );
+  const contentType = request.headers.get("content-type") || "";
+  
+  let imageBuffer: Buffer;
+  let mimeType: string;
+
+  // 2. Handle Input (JSON URL or File Upload)
+  try {
+    if (contentType.includes("application/json")) {
+      // Case A: Client sent { imageUrl: "..." }
+      const body = await request.json();
+      const { imageUrl } = body;
+      
+      if (!imageUrl) {
+        return NextResponse.json({ error: "No imageUrl provided" }, { status: 400 });
+      }
+
+      console.log(`[Analyze] Fetching image from: ${imageUrl}`);
+      const imgRes = await fetch(imageUrl);
+      if (!imgRes.ok) {
+        console.error(`[Analyze] Failed to fetch image: ${imgRes.status}`);
+        return NextResponse.json({ error: "Failed to download image from URL" }, { status: 400 });
+      }
+
+      const arrayBuffer = await imgRes.arrayBuffer();
+      imageBuffer = Buffer.from(arrayBuffer);
+      mimeType = imgRes.headers.get("content-type") || "image/jpeg";
+
+    } else if (contentType.includes("multipart/form-data")) {
+      // Case B: Client sent FormData with 'file'
+      const formData = await request.formData();
+      const file = formData.get("file") as File | null;
+
+      if (!file) {
+        return NextResponse.json({ error: "Image file is required" }, { status: 400 });
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        return NextResponse.json({ error: "Image too large (>5MB)" }, { status: 413 });
+      }
+
+      imageBuffer = Buffer.from(await file.arrayBuffer());
+      mimeType = file.type || "image/jpeg";
+    } else {
+      return NextResponse.json({ error: "Unsupported Content-Type" }, { status: 400 });
+    }
+  } catch (e) {
+    console.error("[Analyze] Input parsing error:", e);
+    return NextResponse.json({ error: "Invalid request format" }, { status: 400 });
   }
 
-  const file = formData.get("file") as File | null;
-
-  if (!file) {
-    return NextResponse.json(
-      { error: "Image file is required" },
-      { status: 400 },
-    );
-  }
-
-  // Basic security check for file size (prevent OOM attacks)
-  if (file.size > 5 * 1024 * 1024) {
-    return NextResponse.json(
-      { error: "Image too large. Please upload an image under 5MB." },
-      { status: 413 }
-    );
-  }
-
-  const imageBuffer = Buffer.from(await file.arrayBuffer());
+  // 3. Process with Gemini
   const imageData = imageBuffer.toString("base64");
-  const mimeType = file.type || "image/jpeg";
-
   let items: GeminiItem[] = FALLBACK;
   let usedFallback = true;
 
@@ -188,25 +209,20 @@ export async function POST(request: Request) {
       });
 
       const responseText = result.response.text();
-      // Gemini might wrap JSON in markdown code blocks, strip them if needed
       const cleanJson = responseText.replace(/```json|```/g, "").trim();
-      
       const parsed = JSON.parse(cleanJson);
       const parsedItems: GeminiItem[] = parsed.items ?? parsed ?? [];
       
       if (Array.isArray(parsedItems) && parsedItems.length) {
         items = parsedItems;
         usedFallback = false;
-      } else {
-        items = FALLBACK;
-        usedFallback = true;
       }
     } catch (error) {
       console.warn("Gemini call failed, using fallback:", error);
-      usedFallback = true;
     }
   }
 
+  // 4. Match with Database (Embeddings)
   const embed = await getEmbedder();
   const matchThreshold = await deriveMatchThreshold(embed);
 
@@ -231,19 +247,14 @@ export async function POST(request: Request) {
             fiber_100g: top.fiber_100g,
             sugar_100g: top.sugar_100g,
             sodium_100g: top.sodium_100g,
-            similarity:
-              top.similarity ??
-              (typeof top.distance === "number" ? 1 - top.distance : null) ??
-              null,
+            similarity: top.similarity ?? (typeof top.distance === "number" ? 1 - top.distance : null) ?? null,
             text_rank: top.text_rank ?? null,
           }))
         : [];
 
-      const top = mappedMatches[0] ?? null;
-
       return {
         ...item,
-        match: top ?? undefined,
+        match: mappedMatches[0] ?? undefined,
         matches: mappedMatches.slice(0, 3),
       };
     }),
