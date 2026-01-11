@@ -201,7 +201,7 @@ export function DraftReview({
                         autoFocus
                         className="w-24 rounded border border-white/20 bg-transparent px-2 py-1 text-white focus:border-emerald-500 focus:outline-none"
                         type="number"
-                        value={item.weight}
+                        value={item.weight ?? ""}
                         onChange={(e) =>
                           onUpdateWeight(index, parseInt(e.target.value) || 0)
                         }
