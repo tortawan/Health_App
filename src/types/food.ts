@@ -1,66 +1,46 @@
-import { Database } from "./supabase";
-
-// Shortcut to Tables
-type Tables<T extends keyof Database["public"]["Tables"]> =
-  Database["public"]["Tables"][T]["Row"];
-
-export type MealTemplateItem = {
-  food_name: string;
-  weight_g: number;
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fat: number | null;
-};
-
-// Extends the RPC return type but makes fields nullable to match UI needs
-export type MacroMatch = {
-  description: string;
-  kcal_100g: number | null;
-  protein_100g: number | null;
-  carbs_100g: number | null;
-  fat_100g: number | null;
-  fiber_100g?: number | null;
-  sugar_100g?: number | null;
-  sodium_100g?: number | null;
-  similarity?: number | null;
-  text_rank?: number | null;
-};
-
+/**
+ * DraftLog: Represents a food item in the draft stage before confirmation
+ * 
+ * ✅ CHANGES:
+ * - Added unique `id` field to prevent index-based bugs
+ * - Ensures each item can be tracked independently
+ * - Prevents data loss when items are reordered/removed
+ */
 export type DraftLog = {
-  food_name: string;
-  quantity_estimate: string;
-  search_term: string;
-  match?: MacroMatch;
-  matches?: MacroMatch[];
-  weight: number;
+  id: string;  // ✅ NEW: Unique identifier (e.g., "draft_1705004100000_a1b2c3d4e")
+  food_name: string;  // e.g., "Chicken"
+  weight: number;  // in grams
+  search_term: string;  // Original search term
+  match: MacroMatch | null;  // Nutrition data matched to this item
+  image_base64?: string;  // Base64 encoded image
+  created_at?: Date;  // When item was created
 };
 
-// Directly inherit from Supabase 'food_logs' table
-export type FoodLogRecord = Tables<"food_logs">;
-
-// Directly inherit from Supabase 'user_profiles' table
-export type UserProfile = Tables<"user_profiles"> | null;
-
-// Inherit basics from 'meal_templates' but strictly type the JSON 'items'
-export type MealTemplate = Omit<Tables<"meal_templates">, "items"> & {
-  items: MealTemplateItem[];
+/**
+ * MacroMatch: Nutrition data for a food item
+ * 
+ * ✅ CHANGES:
+ * - Added `id` field to track matches uniquely
+ * - Ensures correct match is applied to correct item
+ */
+export type MacroMatch = {
+  id: string;  // ✅ NEW: Unique ID for this match
+  food_name: string;  // e.g., "Boneless Chicken Breast"
+  calories: number;  // Total calories
+  protein: number;  // grams
+  carbs: number;  // grams
+  fat: number;  // grams
+  serving_size: number;  // e.g., 100
+  serving_unit: string;  // e.g., "g" or "oz"
 };
 
-export type PortionMemoryRow = {
-  food_name: string;
-  weight_g: number;
-  count: number;
-};
+/**
+ * Optional: Add these helper types for better type safety
+ */
+export type DraftLogInput = Omit<DraftLog, 'id'>;
 
-export type RecentFood = {
-  food_name: string;
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fat: number | null;
-  fiber?: number | null;
-  sugar?: number | null;
-  sodium?: number | null;
-  weight_g: number;
+export type ConfirmResult = {
+  itemId: string;
+  success: boolean;
+  error?: string;
 };
