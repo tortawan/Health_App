@@ -104,8 +104,11 @@ export async function submitLogFood(args: Parameters<typeof logFood>[0]) {
   } catch (err) {
     console.error("Log food error:", err);
     // Fix: Check type instead of using 'any'
-    const message = err instanceof Error ? err.message : "An unknown error occurred";
-    return { error: message };
+    // Cast to any to access the potential .message property from Supabase errors
+    const message = err instanceof Error 
+      ? err.message 
+      : (err as any)?.message || JSON.stringify(err) || "An unknown error occurred";
+      return { error: message };
   }
 }
 
