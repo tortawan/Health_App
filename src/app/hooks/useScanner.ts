@@ -5,6 +5,13 @@ import toast from "react-hot-toast";
 import type { DraftLog, MacroMatch } from "@/types/food";
 import { createClient } from "@/lib/supabase-browser";
 
+function generateId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
+
 // --- Barcode Scanner Types ---
 type Html5QrcodeInstance = {
   start(
@@ -88,7 +95,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     
     try {
       // 1. Upload to Supabase Storage
-      const fileName = `${crypto.randomUUID()}-${file.name}`;
+      const fileName = `${generateId()}-${file.name}`;
       
       // 🛠️ FIX: Hardcode the bucket name to ensure it works. 
       // The previous error showed it was trying 'food-images', which is wrong.
