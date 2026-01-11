@@ -17,6 +17,15 @@ function isMealTemplateItem(item: unknown): item is MealTemplateItem {
   );
 }
 
+function isErrorWithMessage(error: unknown): error is { message: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as Record<string, unknown>).message === "string"
+  );
+}
+
 type MacroMatch = {
   description: string;
   kcal_100g: number | null;
@@ -103,12 +112,24 @@ export async function submitLogFood(args: Parameters<typeof logFood>[0]) {
     return { data };
   } catch (err) {
     console.error("Log food error:", err);
-    // Fix: Check type instead of using 'any'
-    // Cast to any to access the potential .message property from Supabase errors
-    const message = err instanceof Error 
-      ? err.message 
-      : (err as any)?.message || JSON.stringify(err) || "An unknown error occurred";
-      return { error: message };
+
+    let message = "An unknown error occurred";
+
+    if (err instanceof Error) {
+      message = err.message;
+    } else if (isErrorWithMessage(err)) {
+      message = err.message;
+    } else if (typeof err === "string") {
+      message = err;
+    } else {
+      try {
+        message = JSON.stringify(err);
+      } catch {
+        message = "An error occurred (could not serialize error object)";
+      }
+    }
+
+    return { error: message };
   }
 }
 
