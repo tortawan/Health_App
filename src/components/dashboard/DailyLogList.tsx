@@ -232,10 +232,12 @@ export function DailyLogList({
                     <p className="text-base font-semibold text-white">{log.food_name}</p>
                     <p className="text-white/60">
                       {log.weight_g}g •{" "}
-                      {new Date(log.consumed_at).toLocaleTimeString([], {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      <span suppressHydrationWarning>
+                        {new Date(log.consumed_at).toLocaleTimeString([], {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
                     </p>
                   </>
                 )}
