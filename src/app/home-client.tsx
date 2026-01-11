@@ -43,7 +43,9 @@ export default function HomeClient({
 }: Props) {
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
-  const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories);
+  
+  // ✅ FIX: Added closing ); and fallback to empty array
+  const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories ?? []);
 
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
 
@@ -130,6 +132,9 @@ export default function HomeClient({
 
   const bumpPortionMemory = (foodName: string, weight: number) => {
     setPortionMemories((prev) => {
+      // Safe check to ensure prev is an array before using findIndex
+      if (!Array.isArray(prev)) return [];
+      
       const existing = prev.findIndex(
         (p) => p.food_name.toLowerCase() === foodName.toLowerCase(),
       );

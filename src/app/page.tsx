@@ -178,7 +178,8 @@ export default async function HomePage({
       profile={profile as UserProfile | null}
       streak={streak}
       templates={(templates as MealTemplate[] | null) ?? []}
-      portionMemory={portionMemory}
+      // ✅ FIX: Passed the correct prop name to match HomeClient props
+      initialPortionMemories={portionMemory}
       initialRecentFoods={recentFoods ?? []}
       initialWater={initialWater ?? 0}
     />
