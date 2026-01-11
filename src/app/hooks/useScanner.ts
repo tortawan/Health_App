@@ -97,9 +97,9 @@ export function useScanner(options: UseScannerOptions = {}) {
       // 1. Upload to Supabase Storage
       const fileName = `${generateId()}-${file.name}`;
       
-      // 🛠️ FIX: Hardcode the bucket name to ensure it works. 
-      // The previous error showed it was trying 'food-images', which is wrong.
-      const bucketName = "food-photos";
+      // ✅ FIX: Use environment variable or default to "food-photos"
+      // This ensures consistency with the database audit recommendations.
+      const bucketName = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "food-photos";
 
       console.log(`📦 [DEBUG] Uploading to Bucket: '${bucketName}'`);
 
