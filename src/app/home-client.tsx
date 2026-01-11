@@ -16,6 +16,7 @@ import { CameraCapture } from "../components/scanner/CameraCapture";
 import { DailyLogList } from "../components/dashboard/DailyLogList";
 import { DraftReview } from "../components/logging/DraftReview";
 import { ManualSearchModal } from "../components/logging/ManualSearchModal";
+import { generateDraftId } from "@/lib/uuid";
 import {
   DraftLog,
   FoodLogRecord,
@@ -291,6 +292,7 @@ export default function HomeClient({
   const applyManualResult = (match: MacroMatch) => {
     if (manualOpenIndex === -1 || manualOpenIndex === null) {
       const newDraftItem: DraftLog = {
+        id: generateDraftId(),
         food_name: match.description,
         weight: 100, 
         match,

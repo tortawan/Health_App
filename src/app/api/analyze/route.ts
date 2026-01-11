@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase";
 import { FOOD_PROMPT, geminiClient } from "@/lib/gemini";
+import { generateDraftId } from "@/lib/uuid";
 import { getEmbedder } from "@/lib/embedder";
 import { analyzeLimiter, rateLimitRedis } from "@/lib/ratelimit";
 
@@ -253,6 +254,7 @@ export async function POST(request: Request) {
         : [];
 
       return {
+        id: generateDraftId(),
         ...item,
         match: mappedMatches[0] ?? undefined,
         matches: mappedMatches.slice(0, 3),
