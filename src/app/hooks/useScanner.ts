@@ -132,8 +132,8 @@ export function useScanner(options: UseScannerOptions = {}) {
       const data = await response.json();
       console.log("✅ [DEBUG] Analysis Results:", data);
 
-      if (data.foods) {
-        setDraft(data.foods);
+      if (data.draft) { 
+        setDraft(data.draft);
       }
     } catch (err: unknown) {
       console.error("💥 [DEBUG] Error:", err);
