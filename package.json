@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --ext .ts,.tsx,.js,.mjs",
     "test:unit": "vitest",
     "test:e2e": "playwright test",
     "usda:download": "node scripts/download_usda.js",
@@ -32,6 +32,7 @@
     "recharts": "^2.12.7"
   },
   "devDependencies": {
+    "@eslintrc/eslintrc": "^3.1.0",
     "@playwright/test": "^1.48.2",
     "@types/node": "^22.9.4",
     "@types/react": "^18.3.12",
