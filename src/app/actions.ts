@@ -103,12 +103,15 @@ export async function submitLogFood(args: Parameters<typeof logFood>[0]) {
     return { data };
   } catch (err) {
     console.error("Log food error:", err);
-    // Fix: Check type instead of using 'any'
-    // Cast to any to access the potential .message property from Supabase errors
-    const message = err instanceof Error 
-      ? err.message 
-      : (err as any)?.message || JSON.stringify(err) || "An unknown error occurred";
-      return { error: message };
+    // ✅ FIX: Use type-safe error handling without 'any' cast
+    // Handle Error objects and unknown error types safely
+    let message: string;
+    if (err instanceof Error) {
+      message = err.message;
+    } else {
+      message = JSON.stringify(err) || "An unknown error occurred";
+    }
+    return { error: message };
   }
 }
 
@@ -117,7 +120,7 @@ export async function logCorrection(payload: {
   original: number; 
   corrected: number; 
   foodName: string 
-}) {
+ }) {
   try {
     const supabase = await createSupabaseServerClient();
     const { data: { session } } = await supabase.auth.getSession();
