@@ -11,10 +11,11 @@ import {
 } from "./actions";
 import { useProfileForm } from "./hooks/useProfileForm";
 import { useScanner } from "./hooks/useScanner";
-import { CameraCapture } from "@/components/scanner/CameraCapture";
-import { DailyLogList } from "@/components/dashboard/DailyLogList";
-import { DraftReview } from "@/components/logging/DraftReview";
-import { ManualSearchModal } from "@/components/logging/ManualSearchModal";
+// Changed aliases to relative paths to fix resolution errors
+import { CameraCapture } from "../components/scanner/CameraCapture";
+import { DailyLogList } from "../components/dashboard/DailyLogList";
+import { DraftReview } from "../components/logging/DraftReview";
+import { ManualSearchModal } from "../components/logging/ManualSearchModal";
 import {
   DraftLog,
   FoodLogRecord,
@@ -23,7 +24,7 @@ import {
   PortionMemoryRow,
   RecentFood,
   UserProfile,
-} from "@/types/food";
+} from "../types/food";
 
 type Props = {
   initialLogs: FoodLogRecord[];
@@ -43,8 +44,6 @@ export default function HomeClient({
 }: Props) {
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
-  
-  // ✅ FIX: Added closing ); and fallback to empty array
   const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories ?? []);
 
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
@@ -54,7 +53,6 @@ export default function HomeClient({
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
   
-  // Removed unused isCopying state setter
   const [isCopying] = useState(false);
   
   const [deletingId, setDeletingLogId] = useState<string | null>(null);
@@ -132,9 +130,7 @@ export default function HomeClient({
 
   const bumpPortionMemory = (foodName: string, weight: number) => {
     setPortionMemories((prev) => {
-      // Safe check to ensure prev is an array before using findIndex
       if (!Array.isArray(prev)) return [];
-      
       const existing = prev.findIndex(
         (p) => p.food_name.toLowerCase() === foodName.toLowerCase(),
       );
@@ -229,13 +225,18 @@ export default function HomeClient({
     }
   };
 
+  // ✅ CRITICAL BUG FIX #2: Prevents data loss during "Confirm All"
   const handleConfirmAll = async () => {
     setIsConfirmingAll(true);
     setError(null);
     let successCount = 0;
+    const successfulIndices = new Set<number>();
+    
+    // Create a stable reference to iterate over
+    const currentDraft = draft;
 
-    for (let i = 0; i < draft.length; i++) {
-      const item = draft[i];
+    for (let i = 0; i < currentDraft.length; i++) {
+      const item = currentDraft[i];
       if (!item.match) continue; 
       try {
         const result = await submitLogFood({
@@ -250,6 +251,7 @@ export default function HomeClient({
             bumpPortionMemory(item.food_name, item.weight);
           }
           successCount++;
+          successfulIndices.add(i);
         }
       } catch (err) {
         console.error("Failed item", i, err);
@@ -258,8 +260,14 @@ export default function HomeClient({
 
     if (successCount > 0) {
       toast.success(`Saved ${successCount} items`);
-      setDraft([]); 
-      setShowScanner(false);
+      // Only remove items that were successfully saved
+      // Filter by index check against the successful set
+      setDraft((prev) => prev.filter((_, index) => !successfulIndices.has(index))); 
+      
+      // If everything was saved, we can close the scanner
+      if (successfulIndices.size === currentDraft.length) {
+        setShowScanner(false);
+      }
       refreshRecentFoods();
     } else {
       toast.error("No items saved. Please check matches.");
@@ -281,7 +289,6 @@ export default function HomeClient({
   };
 
   const applyManualResult = (match: MacroMatch) => {
-    // FIX: Check for -1 (New Item) or null (fallback)
     if (manualOpenIndex === -1 || manualOpenIndex === null) {
       const newDraftItem: DraftLog = {
         food_name: match.description,
@@ -417,7 +424,6 @@ export default function HomeClient({
                 <button
                    className="rounded-full bg-white/10 p-3 text-sm font-medium text-white backdrop-blur-md"
                    onClick={() => {
-                     // FIX: Use -1 to indicate "New Item" so the modal renders
                      setManualOpenIndex(-1); 
                      setManualQuery("");
                    }}
