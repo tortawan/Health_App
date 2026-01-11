@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * Downloads the USDA Foundation Foods CSV bundle, extracts it,
  * writes `food.json`, and copies `food_nutrient.csv` for streaming later.

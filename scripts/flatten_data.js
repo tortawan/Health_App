@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * Flattens the USDA Foundation Foods dataset.
  * Streams `food_nutrient.csv` to avoid memory issues.

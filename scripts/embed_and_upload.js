@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 /**
  * Embeds the flattened USDA data and uploads it to Supabase.
  *
