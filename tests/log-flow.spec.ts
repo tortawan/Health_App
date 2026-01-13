@@ -12,7 +12,7 @@ async function ensureLoggedIn(page: Page) {
   try {
     // Give it a moment to redirect
     await page.waitForURL(/.*\/login/, { timeout: 3000 });
-  } catch (e) {
+  } catch (_e) {
     // If not redirected, maybe we are already logged in or on home
   }
 

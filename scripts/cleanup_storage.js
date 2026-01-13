@@ -1,9 +1,8 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 // Delete storage objects older than 30 days or orphaned from food_logs.image_path.
 // Run with: node scripts/cleanup_storage.js
 // Requires SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and optionally SUPABASE_STORAGE_BUCKET.
- 
-const { createClient } = require("@supabase/supabase-js");
+
+import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

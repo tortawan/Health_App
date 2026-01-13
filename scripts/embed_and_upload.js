@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-
 /**
  * Embeds the flattened USDA data and uploads it to Supabase.
  *
@@ -12,13 +10,17 @@
  * - SUPABASE_SERVICE_ROLE_KEY
  * - EMBEDDING_MODEL (optional)
  */
-const path = require("path");
+import path from "path";
+import fs from "fs";
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables immediately so Supabase client can find them
-require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
-require("dotenv").config({ path: path.join(__dirname, "..", ".env.local") });
-
-const fs = require("fs");
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
+dotenv.config({ path: path.join(__dirname, "..", ".env.local") });
 
 const BATCH_SIZE = Number(process.env.BATCH_SIZE ?? 250);
 const DATA_PATH = path.join(__dirname, "data", "flattened.json");
