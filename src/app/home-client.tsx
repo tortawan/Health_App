@@ -88,9 +88,7 @@ export default function HomeClient({
     isAnalyzing,
     isImageUploading,
     imagePublicUrl,
-    handleCapture, 
     handleImageUpload,
-    error,
     setError,
   } = useScanner();
 
