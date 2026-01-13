@@ -1,4 +1,5 @@
- 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+
 /**
  * Flattens the USDA Foundation Foods dataset.
  * Streams `food_nutrient.csv` to avoid memory issues.

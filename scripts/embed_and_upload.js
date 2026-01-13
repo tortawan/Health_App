@@ -1,4 +1,5 @@
- 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+
 /**
  * Embeds the flattened USDA data and uploads it to Supabase.
  *
