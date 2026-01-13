@@ -25,7 +25,7 @@ async function listAll(prefix = ""): Promise<{ path: string; created_at?: string
   let from = 0;
   const size = 100;
 
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     const { data, error } = await supabase.storage.from(bucket).list(prefix, {
       limit: size,

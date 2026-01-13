@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test:unit": "vitest",
     "test:e2e": "playwright test",
     "usda:download": "node scripts/download_usda.js",

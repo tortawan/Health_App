@@ -1,11 +1,15 @@
-/* eslint-disable no-console */
 /**
  * Flattens the USDA Foundation Foods dataset.
  * Streams `food_nutrient.csv` to avoid memory issues.
  */
-const fs = require("fs");
-const path = require("path");
-const { parse } = require("csv-parse");
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { createReadStream } from "fs";
+import { parse } from "csv-parse";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const DATA_DIR = path.join(__dirname, "data");
 const OUTPUT_FILE = path.join(DATA_DIR, "flattened.json");
@@ -38,9 +42,9 @@ async function buildMacroMap() {
     throw new Error(`Missing ${RAW_NUTRIENT_CSV}. Run download_usda.js first.`);
   }
 
-  const parser = fs
-    .createReadStream(RAW_NUTRIENT_CSV)
-    .pipe(parse({ columns: true, cast: true }));
+  const parser = createReadStream(RAW_NUTRIENT_CSV).pipe(
+    parse({ columns: true, cast: true }),
+  );
 
   let rowsProcessed = 0;
 

@@ -1,12 +1,15 @@
-/* eslint-disable no-console */
 /**
  * Downloads the USDA Foundation Foods CSV bundle, extracts it,
  * writes `food.json`, and copies `food_nutrient.csv` for streaming later.
  */
-const fs = require("fs");
-const path = require("path");
-const AdmZip = require("adm-zip");
-const { parse } = require("csv-parse/sync");
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import AdmZip from "adm-zip";
+import { parse } from "csv-parse/sync";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const DATA_URL =
   process.env.USDA_DATA_URL ||
