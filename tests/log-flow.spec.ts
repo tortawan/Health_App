@@ -48,20 +48,48 @@ async function stubLogFood(page: Page) {
 }
 
 async function stubStorage(page: Page) {
-  // FIX: Provide a more complete mock response for Supabase Storage
-  // Different versions of the client look for different fields (Key vs path)
-  await page.route("**/storage/v1/object/**", (route) =>
-    route.fulfill({
+  const fs = await import("node:fs");
+  const imageFixturePath = path.join(__dirname, "fixtures", "sample.png");
+  await page.route("**/storage/v1/object/**", async (route) => {
+    const req = route.request();
+    const objectPath = req.url().split("/storage/v1/object/")[1] ?? "public/mock-key";
+
+    if (req.method() === "POST" || req.method() === "PUT") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          Key: objectPath,
+          path: objectPath,
+          id: "mock-id",
+          fullPath: objectPath,
+        }),
+      });
+      return;
+    }
+
+    const accept = req.headers()["accept"] || "";
+    if (/image/.test(accept)) {
+      const buffer = fs.readFileSync(imageFixturePath);
+      await route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: buffer,
+      });
+      return;
+    }
+
+    await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ 
-        Key: "mock-key", 
+      body: JSON.stringify({
+        Key: "mock-key",
         path: "mock-path",
-        Id: "mock-id",
-        fullPath: "food-images/mock-path"
+        id: "mock-id",
+        fullPath: "food-images/mock-path",
       }),
-    }),
-  );
+    });
+  });
 }
 
 test("image draft to confirmed log flow", async ({ page }) => {
@@ -118,19 +146,20 @@ test("manual search fallback flow", async ({ page }) => {
   await ensureLoggedIn(page);
   await stubLogFood(page);
 
-  // Stub search API
-  await page.route("**/api/search?**", (route) =>
+  // Stub search RPC
+  await page.route("**/rest/v1/rpc/match_foods", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify([
         {
           description: "Greek Yogurt Plain",
-          score: 1.0,
-          foodNutrients: [
-            { nutrientId: 1008, value: 59 }, 
-            { nutrientId: 1003, value: 10 }, 
-          ],
+          kcal_100g: 59,
+          protein_100g: 10,
+          carbs_100g: 3.6,
+          fat_100g: 0.4,
+          similarity: 0.99,
+          text_rank: 1.0,
         },
       ]),
     }),
