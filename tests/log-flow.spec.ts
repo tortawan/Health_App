@@ -101,7 +101,7 @@ test("image draft to confirmed log flow", async ({ page }) => {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        foods: [
+        draft: [
           {
             food_name: "Mock Chicken Bowl",
             weight: 350,
@@ -194,7 +194,7 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        foods: [
+        draft: [
           {
             food_name: "Mystery Meat",
             weight: 200,

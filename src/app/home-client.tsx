@@ -3,7 +3,6 @@
 import React, { useCallback, useState, useMemo } from "react";
 import toast from "react-hot-toast";
 import {
-  manualSearch,
   getRecentFoods,
   reportLogIssue,
   submitLogFood,
@@ -278,7 +277,8 @@ export default function HomeClient({
     if (!manualQuery.trim()) return;
     setIsSearching(true);
     try {
-      const results = await manualSearch(manualQuery);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(manualQuery)}`);
+      const results = await res.json();
       setSearchResults(results);
     } catch {
       toast.error("Search failed");
