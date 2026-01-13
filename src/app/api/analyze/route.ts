@@ -4,7 +4,7 @@ import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/s
 import { FOOD_PROMPT, geminiClient } from "@/lib/gemini";
 import { generateDraftId } from "@/lib/uuid";
 import { getEmbedder } from "@/lib/embedder";
-import { analyzeLimiter, rateLimitRedis } from "@/lib/ratelimit";
+import { analyzeLimiter } from "@/lib/ratelimit";
 
 type GeminiItem = {
   food_name: string;
