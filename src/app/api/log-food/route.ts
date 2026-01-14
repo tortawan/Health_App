@@ -1,42 +1,23 @@
-import { createClient } from "@/utils/supabase/server";
-import { NextResponse } from "next/server";
+import { submitLogFood } from "@/app/actions";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  
-  // 1. Authenticate
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
     const body = await request.json();
 
-    // 2. Insert into Supabase
-    // We explicitly select() to get the returned data (required for the UI update)
-    const { data, error } = await supabase
-      .from("food_logs")
-      .insert({
-        ...body,
-        user_id: user.id, // Ensure security by forcing the user ID
-      })
-      .select();
+    if (!body.foodName) return Response.json({ error: "Missing required field: foodName" }, { status: 400 });
+    if (body.weight === undefined || body.weight === null) return Response.json({ error: "Missing required field: weight" }, { status: 400 });
 
-    if (error) {
-      console.error("Supabase error:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    const result = await submitLogFood(body);
+
+    if (result.data) {
+      return Response.json({ data: result.data }, { status: 200 });
+    } else if (result.error) {
+      return Response.json({ error: result.error }, { status: 400 });
+    } else {
+      return Response.json({ error: "Unexpected response from server action" }, { status: 500 });
     }
-
-    // 3. Return the standard format expected by our frontend/test
-    return NextResponse.json({ 
-      success: true, 
-      message: "Entry added", 
-      data: data // Supabase .select() returns an array
-    }, { status: 201 });
-
-  } catch (err) {
-    console.error("Server error:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return Response.json({ error: message }, { status: 500 });
   }
 }

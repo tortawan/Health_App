@@ -5,12 +5,10 @@ import toast from "react-hot-toast";
 import {
   getRecentFoods,
   reportLogIssue,
-  // submitLogFood, // Removed: We now use fetch('/api/log-food') for testability
   logCorrection,
 } from "./actions";
 import { useProfileForm } from "./hooks/useProfileForm";
 import { useScanner } from "./hooks/useScanner";
-// Changed aliases to relative paths to fix resolution errors
 import { CameraCapture } from "../components/scanner/CameraCapture";
 import { DailyLogList } from "../components/dashboard/DailyLogList";
 import { DraftReview } from "../components/logging/DraftReview";
@@ -47,17 +45,12 @@ export default function HomeClient({
   const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories ?? []);
 
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
-
-  // --- NEW STATE for DailyLogList V2 ---
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
-  
   const [isCopying] = useState(false);
-  
   const [deletingId, setDeletingLogId] = useState<string | null>(null);
 
-  // Calculate Daily Totals
   const dailyTotals = useMemo(() => {
     return dailyLogs.reduce(
       (acc, log) => ({
@@ -78,7 +71,6 @@ export default function HomeClient({
   
   const calorieTarget = initialProfile?.calorie_target || 2500;
 
-  // Scanner Hook
   const {
     showScanner,
     setShowScanner,
@@ -96,20 +88,14 @@ export default function HomeClient({
   const [loggingIndex, setLoggingIndex] = useState<number | null>(null);
   const [editingWeightIndex, setEditingWeightIndex] = useState<number | null>(null);
   const [isConfirmingAll, setIsConfirmingAll] = useState(false);
-
-  // Manual Search State
   const [manualOpenIndex, setManualOpenIndex] = useState<number | null>(null);
   const [manualQuery, setManualQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MacroMatch[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-
-  // Template State
   const [templateName, setTemplateName] = useState("");
   const [isSavingTemplate] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [templateScale, setTemplateScale] = useState(1);
-
-  // Flagging
   const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
   const [flagNotes, setFlagNotes] = useState("");
   const [isFlagging, setIsFlagging] = useState(false);
@@ -147,17 +133,8 @@ export default function HomeClient({
   const handleEditField = (field: keyof FoodLogRecord, value: string | number | null) => {
     setEditForm(prev => ({ ...prev, [field]: value }));
   };
-
-  const handleBeginEdit = (log: FoodLogRecord) => {
-    setEditingLogId(log.id);
-    setEditForm(log);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingLogId(null);
-    setEditForm({});
-  };
-
+  const handleBeginEdit = (log: FoodLogRecord) => { setEditingLogId(log.id); setEditForm(log); };
+  const handleCancelEdit = () => { setEditingLogId(null); setEditForm({}); };
   const handleSaveEdits = async () => {
      if (!editingLogId) return;
      setDailyLogs(prev => prev.map(log => 
@@ -166,7 +143,6 @@ export default function HomeClient({
      toast.success("Log updated");
      setEditingLogId(null);
   };
-  
   const handleDeleteLog = async (id: string) => {
       setDeletingLogId(id);
       await new Promise(r => setTimeout(r, 500));
@@ -174,7 +150,6 @@ export default function HomeClient({
       toast.success("Entry deleted");
       setDeletingLogId(null);
   }
-
   const handleShiftDate = (delta: number) => {
       const date = new Date(selectedDate);
       date.setDate(date.getDate() + delta);
@@ -188,8 +163,8 @@ export default function HomeClient({
     setLoggingIndex(index);
 
     try {
-      // ✅ UPDATED: Use fetch API route with improved error handling
-      const apiResponse = await fetch("/api/log-food", {
+      // Use fetch API route
+      const response = await fetch("/api/log-food", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -200,31 +175,24 @@ export default function HomeClient({
         }),
       });
 
-      if (!apiResponse.ok) {
-        const error = await apiResponse.json();
-        throw new Error(error.error || `API error: ${apiResponse.statusText}`);
-      }
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to log food");
 
-      const result = await apiResponse.json();
-
-      if (result.data) {
-        // We cast directly as per the expert suggestion, assuming result.data is the record
-        setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
+      // Robust check: handle if data is Array (Supabase) or Object
+      const newEntry = Array.isArray(result.data) ? result.data[0] : result.data;
+      
+      if (newEntry) {
+        setDailyLogs((prev) => [newEntry as FoodLogRecord, ...prev]);
         setDraft((prev) => prev.filter((_, i) => i !== index));
         bumpPortionMemory(item.food_name, item.weight);
         toast.success("Food log saved");
       } else {
-        throw new Error(result.error || "Failed to log food");
+        throw new Error("No data returned from API");
       }
 
       if (item.ai_suggested_weight && Math.abs(item.weight - item.ai_suggested_weight) > 10) {
-         await logCorrection({
-           original: item.ai_suggested_weight,
-           corrected: item.weight,
-           foodName: item.food_name
-         });
+         await logCorrection({ original: item.ai_suggested_weight, corrected: item.weight, foodName: item.food_name });
       }
-
       refreshRecentFoods();
     } catch (err: unknown) {
       console.error(err);
@@ -239,45 +207,34 @@ export default function HomeClient({
     setError(null);
     let successCount = 0;
     const successfulIndices = new Set<number>();
-    
     const currentDraft = draft;
 
     for (let i = 0; i < currentDraft.length; i++) {
       const item = currentDraft[i];
       if (!item.match) continue; 
       try {
-        const apiResponse = await fetch("/api/log-food", {
+        const response = await fetch("/api/log-food", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              foodName: item.food_name,
-              weight: item.weight,
-              match: item.match,
-              imageUrl: imagePublicUrl, 
-            }),
+            body: JSON.stringify({ foodName: item.food_name, weight: item.weight, match: item.match, imageUrl: imagePublicUrl }),
         });
-        
-        if (apiResponse.ok) {
-            const result = await apiResponse.json();
-            if (result.data) {
-                setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
+        if (response.ok) {
+            const result = await response.json();
+            const newEntry = Array.isArray(result.data) ? result.data[0] : result.data;
+            if (newEntry) {
+                setDailyLogs((prev) => [newEntry as FoodLogRecord, ...prev]);
                 bumpPortionMemory(item.food_name, item.weight);
                 successCount++;
                 successfulIndices.add(i);
             }
         }
-      } catch (err) {
-        console.error("Failed item", i, err);
-      }
+      } catch (err) { console.error("Failed item", i, err); }
     }
 
     if (successCount > 0) {
       toast.success(`Saved ${successCount} items`);
       setDraft((prev) => prev.filter((_, index) => !successfulIndices.has(index))); 
-      
-      if (successfulIndices.size === currentDraft.length) {
-        setShowScanner(false);
-      }
+      if (successfulIndices.size === currentDraft.length) setShowScanner(false);
       refreshRecentFoods();
     } else {
       toast.error("No items saved. Please check matches.");
@@ -292,11 +249,8 @@ export default function HomeClient({
       const res = await fetch(`/api/search?q=${encodeURIComponent(manualQuery)}`);
       const results = await res.json();
       setSearchResults(results);
-    } catch {
-      toast.error("Search failed");
-    } finally {
-      setIsSearching(false);
-    }
+    } catch { toast.error("Search failed"); } 
+    finally { setIsSearching(false); }
   };
 
   const applyManualResult = (match: MacroMatch) => {
@@ -308,27 +262,16 @@ export default function HomeClient({
         match,
         search_term: manualQuery,
       };
-      const mem = portionMemories.find(
-        (p) => p.food_name.toLowerCase() === match.description.toLowerCase(),
-      );
-      if (mem) {
-        newDraftItem.weight = mem.last_weight_g;
-      }
-
+      const mem = portionMemories.find(p => p.food_name.toLowerCase() === match.description.toLowerCase());
+      if (mem) newDraftItem.weight = mem.last_weight_g;
       setDraft([newDraftItem]);
       setShowScanner(true); 
     } else {
       const newDraft = [...draft];
-      newDraft[manualOpenIndex] = {
-        ...newDraft[manualOpenIndex],
-        food_name: match.description,
-        match,
-      };
+      newDraft[manualOpenIndex] = { ...newDraft[manualOpenIndex], food_name: match.description, match };
       setDraft(newDraft);
     }
-    setManualOpenIndex(null);
-    setManualQuery("");
-    setSearchResults([]);
+    setManualOpenIndex(null); setManualQuery(""); setSearchResults([]);
   };
 
   const submitFlaggedLog = async () => {
@@ -337,13 +280,9 @@ export default function HomeClient({
     try {
       await reportLogIssue(flaggingLog.id, flagNotes);
       toast.success("Report submitted. Thank you!");
-      setFlaggingLog(null);
-      setFlagNotes("");
-    } catch {
-      toast.error("Failed to submit report");
-    } finally {
-      setIsFlagging(false);
-    }
+      setFlaggingLog(null); setFlagNotes("");
+    } catch { toast.error("Failed to submit report"); } 
+    finally { setIsFlagging(false); }
   };
 
   return (
@@ -377,26 +316,17 @@ export default function HomeClient({
                 isSavingTemplate={isSavingTemplate}
                 loggingIndex={loggingIndex}
                 onApplyMatch={(idx, m) => {
-                  const d = [...draft];
-                  d[idx].match = m;
-                  setDraft(d);
+                  const d = [...draft]; d[idx].match = m; setDraft(d);
                 }}
                 onConfirm={handleConfirm}
                 onConfirmAll={handleConfirmAll}
                 onManualSearch={(idx) => {
-                  setManualOpenIndex(idx);
-                  setManualQuery(draft[idx].search_term || draft[idx].food_name);
+                  setManualOpenIndex(idx); setManualQuery(draft[idx].search_term || draft[idx].food_name);
                 }}
                 onSaveTemplate={() => {}}
                 onTemplateNameChange={setTemplateName}
-                onToggleWeightEdit={(idx) => {
-                  setEditingWeightIndex(editingWeightIndex === idx ? null : idx);
-                }}
-                onUpdateWeight={(idx, w) => {
-                  const d = [...draft];
-                  d[idx].weight = w;
-                  setDraft(d);
-                }}
+                onToggleWeightEdit={(idx) => setEditingWeightIndex(editingWeightIndex === idx ? null : idx)}
+                onUpdateWeight={(idx, w) => { const d = [...draft]; d[idx].weight = w; setDraft(d); }}
                 templateName={templateName}
               />
             )}
@@ -424,74 +354,36 @@ export default function HomeClient({
                deletingId={deletingId}
                onDeleteLog={handleDeleteLog}
              />
-             
              <div className="fixed bottom-24 right-4 z-20 flex flex-col gap-3">
-                <button 
-                  className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition hover:bg-emerald-400"
-                  onClick={() => setShowScanner(true)}
-                  aria-label="Add Log"
-                >
+                <button className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition hover:bg-emerald-400" onClick={() => setShowScanner(true)} aria-label="Add Log">
                   <span className="text-2xl">+</span>
                 </button>
-                <button
-                   className="rounded-full bg-white/10 p-3 text-sm font-medium text-white backdrop-blur-md"
-                   onClick={() => {
-                     setManualOpenIndex(-1); 
-                     setManualQuery("");
-                   }}
-                >
+                <button className="rounded-full bg-white/10 p-3 text-sm font-medium text-white backdrop-blur-md" onClick={() => { setManualOpenIndex(-1); setManualQuery(""); }}>
                   Manual Add
                 </button>
              </div>
           </>
         )}
       </main>
-
       {flaggingLog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-[#1a1a1a] p-6 ring-1 ring-white/10">
             <h3 className="mb-4 text-lg font-bold text-white">Report an issue</h3>
-            <p className="mb-4 text-sm text-white/60">
-              Is the nutrition info for <span className="text-white">{flaggingLog.food_name}</span> incorrect?
-            </p>
+            <p className="mb-4 text-sm text-white/60">Is the nutrition info for <span className="text-white">{flaggingLog.food_name}</span> incorrect?</p>
             <div className="space-y-4">
               <label className="space-y-1 text-sm text-white/70 sm:col-span-2">
                 <span>Notes</span>
-                <textarea
-                  className="min-h-[80px] w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
-                  value={flagNotes}
-                  onChange={(e) => setFlagNotes(e.target.value)}
-                />
+                <textarea className="min-h-[80px] w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none" value={flagNotes} onChange={(e) => setFlagNotes(e.target.value)}/>
               </label>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <button className="btn" disabled={isFlagging} onClick={submitFlaggedLog} type="button">
-                {isFlagging ? "Sending..." : "Submit report"}
-              </button>
-              <button
-                className="btn bg-white/10 text-white hover:bg-white/20"
-                onClick={() => setFlaggingLog(null)}
-                type="button"
-              >
-                Cancel
-              </button>
+              <button className="btn" disabled={isFlagging} onClick={submitFlaggedLog} type="button">{isFlagging ? "Sending..." : "Submit report"}</button>
+              <button className="btn bg-white/10 text-white hover:bg-white/20" onClick={() => setFlaggingLog(null)} type="button">Cancel</button>
             </div>
           </div>
         </div>
       )}
-
-      <ManualSearchModal
-        isLoadingRecentFoods={isLoadingRecentFoods}
-        isSearching={isSearching}
-        onChangeQuery={setManualQuery}
-        onClose={() => setManualOpenIndex(null)}
-        onSearch={runManualSearch}
-        onSelect={applyManualResult}
-        openIndex={manualOpenIndex}
-        query={manualQuery}
-        recentFoods={recentFoods}
-        results={searchResults}
-      />
+      <ManualSearchModal isLoadingRecentFoods={isLoadingRecentFoods} isSearching={isSearching} onChangeQuery={setManualQuery} onClose={() => setManualOpenIndex(null)} onSearch={runManualSearch} onSelect={applyManualResult} openIndex={manualOpenIndex} query={manualQuery} recentFoods={recentFoods} results={searchResults} />
     </div>
   );
 }
