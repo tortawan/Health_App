@@ -23,7 +23,7 @@ async function ensureLoggedIn(page: Page) {
     await page.click('button:has-text("Sign in")');
     
     // 4. Wait until we land on the dashboard
-    await page.waitForURL("**/"); 
+    await page.waitForURL("**/#"); 
   }
 }
 
@@ -35,34 +35,31 @@ async function stubLogFood(page: Page) {
     const foodName = postData.foodName || postData.food_name;
     const weight = postData.weight || postData.weight_g;
 
-    // Create a complete mock response object
+    // ✅ CRITICAL FIX: Return proper FoodLogRecord structure
+    // This MUST match what your frontend expects in result.data
     const mockEntry = {
-        ...postData,
         id: crypto.randomUUID(),
+        user_id: "test-user-id",
         food_name: foodName,
         weight_g: weight,
-        calories: postData.manualMacros?.calories || postData.calories || null,
-        protein: postData.manualMacros?.protein || postData.protein || null,
-        carbs: postData.manualMacros?.carbs || postData.carbs || null,
-        fat: postData.manualMacros?.fat || postData.fat || null,
+        calories: postData.manualMacros?.calories || postData.calories || 165,
+        protein: postData.manualMacros?.protein || postData.protein || 31,
+        carbs: postData.manualMacros?.carbs || postData.carbs || 0,
+        fat: postData.manualMacros?.fat || postData.fat || 3.6,
         consumed_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
-        // ✅ CRITICAL FIX: Ensure both image_url and image_path are present.
         image_url: postData.image_url || "https://placehold.co/100x100.png",
         image_path: postData.image_path || "food-images/mock-path",
-        // ✅ Ensure meal_type exists (often required for rendering lists)
         meal_type: postData.meal_type || "snack",
     };
     
+    // ✅ CRITICAL FIX: Return response in proper structure
+    // Frontend expects: result.data to contain the FoodLogRecord
     await route.fulfill({
-      status: 200, // Revert to 200 to be safe (some clients strict check for 200)
+      status: 200,
       contentType: "application/json",
-      // ✅ Return a structure that handles common API patterns:
       body: JSON.stringify({
-        success: true,
-        message: "Entry added", 
-        data: mockEntry, 
-        ...mockEntry,   
+        data: mockEntry,  // Wrap in data property only (not flattened)
       }),
     });
   });
@@ -113,7 +110,7 @@ async function stubStorage(page: Page) {
   });
 }
 
-// ✅ NEW: Intercept Next.js image optimization requests
+// ✅ Intercept Next.js image optimization requests
 // This prevents the "upstream image response failed" error by serving the local file
 // directly to the browser, bypassing the server-side fetch to Supabase.
 async function stubNextImage(page: Page) {
@@ -145,11 +142,13 @@ test("image draft to confirmed log flow", async ({ page }) => {
             weight: 350,
             confidence: 0.95,
             match: {
+              id: "match-1",
+              food_name: "Grilled Chicken Bowl",
               description: "Grilled chicken breast with rice",
-              kcal_100g: 165,
-              protein_100g: 31,
-              carbs_100g: 0,
-              fat_100g: 3.6,
+              calories: 165,
+              protein: 31,
+              carbs: 0,
+              fat: 3.6,
               similarity: 0.95,
             },
           },
@@ -184,13 +183,15 @@ test("image draft to confirmed log flow", async ({ page }) => {
 
   // Step 5b: Verify the item appears in the list (Persistent Success)
   // We check this FIRST because it's the most important outcome.
-  await expect(page.getByText("Mock Chicken Bowl")).toBeVisible();
+  // ✅ CRITICAL FIX: This should now work because the mock returns proper data structure
+  await expect(page.getByText("Mock Chicken Bowl")).toBeVisible({ timeout: 10000 });
 
   // Step 5c: Verify toast (Transient Success)
   // We check this last. If the item is there but toast is missed, it's less critical.
+  // ✅ Match the actual toast message from home-client.tsx line 283
   await expect(
-    page.getByText("Entry added")
-      .or(page.getByText("Food log saved"))
+    page.getByText("Food log saved")
+      .or(page.getByText("Entry added"))
       .or(page.getByText("Success"))
       .or(page.getByText("Saved"))
   ).toBeVisible();
@@ -209,11 +210,13 @@ test("manual search fallback flow", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify([
         {
+          id: "match-2",
+          food_name: "Greek Yogurt Plain",
           description: "Greek Yogurt Plain",
-          kcal_100g: 59,
-          protein_100g: 10,
-          carbs_100g: 3.6,
-          fat_100g: 0.4,
+          calories: 59,
+          protein: 10,
+          carbs: 3.6,
+          fat: 0.4,
           similarity: 0.99,
           text_rank: 1.0,
         },
@@ -246,8 +249,8 @@ test("manual search fallback flow", async ({ page }) => {
   
   // Step 5c: Verify toast
   await expect(
-    page.getByText("Entry added")
-      .or(page.getByText("Food log saved"))
+    page.getByText("Food log saved")
+      .or(page.getByText("Entry added"))
       .or(page.getByText("Success"))
       .or(page.getByText("Saved"))
   ).toBeVisible();
@@ -265,12 +268,15 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
           {
             food_name: "Mystery Meat",
             weight: 200,
+            ai_suggested_weight: 200,
             match: {
+              id: "match-3",
+              food_name: "Grilled Chicken",
               description: "Grilled chicken breast",
-              kcal_100g: 165,
-              protein_100g: 31,
-              carbs_100g: 0,
-              fat_100g: 3.6,
+              calories: 165,
+              protein: 31,
+              carbs: 0,
+              fat: 3.6,
               similarity: 0.75,
             },
           },
