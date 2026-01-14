@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import {
   getRecentFoods,
   reportLogIssue,
-  submitLogFood,
+  // submitLogFood, // Removed: We now use fetch('/api/log-food') for testability
   logCorrection,
 } from "./actions";
 import { useProfileForm } from "./hooks/useProfileForm";
@@ -188,16 +188,27 @@ export default function HomeClient({
     setLoggingIndex(index);
 
     try {
-      const result = await submitLogFood({
-        foodName: item.food_name,
-        weight: item.weight,
-        match: item.match,
-        imageUrl: imagePublicUrl,
+      // ✅ UPDATED: Use fetch API route with improved error handling
+      const apiResponse = await fetch("/api/log-food", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          foodName: item.food_name,
+          weight: item.weight,
+          match: item.match,
+          imageUrl: imagePublicUrl,
+        }),
       });
 
-      if (result.queued) {
-        toast.success("Offline — queued for sync once you reconnect");
-      } else if (result.data) {
+      if (!apiResponse.ok) {
+        const error = await apiResponse.json();
+        throw new Error(error.error || `API error: ${apiResponse.statusText}`);
+      }
+
+      const result = await apiResponse.json();
+
+      if (result.data) {
+        // We cast directly as per the expert suggestion, assuming result.data is the record
         setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
         setDraft((prev) => prev.filter((_, i) => i !== index));
         bumpPortionMemory(item.food_name, item.weight);
@@ -223,33 +234,37 @@ export default function HomeClient({
     }
   };
 
-  // ✅ CRITICAL BUG FIX #2: Prevents data loss during "Confirm All"
   const handleConfirmAll = async () => {
     setIsConfirmingAll(true);
     setError(null);
     let successCount = 0;
     const successfulIndices = new Set<number>();
     
-    // Create a stable reference to iterate over
     const currentDraft = draft;
 
     for (let i = 0; i < currentDraft.length; i++) {
       const item = currentDraft[i];
       if (!item.match) continue; 
       try {
-        const result = await submitLogFood({
-          foodName: item.food_name,
-          weight: item.weight,
-          match: item.match,
-          imageUrl: imagePublicUrl, 
+        const apiResponse = await fetch("/api/log-food", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              foodName: item.food_name,
+              weight: item.weight,
+              match: item.match,
+              imageUrl: imagePublicUrl, 
+            }),
         });
-        if (result.data || result.queued) {
-          if (result.data) {
-            setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
-            bumpPortionMemory(item.food_name, item.weight);
-          }
-          successCount++;
-          successfulIndices.add(i);
+        
+        if (apiResponse.ok) {
+            const result = await apiResponse.json();
+            if (result.data) {
+                setDailyLogs((prev) => [result.data as FoodLogRecord, ...prev]);
+                bumpPortionMemory(item.food_name, item.weight);
+                successCount++;
+                successfulIndices.add(i);
+            }
         }
       } catch (err) {
         console.error("Failed item", i, err);
@@ -258,11 +273,8 @@ export default function HomeClient({
 
     if (successCount > 0) {
       toast.success(`Saved ${successCount} items`);
-      // Only remove items that were successfully saved
-      // Filter by index check against the successful set
       setDraft((prev) => prev.filter((_, index) => !successfulIndices.has(index))); 
       
-      // If everything was saved, we can close the scanner
       if (successfulIndices.size === currentDraft.length) {
         setShowScanner(false);
       }

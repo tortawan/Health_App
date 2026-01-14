@@ -1,80 +1,42 @@
+import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "@/lib/supabase";
-
-type MacroMatch = {
-  kcal_100g: number | null;
-  protein_100g: number | null;
-  carbs_100g: number | null;
-  fat_100g: number | null;
-  fiber_100g?: number | null;
-  sugar_100g?: number | null;
-  sodium_100g?: number | null;
-};
-
-type Payload = {
-  foodName: string;
-  weight: number;
-  match?: MacroMatch | null;
-  imageUrl?: string | null;
-  manualMacros?: {
-    calories: number | null;
-    protein?: number | null;
-    carbs?: number | null;
-    fat?: number | null;
-  };
-};
 
 export async function POST(request: Request) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    return NextResponse.json({ error: "You must be signed in to log food." }, { status: 401 });
+  const supabase = await createClient();
+  
+  // 1. Authenticate
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as Payload;
-  const factor = body.weight / 100;
-  const calc = (value: number | null | undefined) =>
-    value === null || value === undefined ? null : Number(value) * factor;
+  try {
+    const body = await request.json();
 
-  const calories =
-    body.manualMacros?.calories ?? calc(body.match?.kcal_100g ?? null);
-  const protein =
-    body.manualMacros?.protein ?? calc(body.match?.protein_100g ?? null);
-  const carbs =
-    body.manualMacros?.carbs ?? calc(body.match?.carbs_100g ?? null);
-  const fat = body.manualMacros?.fat ?? calc(body.match?.fat_100g ?? null);
-  const fiber = calc(body.match?.fiber_100g ?? null);
-  const sugar = calc(body.match?.sugar_100g ?? null);
-  const sodium = calc(body.match?.sodium_100g ?? null);
+    // 2. Insert into Supabase
+    // We explicitly select() to get the returned data (required for the UI update)
+    const { data, error } = await supabase
+      .from("food_logs")
+      .insert({
+        ...body,
+        user_id: user.id, // Ensure security by forcing the user ID
+      })
+      .select();
 
-  const { data, error } = await supabase
-    .from("food_logs")
-    .insert({
-      user_id: session.user.id,
-      food_name: body.foodName,
-      weight_g: body.weight,
-      image_path: body.imageUrl ?? null,
-      calories,
-      protein,
-      carbs,
-      fat,
-      fiber,
-      sugar,
-      sodium,
-    })
-    .select()
-    .single();
+    if (error) {
+      console.error("Supabase error:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // 3. Return the standard format expected by our frontend/test
+    return NextResponse.json({ 
+      success: true, 
+      message: "Entry added", 
+      data: data // Supabase .select() returns an array
+    }, { status: 201 });
+
+  } catch (err) {
+    console.error("Server error:", err);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
-
-  revalidatePath("/");
-  revalidatePath("/stats");
-
-  return NextResponse.json(data);
 }

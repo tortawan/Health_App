@@ -4,6 +4,9 @@ import { test, expect, type Page } from "@playwright/test";
 const TEST_EMAIL = process.env.PLAYWRIGHT_EMAIL || "tortawan@gmail.com";
 const TEST_PASSWORD = process.env.PLAYWRIGHT_PASSWORD || "password123";
 
+// Shared in-memory storage for the test session to handle re-fetches
+let mockFoodLogs: any[] = [];
+
 async function ensureLoggedIn(page: Page) {
   // 1. Navigate to home
   await page.goto("/");
@@ -28,43 +31,80 @@ async function ensureLoggedIn(page: Page) {
 }
 
 async function stubLogFood(page: Page) {
+  // 1. Handle POST (Adding food)
   await page.route("**/api/log-food", async (route) => {
+    console.log("Stub: Intercepted POST /api/log-food"); // DEBUG LOG
     const postData = route.request().postDataJSON();
     
     // Fix: Handle both camelCase (foodName) and snake_case (food_name)
     const foodName = postData.foodName || postData.food_name;
     const weight = postData.weight || postData.weight_g;
+    
+    // Fix: Respect the date sent by frontend, fallback to now only if missing.
+    const consumedAt = postData.consumed_at || postData.date || new Date().toISOString();
 
     // Create a complete mock response object
     const mockEntry = {
         ...postData,
         id: crypto.randomUUID(),
+        user_id: postData.user_id || "mock-user-id", 
         food_name: foodName,
         weight_g: weight,
         calories: postData.manualMacros?.calories || postData.calories || null,
         protein: postData.manualMacros?.protein || postData.protein || null,
         carbs: postData.manualMacros?.carbs || postData.carbs || null,
         fat: postData.manualMacros?.fat || postData.fat || null,
-        consumed_at: new Date().toISOString(),
+        consumed_at: consumedAt,
         created_at: new Date().toISOString(),
-        // ✅ CRITICAL FIX: Ensure both image_url and image_path are present.
-        image_url: postData.image_url || "https://placehold.co/100x100.png",
+        // ✅ UPDATED: Use the real Supabase URL provided
+        image_url: postData.image_url || "https://eypxeqldfilsvapibigm.supabase.co/storage/v1/object/public/food-photos/7b838bba-7b64-4f11-8a04-44c551decb6e-sample.png",
         image_path: postData.image_path || "food-images/mock-path",
-        // ✅ Ensure meal_type exists (often required for rendering lists)
         meal_type: postData.meal_type || "snack",
+        serving_size: postData.serving_size || 1,
+        serving_unit: postData.serving_unit || "serving",
     };
+
+    // Add to in-memory store for GET requests
+    mockFoodLogs.push(mockEntry);
+    console.log("Stub: Added entry to mock DB. Total entries:", mockFoodLogs.length); // DEBUG LOG
     
     await route.fulfill({
-      status: 200, // Revert to 200 to be safe (some clients strict check for 200)
+      status: 200, 
       contentType: "application/json",
-      // ✅ Return a structure that handles common API patterns:
+      // ✅ UPDATED: Strictly wrap response in 'data' object AND make it an array.
+      // Supabase insert() typically returns an array of rows: { data: [entry], error: null }
       body: JSON.stringify({
-        success: true,
-        message: "Entry added", 
-        data: mockEntry, 
-        ...mockEntry,   
+        data: [mockEntry],
+        error: null 
       }),
     });
+  });
+
+  // 2. Handle GET (Fetching logs)
+  // Catches any request containing "food_logs" (Supabase) or "get-logs" (API)
+  await page.route(/.*(food_logs|get-logs).*/, async (route) => {
+      if (route.request().method() === 'GET') {
+          console.log("Stub: Intercepted GET food_logs/get-logs. Returning:", mockFoodLogs.length, "items");
+          
+          // Helper: Supabase direct REST API returns Array, Next.js API usually returns { data: Array }
+          const isSupabaseDirect = route.request().url().includes('rest/v1');
+
+          if (isSupabaseDirect) {
+             await route.fulfill({
+                  status: 200,
+                  contentType: "application/json",
+                  body: JSON.stringify(mockFoodLogs),
+              });
+          } else {
+             await route.fulfill({
+                  status: 200,
+                  contentType: "application/json",
+                  body: JSON.stringify({ data: mockFoodLogs }),
+              });
+          }
+      } else {
+          await route.continue();
+      }
   });
 }
 
@@ -113,9 +153,6 @@ async function stubStorage(page: Page) {
   });
 }
 
-// ✅ NEW: Intercept Next.js image optimization requests
-// This prevents the "upstream image response failed" error by serving the local file
-// directly to the browser, bypassing the server-side fetch to Supabase.
 async function stubNextImage(page: Page) {
   const fs = await import("node:fs");
   const imageFixturePath = path.join(__dirname, "fixtures", "sample.png");
@@ -129,6 +166,11 @@ async function stubNextImage(page: Page) {
     });
   });
 }
+
+test.beforeEach(() => {
+    // Clear mock logs before each test
+    mockFoodLogs = [];
+});
 
 test("image draft to confirmed log flow", async ({ page }) => {
   await ensureLoggedIn(page);
@@ -160,7 +202,6 @@ test("image draft to confirmed log flow", async ({ page }) => {
   
   await stubLogFood(page);
   await stubStorage(page);
-  // ✅ Enable the image optimizer stub
   await stubNextImage(page);
 
   // 1. Open Scanner
@@ -171,7 +212,6 @@ test("image draft to confirmed log flow", async ({ page }) => {
   await page.setInputFiles('input[type="file"]', imagePath);
 
   // 3. Wait for Draft Screen (this confirms upload & analyze worked)
-  // We use a broader timeout here because image processing can simulate delays
   await expect(page.getByText("Draft entries")).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole("heading", { name: "Mock Chicken Bowl" })).toBeVisible();
 
@@ -179,15 +219,9 @@ test("image draft to confirmed log flow", async ({ page }) => {
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
 
   // 5. Verify Success
-  // Step 5a: Ensure the draft screen goes away (confirms navigation/state change)
   await expect(page.getByText("Draft entries")).toBeHidden();
-
-  // Step 5b: Verify the item appears in the list (Persistent Success)
-  // We check this FIRST because it's the most important outcome.
   await expect(page.getByText("Mock Chicken Bowl")).toBeVisible();
-
-  // Step 5c: Verify toast (Transient Success)
-  // We check this last. If the item is there but toast is missed, it's less critical.
+  
   await expect(
     page.getByText("Entry added")
       .or(page.getByText("Food log saved"))
@@ -199,7 +233,6 @@ test("image draft to confirmed log flow", async ({ page }) => {
 test("manual search fallback flow", async ({ page }) => {
   await ensureLoggedIn(page);
   await stubLogFood(page);
-  // We also stub images here in case the search results have thumbnails
   await stubNextImage(page);
 
   // Stub search RPC
@@ -221,30 +254,15 @@ test("manual search fallback flow", async ({ page }) => {
     }),
   );
 
-  // 1. Click Manual Add directly (this relies on home-client -1 fix)
   await page.getByRole("button", { name: "Manual Add" }).click();
-
-  // 2. Fill Search
-  // Ensure we match the placeholder used in ManualSearchModal.tsx
   await page.getByPlaceholder("Search for a food (e.g., grilled chicken)").fill("Greek Yogurt");
-   
-  // FIX: Must CLICK SEARCH button (Automatic search on type is not implemented)
   await page.getByRole("button", { name: "Search" }).click();
-
-  // 3. Select Result
   await page.getByText("Greek Yogurt Plain").first().click();
-
-  // 4. Add to Log
   await page.getByRole("button", { name: "Add to log" }).click();
 
-  // 5. Verify
-  // Step 5a: Ensure we left the search modal
   await expect(page.getByRole("button", { name: "Add to log" })).toBeHidden();
-
-  // Step 5b: Verify item
   await expect(page.getByText("Greek Yogurt")).toBeVisible();
   
-  // Step 5c: Verify toast
   await expect(
     page.getByText("Entry added")
       .or(page.getByText("Food log saved"))
@@ -280,10 +298,8 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   );
   await stubLogFood(page);
   await stubStorage(page);
-  // ✅ Enable the image optimizer stub
   await stubNextImage(page);
 
-  // Spy on correction API
   let correctionTriggered = false;
   await page.route("**/api/log-correction", (route) => {
     correctionTriggered = true;
@@ -294,25 +310,17 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
     });
   });
 
-  // 1. Open Scanner & Upload
   await page.getByRole("button", { name: "Add Log" }).click();
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
-
-  // 2. Wait for Drafts
   await expect(page.getByText("Draft entries")).toBeVisible();
 
-  // 3. Adjust Weight
   await page.getByRole("button", { name: "Adjust weight" }).click();
-   
-  // Use generic spinbutton selector for number input
   const weightInput = page.getByRole("spinbutton");
   await weightInput.fill("250");
   await expect(weightInput).toHaveValue("250");
-
   await page.getByRole("button", { name: "Done" }).click();
 
-  // 4. Confirm & Verify Correction Logged
   const [logCorrectionRequest] = await Promise.all([
     page.waitForRequest("**/api/log-correction"),
     page.getByRole("button", { name: "Confirm", exact: true }).click(),
