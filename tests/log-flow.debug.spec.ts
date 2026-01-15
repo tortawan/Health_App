@@ -30,7 +30,8 @@ async function ensureLoggedIn(page: Page) {
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', TEST_PASSWORD);
     await page.click('button:has-text("Sign in")');
-    await page.waitForURL("**/ ");
+    // FIXED: Removed the extra space in the URL pattern
+    await page.waitForURL("**/");
   }
 }
 
@@ -203,19 +204,19 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   await stubNextImage(page);
 
   // Step 1: Click "Add Log"
-  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 1: Click Add Log ===");
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 1: Click Add Log ===`);
   await page.getByRole("button", { name: "Add Log" }).click();
   await logPageState(page, "After clicking Add Log");
 
   // Step 2: Upload image
-  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 2: Upload image ===");
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 2: Upload image ===`);
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
   await logPageState(page, "After uploading image");
   await page.waitForTimeout(2000); // Give API time to respond
 
   // Step 3: Verify draft appears
-  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 3: Verify draft entries ===");
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 3: Verify draft entries ===`);
   await logAllVisibleText(page);
   await searchForText(page, "Mock Chicken Bowl");
   await waitForWithDebug(
@@ -226,7 +227,7 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   );
 
   // Step 4: Verify heading
-  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 4: Verify Mock Chicken Bowl heading ===");
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 4: Verify Mock Chicken Bowl heading ===`);
   await waitForWithDebug(
     page,
     page.getByRole("heading", { name: "Mock Chicken Bowl" }),
@@ -236,14 +237,14 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   await debugScreenshot(page, "after-draft-appears");
 
   // Step 5a: Click Confirm
-  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 5a: Click Confirm button ===");
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 5a: Click Confirm button ===`);
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await logPageState(page, "After clicking Confirm");
   await page.waitForTimeout(2000); // Wait for API request
 
   // Step 5b: Verify draft section disappears
   console.log(
-    `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5b: Verify draft entries disappear ==="
+    `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5b: Verify draft entries disappear ===`
   );
   await logAllVisibleText(page);
   await assertWithDebug(
@@ -255,7 +256,7 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
 
   // Step 5c: THE CRITICAL ASSERTION - Verify item appears in confirmed logs
   console.log(
-    `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5c: CRITICAL - Verify Mock Chicken Bowl in confirmed logs ==="
+    `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5c: CRITICAL - Verify Mock Chicken Bowl in confirmed logs ===`
   );
   console.log(
     `${DEBUG_CONFIG.LOG_PREFIX} Current mockFoodLogs state: ${JSON.stringify(mockFoodLogs)}`
@@ -281,7 +282,7 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   }
 
   // Step 5d: Verify toast
-  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 5d: Verify success toast ===");
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 5d: Verify success toast ===`);
   await assertWithDebug(
     page,
     page
