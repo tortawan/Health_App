@@ -36,8 +36,30 @@ async function ensureLoggedIn(page: Page) {
 
 async function stubLogFood(page: Page) {
   await page.route("**/api/log-food", async (route) => {
+    const method = route.request().method();
+
+    if (method === "GET") {
+      console.log(
+        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] GET /api/log-food - Returning ${mockFoodLogs.length} logs`
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: mockFoodLogs,
+          success: true,
+        }),
+      });
+      return;
+    }
+
+    if (method !== "POST") {
+      await route.continue();
+      return;
+    }
+
     const postData = route.request().postDataJSON();
-    
+
     // ===== FIX #1: ENHANCED LOGGING =====
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] /api/log-food called`);
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData keys:`, Object.keys(postData));
@@ -50,9 +72,7 @@ async function stubLogFood(page: Page) {
     console.log(
       `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`
     );
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`
-    );
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`);
 
     // ===== FIX #2: ENSURE FALLBACK VALUES =====
     const mockEntry = {
