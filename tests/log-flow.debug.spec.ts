@@ -35,138 +35,100 @@ async function ensureLoggedIn(page: Page) {
 }
 
 async function stubLogFood(page: Page) {
-  await page.route("**/api/log-food", async (route) => {
+  await page.route('**/api/log-food', async (route) => {
     const method = route.request().method();
-
+    
     // FIX: Enhanced logging for all methods
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] ${method} /api/log-food called`);
-
-    if (method === "GET") {
+    
+    if (method === 'GET') {
       // NEW: Handle GET - return stored logs
-      console.log(
-        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] GET - Returning ${mockFoodLogs.length} logs`
-      );
-      console.log(
-        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs keys:`,
-        Object.keys(mockFoodLogs[0] || {})
-      );
+      console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] GET - Returning ${mockFoodLogs.length} logs`);
+      console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs keys:`, Object.keys(mockFoodLogs[0] || {}));
       await route.fulfill({
         status: 200,
-        contentType: "application/json",
+        contentType: 'application/json',
         body: JSON.stringify({
           data: mockFoodLogs,
-          success: true,
-        }),
+          success: true
+        })
       });
       return;
     }
-
-    if (method !== "POST") {
+    
+    if (method !== 'POST') {
       // Continue for other methods (PUT, DELETE, etc.)
       await route.continue();
       return;
     }
-
+    
     // EXISTING POST HANDLER (unchanged)
     const postData = route.request().postDataJSON();
-
+    
     // FIX 1: Enhanced logging
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData keys:`, Object.keys(postData || {}));
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData:`, JSON.stringify(postData, null, 2));
-
+    
     // FIX 2: Fallback values to prevent undefined errors
-    const foodName = postData?.foodName || postData?.food_name || "Unknown Food";
+    const foodName = postData?.foodName || postData?.food_name || 'Unknown Food';
     const weight = postData?.weight || postData?.weight_g || 100;
     const consumedAt = postData?.consumed_at || postData?.date || new Date().toISOString();
-
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`
-    );
+    
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`);
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`);
-
+    
     // Create mock entry (your existing logic with fallbacks)
     const mockEntry = {
       ...postData,
       id: crypto.randomUUID?.() || `mock-${Date.now()}`,
-      user_id: "test-user-id",
+      user_id: 'test-user-id',
       food_name: foodName,
       weight_g: weight,
-      calories:
-        postData?.match?.calories ||
-        postData?.manualMacros?.calories ||
-        postData?.calories ||
-        165,
-      protein:
-        postData?.match?.protein ||
-        postData?.manualMacros?.protein ||
-        postData?.protein ||
-        31,
-      carbs:
-        postData?.match?.carbs ||
-        postData?.manualMacros?.carbs ||
-        postData?.carbs ||
-        0,
+      calories: postData?.match?.calories || postData?.manualMacros?.calories || postData?.calories || 165,
+      protein: postData?.match?.protein || postData?.manualMacros?.protein || postData?.protein || 31,
+      carbs: postData?.match?.carbs || postData?.manualMacros?.carbs || postData?.carbs || 0,
       fat: postData?.match?.fat || postData?.manualMacros?.fat || postData?.fat || 3.6,
       consumed_at: consumedAt,
       created_at: new Date().toISOString(),
-      image_url: postData?.imageUrl || postData?.image_url || "https://placehold.co/100x100.png",
-      image_path: postData?.imagePath || postData?.image_path || "food-images/mock-path",
-      meal_type: postData?.meal_type || "snack",
+      image_url: postData?.imageUrl || postData?.image_url || 'https://placehold.co/100x100.png',
+      image_path: postData?.imagePath || postData?.image_path || 'food-images/mock-path',
+      meal_type: postData?.meal_type || 'snack',
       serving_size: postData?.serving_size || 1,
-      serving_unit: postData?.serving_unit || "serving",
+      serving_unit: postData?.serving_unit || 'serving'
     };
-
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Created mock entry with food_name: "${mockEntry.food_name}"`
-    );
+    
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Created mock entry with food_name: "${mockEntry.food_name}"`);
     mockFoodLogs.push(mockEntry);
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs now contains ${mockFoodLogs.length} items: ${mockFoodLogs.map((l) => l.food_name).join(", ")}`
-    );
-
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs now contains ${mockFoodLogs.length} items: ${mockFoodLogs.map(l => l.food_name).join(', ')}`);
+    
     const responseBody = {
       data: [mockEntry],
-      success: true,
+      success: true
     };
-
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Responding with:`,
-      JSON.stringify(responseBody, null, 2)
-    );
-
+    
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Responding with:`, JSON.stringify(responseBody, null, 2));
+    
     await route.fulfill({
       status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(responseBody),
+      contentType: 'application/json',
+      body: JSON.stringify(responseBody)
     });
   });
+}
 
-  // Handle GET requests (Refetching logs)
-  await page.route(/.*(food_logs|get-logs).*/, async (route) => {
-    if (route.request().method() === "GET") {
-      console.log(
-        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] GET request to ${route.request().url()}`
-      );
-      console.log(
-        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Returning ${mockFoodLogs.length} mock logs`
-      );
-      const isSupabaseDirect = route.request().url().includes("rest/v1");
-      if (isSupabaseDirect) {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(mockFoodLogs),
-        });
-      } else {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ data: mockFoodLogs }),
-        });
-      }
-    } else {
-      await route.continue();
+
+async function stubSupabaseLogs(page: Page) {
+  await page.route('**/rest/v1/food_logs**', async (route) => {
+    if (route.request().method() === 'GET') {
+      console.log(`${DEBUG_CONFIG.LOG_PREFIX} [SUPABASE MOCK] GET /rest/v1/food_logs - Returning ${mockFoodLogs.length} logs`);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(mockFoodLogs)
+      });
+      return;
     }
+    await route.continue();
   });
 }
 
@@ -262,6 +224,7 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   );
 
   await stubLogFood(page);
+  await stubSupabaseLogs(page);
   await stubStorage(page);
   await stubNextImage(page);
 
@@ -348,12 +311,15 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
     `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5c-fix: Waiting for Mock Chicken Bowl with timeout ===`
   );
   try {
-    // Try to navigate to logs section:
-	await page.getByText("Today").click();
-	// or
-	await page.getByRole('heading', { name: /today/i }).scrollIntoViewIfNeeded();
-    await page.getByText("Mock Chicken Bowl").waitFor({ timeout: 20000 });
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ Mock Chicken Bowl found in DOM`);
+    // Trigger refetch by reload
+  await page.reload({ waitUntil: 'networkidle' });
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} Page reloaded - waiting for logs...`);
+
+  // Direct wait
+  await page.waitForTimeout(1000); // Settle
+  await page.getByText("Mock Chicken Bowl").waitFor({ timeout: 20000 });
+console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ Mock Chicken Bowl found in DOM`);
+
   } catch (error) {
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} ❌ Mock Chicken Bowl NOT found in DOM after 10s`);
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} Page has ${mockFoodLogs.length} mock entries`);
