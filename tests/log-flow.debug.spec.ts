@@ -30,7 +30,6 @@ async function ensureLoggedIn(page: Page) {
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', TEST_PASSWORD);
     await page.click('button:has-text("Sign in")');
-    // FIXED: Removed the extra space in the URL pattern
     await page.waitForURL("**/");
   }
 }
@@ -38,18 +37,30 @@ async function ensureLoggedIn(page: Page) {
 async function stubLogFood(page: Page) {
   await page.route("**/api/log-food", async (route) => {
     const postData = route.request().postDataJSON();
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] /api/log-food called with:`, postData);
+    
+    // ===== FIX #1: ENHANCED LOGGING =====
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] /api/log-food called`);
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData keys:`, Object.keys(postData));
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData:`, JSON.stringify(postData, null, 2));
 
     const foodName = postData.foodName || postData.food_name;
     const weight = postData.weight || postData.weight_g;
     const consumedAt = postData.consumed_at || postData.date || new Date().toISOString();
 
+    console.log(
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`
+    );
+    console.log(
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`
+    );
+
+    // ===== FIX #2: ENSURE FALLBACK VALUES =====
     const mockEntry = {
       ...postData,
       id: crypto.randomUUID(),
       user_id: "test-user-id",
-      food_name: foodName,
-      weight_g: weight,
+      food_name: foodName || "Unknown Food",
+      weight_g: weight || 100,
       calories: postData.manualMacros?.calories || postData.calories || 165,
       protein: postData.manualMacros?.protein || postData.protein || 31,
       carbs: postData.manualMacros?.carbs || postData.carbs || 0,
@@ -63,19 +74,27 @@ async function stubLogFood(page: Page) {
       serving_unit: postData.serving_unit || "serving",
     };
 
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Created mock entry:`, mockEntry);
+    console.log(
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Created mock entry with food_name: "${mockEntry.food_name}"`
+    );
     mockFoodLogs.push(mockEntry);
     console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs now contains ${mockFoodLogs.length} items`
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs now contains ${mockFoodLogs.length} items: ${mockFoodLogs.map((l) => l.food_name).join(", ")}`
+    );
+
+    const responseBody = {
+      data: [mockEntry],
+      success: true,
+    };
+    console.log(
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Responding with:`,
+      JSON.stringify(responseBody, null, 2)
     );
 
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        data: [mockEntry],
-        success: true,
-      }),
+      body: JSON.stringify(responseBody),
     });
   });
 
@@ -213,7 +232,7 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   const imagePath = path.join(__dirname, "fixtures", "sample.png");
   await page.setInputFiles('input[type="file"]', imagePath);
   await logPageState(page, "After uploading image");
-  await page.waitForTimeout(2000); // Give API time to respond
+  await page.waitForTimeout(2000);
 
   // Step 3: Verify draft appears
   console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 3: Verify draft entries ===`);
@@ -240,7 +259,15 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 5a: Click Confirm button ===`);
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await logPageState(page, "After clicking Confirm");
-  await page.waitForTimeout(2000); // Wait for API request
+
+  // ===== FIX #3: WAIT FOR STATE CHANGE, NOT JUST TIMEOUT =====
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} === STEP 5a-fix: Waiting for draft to disappear ===`);
+  try {
+    await page.getByText("Draft entries").waitFor({ state: "hidden", timeout: 10000 });
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ Draft section disappeared`);
+  } catch (e) {
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} ⚠️ Draft section still visible or not found`);
+  }
 
   // Step 5b: Verify draft section disappears
   console.log(
@@ -254,6 +281,14 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
     10000
   );
 
+  // ===== FIX #4: VERIFY STATE UPDATE COMPLETED =====
+  console.log(
+    `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5b-fix: Verifying state update completed ===`
+  );
+  await page.waitForTimeout(500);
+  await logPageState(page, "After draft disappeared");
+  await logAllVisibleText(page, "Before checking confirmed logs");
+
   // Step 5c: THE CRITICAL ASSERTION - Verify item appears in confirmed logs
   console.log(
     `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5c: CRITICAL - Verify Mock Chicken Bowl in confirmed logs ===`
@@ -265,7 +300,29 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   await searchForText(page, "Mock Chicken Bowl");
   await debugScreenshot(page, "before-final-assertion");
 
-  // This is where it fails - let's be extra careful
+  // ===== FIX #5: USE WAIT FOR INSTEAD OF DIRECT ASSERTION =====
+  console.log(
+    `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5c-fix: Waiting for Mock Chicken Bowl with timeout ===`
+  );
+  try {
+    // Try to navigate to logs section:
+	await page.getByText("Today").click();
+	// or
+	await page.getByRole('heading', { name: /today/i }).scrollIntoViewIfNeeded();
+    await page.getByText("Mock Chicken Bowl").waitFor({ timeout: 20000 });
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ Mock Chicken Bowl found in DOM`);
+  } catch (error) {
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} ❌ Mock Chicken Bowl NOT found in DOM after 10s`);
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} Page has ${mockFoodLogs.length} mock entries`);
+    if (mockFoodLogs.length > 0) {
+      console.log(
+        `${DEBUG_CONFIG.LOG_PREFIX} Mock entries: ${mockFoodLogs.map((l) => l.food_name).join(", ")}`
+      );
+    }
+    throw error;
+  }
+
+  // Final assertion with full context
   try {
     await assertWithDebug(
       page,
@@ -275,7 +332,7 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
     );
   } catch (error) {
     console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} \u274c FAILED: Mock Chicken Bowl not visible`
+      `${DEBUG_CONFIG.LOG_PREFIX} ❌ FAILED: Mock Chicken Bowl not visible`
     );
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} This suggests the log-food API response or state update failed`);
     throw error;
@@ -294,5 +351,5 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
     5000
   );
 
-  console.log(`${DEBUG_CONFIG.LOG_PREFIX} \u2705 TEST PASSED`);
+  console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ TEST PASSED`);
 });
