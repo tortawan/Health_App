@@ -38,9 +38,17 @@ async function stubLogFood(page: Page) {
   await page.route("**/api/log-food", async (route) => {
     const method = route.request().method();
 
+    // FIX: Enhanced logging for all methods
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] ${method} /api/log-food called`);
+
     if (method === "GET") {
+      // NEW: Handle GET - return stored logs
       console.log(
-        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] GET /api/log-food - Returning ${mockFoodLogs.length} logs`
+        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] GET - Returning ${mockFoodLogs.length} logs`
+      );
+      console.log(
+        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs keys:`,
+        Object.keys(mockFoodLogs[0] || {})
       );
       await route.fulfill({
         status: 200,
@@ -54,44 +62,58 @@ async function stubLogFood(page: Page) {
     }
 
     if (method !== "POST") {
+      // Continue for other methods (PUT, DELETE, etc.)
       await route.continue();
       return;
     }
 
+    // EXISTING POST HANDLER (unchanged)
     const postData = route.request().postDataJSON();
 
-    // ===== FIX #1: ENHANCED LOGGING =====
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] /api/log-food called`);
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData keys:`, Object.keys(postData));
+    // FIX 1: Enhanced logging
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData keys:`, Object.keys(postData || {}));
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData:`, JSON.stringify(postData, null, 2));
 
-    const foodName = postData.foodName || postData.food_name;
-    const weight = postData.weight || postData.weight_g;
-    const consumedAt = postData.consumed_at || postData.date || new Date().toISOString();
+    // FIX 2: Fallback values to prevent undefined errors
+    const foodName = postData?.foodName || postData?.food_name || "Unknown Food";
+    const weight = postData?.weight || postData?.weight_g || 100;
+    const consumedAt = postData?.consumed_at || postData?.date || new Date().toISOString();
 
     console.log(
       `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`
     );
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`);
 
-    // ===== FIX #2: ENSURE FALLBACK VALUES =====
+    // Create mock entry (your existing logic with fallbacks)
     const mockEntry = {
       ...postData,
-      id: crypto.randomUUID(),
+      id: crypto.randomUUID?.() || `mock-${Date.now()}`,
       user_id: "test-user-id",
-      food_name: foodName || "Unknown Food",
-      weight_g: weight || 100,
-      calories: postData.manualMacros?.calories || postData.calories || 165,
-      protein: postData.manualMacros?.protein || postData.protein || 31,
-      carbs: postData.manualMacros?.carbs || postData.carbs || 0,
-      fat: postData.manualMacros?.fat || postData.fat || 3.6,
+      food_name: foodName,
+      weight_g: weight,
+      calories:
+        postData?.match?.calories ||
+        postData?.manualMacros?.calories ||
+        postData?.calories ||
+        165,
+      protein:
+        postData?.match?.protein ||
+        postData?.manualMacros?.protein ||
+        postData?.protein ||
+        31,
+      carbs:
+        postData?.match?.carbs ||
+        postData?.manualMacros?.carbs ||
+        postData?.carbs ||
+        0,
+      fat: postData?.match?.fat || postData?.manualMacros?.fat || postData?.fat || 3.6,
       consumed_at: consumedAt,
       created_at: new Date().toISOString(),
-      image_url: postData.image_url || "https://placehold.co/100x100.png",
-      image_path: postData.image_path || "food-images/mock-path",
-      meal_type: postData.meal_type || "snack",
-      serving_size: postData.serving_size || 1,
-      serving_unit: postData.serving_unit || "serving",
+      image_url: postData?.imageUrl || postData?.image_url || "https://placehold.co/100x100.png",
+      image_path: postData?.imagePath || postData?.image_path || "food-images/mock-path",
+      meal_type: postData?.meal_type || "snack",
+      serving_size: postData?.serving_size || 1,
+      serving_unit: postData?.serving_unit || "serving",
     };
 
     console.log(
@@ -106,6 +128,7 @@ async function stubLogFood(page: Page) {
       data: [mockEntry],
       success: true,
     };
+
     console.log(
       `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Responding with:`,
       JSON.stringify(responseBody, null, 2)
