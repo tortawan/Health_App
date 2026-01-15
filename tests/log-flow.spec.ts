@@ -1,5 +1,6 @@
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
+import { DEBUG_CONFIG } from "./debug-helpers";
 
 const TEST_EMAIL = process.env.PLAYWRIGHT_EMAIL || "tortawan@gmail.com";
 const TEST_PASSWORD = process.env.PLAYWRIGHT_PASSWORD || "password123";
@@ -25,41 +26,108 @@ async function ensureLoggedIn(page: Page) {
 
 async function stubLogFood(page: Page) {
   await page.route("**/api/log-food", async (route) => {
-    const postData = route.request().postDataJSON();
-    
-    const foodName = postData.foodName || postData.food_name;
-    const weight = postData.weight || postData.weight_g;
-    const consumedAt = postData.consumed_at || postData.date || new Date().toISOString();
+    const method = route.request().method();
 
+    // FIX: Enhanced logging for all methods
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] ${method} /api/log-food called`);
+
+    if (method === "GET") {
+      // NEW: Handle GET - return stored logs
+      console.log(
+        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] GET - Returning ${mockFoodLogs.length} logs`
+      );
+      console.log(
+        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs keys:`,
+        Object.keys(mockFoodLogs[0] || {})
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: mockFoodLogs,
+          success: true,
+        }),
+      });
+      return;
+    }
+
+    if (method !== "POST") {
+      // Continue for other methods (PUT, DELETE, etc.)
+      await route.continue();
+      return;
+    }
+
+    // EXISTING POST HANDLER (unchanged)
+    const postData = route.request().postDataJSON();
+
+    // FIX 1: Enhanced logging
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData keys:`, Object.keys(postData || {}));
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData:`, JSON.stringify(postData, null, 2));
+
+    // FIX 2: Fallback values to prevent undefined errors
+    const foodName = postData?.foodName || postData?.food_name || "Unknown Food";
+    const weight = postData?.weight || postData?.weight_g || 100;
+    const consumedAt = postData?.consumed_at || postData?.date || new Date().toISOString();
+
+    console.log(
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`
+    );
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`);
+
+    // Create mock entry (your existing logic with fallbacks)
     const mockEntry = {
-        ...postData,
-        id: crypto.randomUUID(),
-        user_id: "test-user-id",
-        food_name: foodName,
-        weight_g: weight,
-        calories: postData.manualMacros?.calories || postData.calories || 165,
-        protein: postData.manualMacros?.protein || postData.protein || 31,
-        carbs: postData.manualMacros?.carbs || postData.carbs || 0,
-        fat: postData.manualMacros?.fat || postData.fat || 3.6,
-        consumed_at: consumedAt,
-        created_at: new Date().toISOString(),
-        image_url: postData.image_url || "https://placehold.co/100x100.png",
-        image_path: postData.image_path || "food-images/mock-path",
-        meal_type: postData.meal_type || "snack",
-        serving_size: postData.serving_size || 1,
-        serving_unit: postData.serving_unit || "serving",
+      ...postData,
+      id: crypto.randomUUID?.() || `mock-${Date.now()}`,
+      user_id: "test-user-id",
+      food_name: foodName,
+      weight_g: weight,
+      calories:
+        postData?.match?.calories ||
+        postData?.manualMacros?.calories ||
+        postData?.calories ||
+        165,
+      protein:
+        postData?.match?.protein ||
+        postData?.manualMacros?.protein ||
+        postData?.protein ||
+        31,
+      carbs:
+        postData?.match?.carbs ||
+        postData?.manualMacros?.carbs ||
+        postData?.carbs ||
+        0,
+      fat: postData?.match?.fat || postData?.manualMacros?.fat || postData?.fat || 3.6,
+      consumed_at: consumedAt,
+      created_at: new Date().toISOString(),
+      image_url: postData?.imageUrl || postData?.image_url || "https://placehold.co/100x100.png",
+      image_path: postData?.imagePath || postData?.image_path || "food-images/mock-path",
+      meal_type: postData?.meal_type || "snack",
+      serving_size: postData?.serving_size || 1,
+      serving_unit: postData?.serving_unit || "serving",
     };
 
+    console.log(
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Created mock entry with food_name: "${mockEntry.food_name}"`
+    );
     mockFoodLogs.push(mockEntry);
-    
+    console.log(
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs now contains ${mockFoodLogs.length} items: ${mockFoodLogs.map((l) => l.food_name).join(", ")}`
+    );
+
+    const responseBody = {
+      data: [mockEntry],
+      success: true,
+    };
+
+    console.log(
+      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Responding with:`,
+      JSON.stringify(responseBody, null, 2)
+    );
+
     await route.fulfill({
-      status: 200, 
+      status: 200,
       contentType: "application/json",
-      // ✅ Return Array in 'data' to match Supabase behavior
-      body: JSON.stringify({
-        data: [mockEntry],
-        success: true
-      }),
+      body: JSON.stringify(responseBody),
     });
   });
 
