@@ -312,11 +312,10 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   );
   try {
     // Trigger refetch by reload
-  await page.reload({ waitUntil: 'networkidle' });
-  console.log(`${DEBUG_CONFIG.LOG_PREFIX} Page reloaded - waiting for logs...`);
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} Page reloaded - waiting for logs...`);
 
   // Direct wait
-  await page.waitForTimeout(1000); // Settle
+  await page.reload({ waitUntil: 'networkidle' });  // Fetch logs
   await page.getByText("Mock Chicken Bowl").waitFor({ timeout: 20000 });
 console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ Mock Chicken Bowl found in DOM`);
 
