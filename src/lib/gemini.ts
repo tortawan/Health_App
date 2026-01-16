@@ -10,6 +10,8 @@ export const geminiClient = geminiApiKey
   ? new GoogleGenerativeAI(geminiApiKey)
   : null;
 
+export const MODEL_NAME = "gemini-2.5-flash";
+
 export const FOOD_PROMPT = `
 Identify all distinct food items in this image.
 Return a JSON array named "items" where each object has:

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase";
-import { FOOD_PROMPT, geminiClient } from "@/lib/gemini";
+import { FOOD_PROMPT, MODEL_NAME, geminiClient } from "@/lib/gemini";
 import { generateDraftId } from "@/lib/uuid";
 import { getEmbedder } from "@/lib/embedder";
 import { analyzeLimiter } from "@/lib/ratelimit";
+import { logGeminiRequest } from "@/lib/logger";
 
 type GeminiItem = {
   food_name: string;
@@ -12,18 +13,25 @@ type GeminiItem = {
   quantity_estimate: string;
 };
 
-const FALLBACK: GeminiItem[] = [
+const MANUAL_FALLBACK: GeminiItem[] = [
   {
-    food_name: "Grilled Chicken Breast",
-    search_term: "grilled chicken breast",
+    food_name: "Lean protein (e.g., chicken, fish)",
+    search_term: "lean protein",
     quantity_estimate: "medium portion, ~150g",
   },
   {
-    food_name: "Steamed Broccoli",
-    search_term: "steamed broccoli",
+    food_name: "Non-starchy vegetables",
+    search_term: "non-starchy vegetables",
     quantity_estimate: "1 cup (~90g)",
   },
+  {
+    food_name: "Whole grains or starches",
+    search_term: "whole grains",
+    quantity_estimate: "1 cup (~150g)",
+  },
 ];
+
+const IDENTIFICATION_FAILURE_PATTERN = /i can't identify|cannot identify|can't identify|unable to identify/i;
 
 const MATCH_THRESHOLD_BASE = 0.6;
 let adaptiveThresholdCache = {
@@ -180,13 +188,14 @@ export async function POST(request: Request) {
 
   // 3. Process with Gemini
   const imageData = imageBuffer.toString("base64");
-  let items: GeminiItem[] = FALLBACK;
+  let items: GeminiItem[] = MANUAL_FALLBACK;
   let usedFallback = true;
 
   if (geminiClient) {
+    const geminiStart = Date.now();
     try {
       const model = geminiClient.getGenerativeModel({
-        model: "gemini-2.5-flash",
+        model: MODEL_NAME,
       });
 
       const result = await model.generateContent({
@@ -210,15 +219,32 @@ export async function POST(request: Request) {
       });
 
       const responseText = result.response.text();
-      const cleanJson = responseText.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleanJson);
-      const parsedItems: GeminiItem[] = parsed.items ?? parsed ?? [];
-      
-      if (Array.isArray(parsedItems) && parsedItems.length) {
-        items = parsedItems;
-        usedFallback = false;
+      const duration = Date.now() - geminiStart;
+
+      if (IDENTIFICATION_FAILURE_PATTERN.test(responseText)) {
+        logGeminiRequest({ duration, status: "fallback", reason: "unidentifiable" });
+      } else {
+        const cleanJson = responseText.replace(/```json|```/g, "").trim();
+        const parsed = JSON.parse(cleanJson);
+        const parsedItems: GeminiItem[] = parsed.items ?? parsed ?? [];
+
+        if (Array.isArray(parsedItems) && parsedItems.length) {
+          items = parsedItems;
+          usedFallback = false;
+          logGeminiRequest({ duration, status: "success" });
+        } else {
+          logGeminiRequest({ duration, status: "fallback", reason: "empty_result" });
+        }
       }
     } catch (error) {
+      const duration = Date.now() - geminiStart;
+      const statusCode =
+        typeof error === "object" && error && "status" in error
+          ? Number((error as { status?: number }).status)
+          : undefined;
+      const reason = statusCode ? `http_${statusCode}` : "exception";
+
+      logGeminiRequest({ duration, status: "failure", reason });
       console.warn("Gemini call failed, using fallback:", error);
     }
   }

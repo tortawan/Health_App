@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState, useMemo } from "react";
+import React, { useCallback, useState, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import {
   getRecentFoods,
@@ -14,6 +14,7 @@ import { DailyLogList } from "../components/dashboard/DailyLogList";
 import { DraftReview } from "../components/logging/DraftReview";
 import { ManualSearchModal } from "../components/logging/ManualSearchModal";
 import { generateDraftId } from "@/lib/uuid";
+import { adjustedMacros } from "@/lib/nutrition";
 import {
   DraftLog,
   FoodLogRecord,
@@ -71,18 +72,6 @@ export default function HomeClient({
   
   const calorieTarget = initialProfile?.calorie_target || 2500;
 
-  const {
-    showScanner,
-    setShowScanner,
-    draft,
-    setDraft,
-    isAnalyzing,
-    isImageUploading,
-    imagePublicUrl,
-    handleImageUpload,
-    setError,
-  } = useScanner();
-
   useProfileForm(initialProfile);
 
   const [loggingIndex, setLoggingIndex] = useState<number | null>(null);
@@ -99,6 +88,90 @@ export default function HomeClient({
   const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
   const [flagNotes, setFlagNotes] = useState("");
   const [isFlagging, setIsFlagging] = useState(false);
+  const optimisticScanIdRef = useRef<string | null>(null);
+
+  const buildOptimisticLog = useCallback(
+    (item: DraftLog, consumedAt: string, imageUrl: string | null): FoodLogRecord => {
+      const macros = adjustedMacros(item.match ?? undefined, item.weight);
+      return {
+        id: item.id,
+        food_name: item.food_name,
+        weight_g: item.weight,
+        calories: macros?.calories ?? 0,
+        protein: macros?.protein ?? 0,
+        carbs: macros?.carbs ?? 0,
+        fat: macros?.fat ?? 0,
+        consumed_at: consumedAt,
+        image_path: imageUrl,
+      } as FoodLogRecord;
+    },
+    [],
+  );
+
+  const handleOptimisticScanStart = useCallback(() => {
+    const scanId = generateDraftId();
+    optimisticScanIdRef.current = scanId;
+    setDailyLogs((prev) => [
+      {
+        id: scanId,
+        food_name: "Scanning...",
+        weight_g: 0,
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        consumed_at: new Date().toISOString(),
+        image_path: null,
+      } as FoodLogRecord,
+      ...prev,
+    ]);
+  }, []);
+
+  const handleOptimisticScanComplete = useCallback(
+    ({ draft: draftItems, imageUrl }: { draft: DraftLog[]; imageUrl: string | null }) => {
+      const consumedAt = new Date().toISOString();
+      setDailyLogs((prev) => {
+        const currentScanId = optimisticScanIdRef.current;
+        const withoutScan = currentScanId
+          ? prev.filter((log) => log.id !== currentScanId)
+          : prev;
+        const optimisticEntries = draftItems.map((item) =>
+          buildOptimisticLog(item, consumedAt, imageUrl),
+        );
+        return [...optimisticEntries, ...withoutScan];
+      });
+      optimisticScanIdRef.current = null;
+    },
+    [buildOptimisticLog],
+  );
+
+  const handleOptimisticScanError = useCallback(
+    (message: string) => {
+      const currentScanId = optimisticScanIdRef.current;
+      if (currentScanId) {
+        setDailyLogs((prev) => prev.filter((log) => log.id !== currentScanId));
+        optimisticScanIdRef.current = null;
+      }
+      void message;
+    },
+    [],
+  );
+
+  const {
+    showScanner,
+    setShowScanner,
+    draft,
+    setDraft,
+    isAnalyzing,
+    isImageUploading,
+    imagePublicUrl,
+    handleImageUpload,
+    setError,
+  } = useScanner({
+    onAnalysisStart: handleOptimisticScanStart,
+    onAnalysisComplete: handleOptimisticScanComplete,
+    onAnalysisError: handleOptimisticScanError,
+  });
 
   const refreshRecentFoods = useCallback(async () => {
     setIsLoadingRecentFoods(true);
@@ -182,8 +255,15 @@ export default function HomeClient({
       const newEntry = Array.isArray(result.data) ? result.data[0] : result.data;
       
       if (newEntry) {
-        setDailyLogs((prev) => [newEntry as FoodLogRecord, ...prev]);
-        setDraft((prev) => prev.filter((_, i) => i !== index));
+        setDailyLogs((prev) => [
+          newEntry as FoodLogRecord,
+          ...prev.filter((log) => log.id !== item.id),
+        ]);
+        setDraft((prev) => {
+          const next = prev.filter((_, i) => i !== index);
+          if (next.length === 0) setShowScanner(false);
+          return next;
+        });
         bumpPortionMemory(item.food_name, item.weight);
         toast.success("Food log saved");
       } else {
@@ -222,7 +302,10 @@ export default function HomeClient({
             const result = await response.json();
             const newEntry = Array.isArray(result.data) ? result.data[0] : result.data;
             if (newEntry) {
-                setDailyLogs((prev) => [newEntry as FoodLogRecord, ...prev]);
+                setDailyLogs((prev) => [
+                  newEntry as FoodLogRecord,
+                  ...prev.filter((log) => log.id !== item.id),
+                ]);
                 bumpPortionMemory(item.food_name, item.weight);
                 successCount++;
                 successfulIndices.add(i);
