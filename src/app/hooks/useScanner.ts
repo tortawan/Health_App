@@ -35,6 +35,9 @@ declare global {
 type UseScannerOptions = {
   onProductLoaded?: (match: MacroMatch) => Promise<void> | void;
   onError?: (message: string) => void;
+  onAnalysisStart?: () => void;
+  onAnalysisComplete?: (payload: { draft: DraftLog[]; imageUrl: string | null }) => void;
+  onAnalysisError?: (message: string) => void;
 };
 
 // --- Loader Helper ---
@@ -68,7 +71,7 @@ const loadScannerScript = () =>
   });
 
 export function useScanner(options: UseScannerOptions = {}) {
-  const { onProductLoaded, onError } = options;
+  const { onProductLoaded, onError, onAnalysisStart, onAnalysisComplete, onAnalysisError } = options;
   const supabase = createClient();
 
   // --- Shared State ---
@@ -92,6 +95,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     console.log("📸 [DEBUG] handleImageUpload triggered");
     setError(null);
     setIsImageUploading(true);
+    onAnalysisStart?.();
     
     try {
       // 1. Upload to Supabase Storage
@@ -139,19 +143,20 @@ export function useScanner(options: UseScannerOptions = {}) {
       const data = await response.json();
       console.log("✅ [DEBUG] Analysis Results:", data);
 
-      if (data.draft) { 
-        setDraft(data.draft);
-      }
+      const draftItems = Array.isArray(data.draft) ? data.draft : [];
+      setDraft(draftItems);
+      onAnalysisComplete?.({ draft: draftItems, imageUrl: publicUrl });
     } catch (err: unknown) {
       console.error("💥 [DEBUG] Error:", err);
       const msg = err instanceof Error ? err.message : "Failed to process image";
       setError(msg);
       toast.error(msg);
+      onAnalysisError?.(msg);
     } finally {
       setIsImageUploading(false);
       setIsAnalyzing(false);
     }
-  }, [supabase]);
+  }, [onAnalysisComplete, onAnalysisError, onAnalysisStart, supabase]);
 
   // --- Barcode Logic ---
   const handleCapture = useCallback((blob: Blob | null) => {

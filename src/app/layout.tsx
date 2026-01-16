@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import "@/lib/env";
 import "./globals.css";
 import { ToastProvider } from "./toast-provider";
 import { ServiceWorkerRegister } from "./sw-register";
