@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useState, useMemo, useRef } from "react";
+import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   getRecentFoods,
@@ -41,7 +42,11 @@ export default function HomeClient({
   initialPortionMemories,
   initialTemplates = [], 
 }: Props) {
+  const router = useRouter();
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
+  useEffect(() => {
+    setDailyLogs(initialLogs);
+  }, [initialLogs]);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
   const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories ?? []);
 
@@ -226,7 +231,9 @@ export default function HomeClient({
   const handleShiftDate = (delta: number) => {
       const date = new Date(selectedDate);
       date.setDate(date.getDate() + delta);
-      setSelectedDate(date.toISOString().split("T")[0]);
+      const newDateStr = date.toISOString().split("T")[0];
+      setSelectedDate(newDateStr);
+      router.push(`/?date=${newDateStr}`);
   };
 
   const handleConfirm = async (index: number) => {
