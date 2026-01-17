@@ -184,9 +184,9 @@ export function DailyLogList({
                 {editingLogId === log.id ? (
                   <div className="grid grid-cols-2 gap-2 text-xs text-white/70 sm:grid-cols-3">
                     <input
-                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
+                      className="cursor-not-allowed rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white opacity-50"
                       value={editForm.food_name ?? ""}
-                      onChange={(e) => onEditField("food_name", e.target.value)}
+                      readOnly
                     />
                     <input
                       className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
@@ -195,28 +195,28 @@ export function DailyLogList({
                       onChange={(e) => onEditField("weight_g", Number(e.target.value))}
                     />
                     <input
-                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
+                      className="cursor-not-allowed rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white opacity-50"
                       type="number"
                       value={editForm.calories ?? 0}
-                      onChange={(e) => onEditField("calories", Number(e.target.value))}
+                      readOnly
                     />
                     <input
-                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
+                      className="cursor-not-allowed rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white opacity-50"
                       type="number"
                       value={editForm.protein ?? 0}
-                      onChange={(e) => onEditField("protein", Number(e.target.value))}
+                      readOnly
                     />
                     <input
-                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
+                      className="cursor-not-allowed rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white opacity-50"
                       type="number"
                       value={editForm.carbs ?? 0}
-                      onChange={(e) => onEditField("carbs", Number(e.target.value))}
+                      readOnly
                     />
                     <input
-                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
+                      className="cursor-not-allowed rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white opacity-50"
                       type="number"
                       value={editForm.fat ?? 0}
-                      onChange={(e) => onEditField("fat", Number(e.target.value))}
+                      readOnly
                     />
                     <div className="col-span-2 flex gap-2 sm:col-span-3">
                       <button className="btn" onClick={onSaveEdits} type="button">

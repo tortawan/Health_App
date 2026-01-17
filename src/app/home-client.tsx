@@ -209,7 +209,29 @@ export default function HomeClient({
   };
 
   const handleEditField = (field: keyof FoodLogRecord, value: string | number | null) => {
-    setEditForm(prev => ({ ...prev, [field]: value }));
+    if (field !== "weight_g") {
+      setEditForm(prev => ({ ...prev, [field]: value }));
+      return;
+    }
+
+    const newWeight = Number(value);
+    const originalLog = dailyLogs.find(log => log.id === editingLogId);
+
+    if (!originalLog || originalLog.weight_g === 0) {
+      setEditForm(prev => ({ ...prev, weight_g: newWeight }));
+      return;
+    }
+
+    const ratio = newWeight / originalLog.weight_g;
+
+    setEditForm(prev => ({
+      ...prev,
+      weight_g: newWeight,
+      calories: Math.round((originalLog.calories || 0) * ratio),
+      protein: Math.round((originalLog.protein || 0) * ratio * 10) / 10,
+      carbs: Math.round((originalLog.carbs || 0) * ratio * 10) / 10,
+      fat: Math.round((originalLog.fat || 0) * ratio * 10) / 10,
+    }));
   };
   const handleBeginEdit = (log: FoodLogRecord) => { setEditingLogId(log.id); setEditForm(log); };
   const handleCancelEdit = () => { setEditingLogId(null); setEditForm({}); };
