@@ -286,7 +286,17 @@ export async function upsertUserProfile(input: {
   return data;
 }
 
-export async function updateFoodLog(id: string, changes: Partial<{ food_name: string; weight_g: number; calories: number | null; protein: number | null; carbs: number | null; fat: number | null }>) {
+export async function updateFoodLog(
+  id: string,
+  changes: Partial<{
+    food_name: string;
+    weight_g: number;
+    calories: number | null;
+    protein: number | null;
+    carbs: number | null;
+    fat: number | null;
+  }>,
+) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { session },
@@ -296,9 +306,49 @@ export async function updateFoodLog(id: string, changes: Partial<{ food_name: st
     throw new Error("You must be signed in to update entries.");
   }
 
+  if (changes.weight_g !== undefined && changes.weight_g <= 0) {
+    throw new Error("Weight must be greater than 0");
+  }
+
+  const { data: currentLog, error: fetchError } = await supabase
+    .from("food_logs")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (fetchError || !currentLog) {
+    throw new Error("Log not found");
+  }
+
+  const finalChanges = { ...changes };
+
+  if (
+    typeof changes.weight_g === "number" &&
+    changes.weight_g !== currentLog.weight_g &&
+    currentLog.weight_g > 0
+  ) {
+    const ratio = changes.weight_g / currentLog.weight_g;
+
+    if (changes.calories === undefined) {
+      finalChanges.calories = Math.round((currentLog.calories || 0) * ratio);
+    }
+    if (changes.protein === undefined) {
+      finalChanges.protein =
+        Math.round((currentLog.protein || 0) * ratio * 10) / 10;
+    }
+    if (changes.carbs === undefined) {
+      finalChanges.carbs =
+        Math.round((currentLog.carbs || 0) * ratio * 10) / 10;
+    }
+    if (changes.fat === undefined) {
+      finalChanges.fat = Math.round((currentLog.fat || 0) * ratio * 10) / 10;
+    }
+  }
+
   const { error } = await supabase
     .from("food_logs")
-    .update(changes)
+    .update(finalChanges)
     .eq("id", id)
     .eq("user_id", session.user.id);
 
