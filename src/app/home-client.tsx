@@ -266,7 +266,8 @@ export default function HomeClient({
 
     try {
       const now = new Date();
-      const targetDate = new Date(selectedDate);
+      const [year, month, day] = selectedDate.split("-").map(Number);
+      const targetDate = new Date(year, month - 1, day);
       targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
 
       // Use fetch API route
