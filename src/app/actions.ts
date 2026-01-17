@@ -46,6 +46,7 @@ export async function logFood(entry: {
   weight: number;
   match?: MacroMatch;
   imageUrl?: string | null;
+  consumedAt?: string;
   manualMacros?: {
     calories: number | null;
     protein?: number | null;
@@ -91,6 +92,7 @@ export async function logFood(entry: {
       fiber,
       sugar,
       sodium,
+      consumed_at: entry.consumedAt ?? new Date().toISOString(),
     })
     .select()
     .single();

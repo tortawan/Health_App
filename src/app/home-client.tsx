@@ -265,6 +265,10 @@ export default function HomeClient({
     setLoggingIndex(index);
 
     try {
+      const now = new Date();
+      const targetDate = new Date(selectedDate);
+      targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
       // Use fetch API route
       const response = await fetch("/api/log-food", {
         method: "POST",
@@ -274,6 +278,7 @@ export default function HomeClient({
           weight: item.weight,
           match: item.match,
           imageUrl: imagePublicUrl,
+          consumedAt: targetDate.toISOString(),
         }),
       });
 
