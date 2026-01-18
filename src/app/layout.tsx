@@ -20,13 +20,13 @@ export default function RootLayout({
   const sentryEnvironment = process.env.NEXT_PUBLIC_APP_ENV ?? process.env.NODE_ENV ?? "production";
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#10b981" />
         <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
       </head>
-      <body className="min-h-screen bg-slate-950 text-slate-50">
+      <body className="min-h-screen bg-slate-950 text-slate-50" suppressHydrationWarning>
         <div className="mx-auto max-w-5xl px-6 py-10">{children}</div>
         <footer className="mt-8 border-t border-white/5 bg-slate-950/80 px-6 py-4 text-center text-xs text-white/60 backdrop-blur">
           Food images are processed by Google AI.
