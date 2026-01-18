@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   getRecentFoods,
@@ -165,6 +165,7 @@ export default function HomeClient({
   const {
     showScanner,
     setShowScanner,
+    stopScanning,
     draft,
     setDraft,
     isAnalyzing,
@@ -177,6 +178,19 @@ export default function HomeClient({
     onAnalysisComplete: handleOptimisticScanComplete,
     onAnalysisError: handleOptimisticScanError,
   });
+  const pathname = usePathname();
+  const isHomeRoute = pathname === "/";
+  const shouldShowScanner = isHomeRoute && showScanner;
+
+  useEffect(() => {
+    if (!isHomeRoute) {
+      stopScanning();
+    }
+  }, [isHomeRoute, stopScanning]);
+
+  useEffect(() => {
+    return () => stopScanning();
+  }, [stopScanning]);
 
   const refreshRecentFoods = useCallback(async () => {
     setIsLoadingRecentFoods(true);
@@ -406,7 +420,7 @@ export default function HomeClient({
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       <main className="mx-auto max-w-md px-4 pt-6 space-y-8">
-        {(showScanner || draft.length > 0) ? (
+        {(shouldShowScanner || draft.length > 0) ? (
           <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
             {draft.length === 0 ? (
               <CameraCapture
@@ -472,7 +486,7 @@ export default function HomeClient({
                deletingId={deletingId}
                onDeleteLog={handleDeleteLog}
              />
-             <div className="fixed bottom-24 right-4 z-20 flex flex-col gap-3">
+             <div className="scanner-container right-4 flex flex-col gap-3">
                 <button className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition hover:bg-emerald-400" onClick={() => setShowScanner(true)} aria-label="Add Log">
                   <span className="text-2xl">+</span>
                 </button>

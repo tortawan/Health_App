@@ -158,6 +158,24 @@ export function useScanner(options: UseScannerOptions = {}) {
     }
   }, [onAnalysisComplete, onAnalysisError, onAnalysisStart, supabase]);
 
+  const stopScanning = useCallback(() => {
+    setShowScanner(false);
+    setDraft([]);
+    setError(null);
+    setImagePublicUrl(null);
+    setIsAnalyzing(false);
+    setIsImageUploading(false);
+    setLastScannedCode(null);
+    setIsScanningBarcode(false);
+    if (scannerRef.current) {
+      scannerRef.current.stop().catch(() => {}).finally(() => {
+        scannerRef.current?.clear?.();
+        scannerRef.current = null;
+        setHasScannerInstance(false);
+      });
+    }
+  }, []);
+
   // --- Barcode Logic ---
   const handleCapture = useCallback((blob: Blob | null) => {
      if (blob && blob instanceof File) {
@@ -270,6 +288,7 @@ export function useScanner(options: UseScannerOptions = {}) {
   return {
     showScanner,
     setShowScanner,
+    stopScanning,
     error,
     setError,
     toggleScanner,
