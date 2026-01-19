@@ -11,7 +11,7 @@
 
 This project builds a friction-less food tracker using **Multimodal RAG**. Instead of asking an LLM to hallucinate nutrition facts, we use:
 
-1.  **Gemini 1.5 Flash** to *perceive* the image (identify food names + visual quantity estimation).
+1.  **gemini‑2.5‑flash** to *perceive* the image (identify food names + visual quantity estimation).
 2.  **Supabase Vector Search** to *retrieve* validated nutrition facts from a self-hosted USDA database.
 3.  **Next.js Server Actions** to orchestrate the flow without managing a separate backend server.
 
@@ -22,7 +22,7 @@ This project builds a friction-less food tracker using **Multimodal RAG**. Inste
 | Component | Technology | Reasoning |
 | :--- | :--- | :--- |
 | **Framework** | **Next.js 15+ (App Router)** | Deployed on Vercel. Server Actions handle logic; avoids "cold start" timeouts of free containers. |
-| **AI Vision** | **Gemini 1.5 Flash** | High rate limit (1,500/day free). Used strictly for *identification*, not for factual nutrition data. |
+| **AI Vision** | **gemini‑2.5‑flash** | High rate limit (1,500/day free). Used strictly for *identification*, not for factual nutrition data. |
 | **Database** | **Supabase (PostgreSQL)** | Stores user logs and USDA data. Includes `pgvector` for semantic search. |
 | **Embeddings** | **Transformers.js** | **CRITICAL FIX:** Runs `all-MiniLM-L6-v2` inside the Next.js API route. **Requirement:** Define `EMBEDDING_MODEL=Xenova/all-MiniLM-L6-v2` in `.env` and use this variable in both the ingestion script and the app to guarantee vector alignment. |
 | **Data Source** | **USDA Foundation Foods** | Downloaded and **denormalized** into a flat table to avoid complex joins at runtime. |
