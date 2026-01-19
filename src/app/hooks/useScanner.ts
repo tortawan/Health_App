@@ -84,6 +84,7 @@ export function useScanner(options: UseScannerOptions = {}) {
   const [isImageUploading, setIsImageUploading] = useState(false);
   const [imagePublicUrl, setImagePublicUrl] = useState<string | null>(null);
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
+  const [noFoodDetected, setNoFoodDetected] = useState(false);
 
   // --- Barcode State ---
   const [isScanningBarcode, setIsScanningBarcode] = useState(false);
@@ -96,6 +97,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     console.log("📸 [DEBUG] handleImageUpload triggered");
     setError(null);
     setAnalysisMessage(null);
+    setNoFoodDetected(false);
     setIsImageUploading(true);
     onAnalysisStart?.();
     
@@ -148,7 +150,11 @@ export function useScanner(options: UseScannerOptions = {}) {
       const draftItems = Array.isArray(data.draft) ? data.draft : [];
       setDraft(draftItems);
       if (data?.noFoodDetected || draftItems.length === 0) {
-        setAnalysisMessage("We couldn’t see any food. Try again?");
+        setNoFoodDetected(true);
+        setAnalysisMessage("We couldn’t detect any food in that photo.");
+      } else {
+        setNoFoodDetected(false);
+        setAnalysisMessage(null);
       }
       onAnalysisComplete?.({ draft: draftItems, imageUrl: publicUrl });
     } catch (err: unknown) {
@@ -171,6 +177,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     setIsAnalyzing(false);
     setIsImageUploading(false);
     setAnalysisMessage(null);
+    setNoFoodDetected(false);
     setLastScannedCode(null);
     setIsScanningBarcode(false);
     if (scannerRef.current) {
@@ -291,6 +298,14 @@ export function useScanner(options: UseScannerOptions = {}) {
     setShowScanner((prev) => !prev);
   };
 
+  const resetAnalysis = () => {
+    setDraft([]);
+    setError(null);
+    setImagePublicUrl(null);
+    setAnalysisMessage(null);
+    setNoFoodDetected(false);
+  };
+
   return {
     showScanner,
     setShowScanner,
@@ -306,6 +321,8 @@ export function useScanner(options: UseScannerOptions = {}) {
     handleCapture,
     handleImageUpload,
     analysisMessage,
+    noFoodDetected,
+    resetAnalysis,
     hasScannerInstance,
     isScanningBarcode,
     scannerError: error,
