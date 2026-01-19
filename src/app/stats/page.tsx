@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import StatsClient from "./stats-client";
 import WeightLogger from "../WeightLogger";
 import WeightTrendChart from "./weight-trend-chart";
+import WaterTrendChart from "./water-trend-chart";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
 function formatLabel(date: Date) {
@@ -26,6 +27,9 @@ export default async function StatsPage() {
   const weightRangeStart = new Date(end);
   weightRangeStart.setHours(0, 0, 0, 0);
   weightRangeStart.setDate(end.getDate() - 29);
+  const waterRangeStart = new Date(end);
+  waterRangeStart.setHours(0, 0, 0, 0);
+  waterRangeStart.setDate(end.getDate() - 29);
 
   const { data: logs } = await supabase
     .from("food_logs")
@@ -85,9 +89,17 @@ export default async function StatsPage() {
 
   const { data: weightLogs } = await supabase
     .from("weight_logs")
-    .select("weight_kg, logged_at")
+    .select("id, weight_kg, logged_at")
     .eq("user_id", session.user.id)
     .gte("logged_at", weightRangeStart.toISOString())
+    .lte("logged_at", end.toISOString())
+    .order("logged_at", { ascending: true });
+
+  const { data: waterLogs } = await supabase
+    .from("water_logs")
+    .select("amount_ml, logged_at")
+    .eq("user_id", session.user.id)
+    .gte("logged_at", waterRangeStart.toISOString())
     .lte("logged_at", end.toISOString())
     .order("logged_at", { ascending: true });
 
@@ -125,13 +137,33 @@ export default async function StatsPage() {
       };
     }) ?? [];
 
+  const waterDays: Record<string, number> = {};
+  const waterCursor = new Date(waterRangeStart);
+  for (let i = 0; i < 30; i++) {
+    waterDays[waterCursor.toISOString().slice(0, 10)] = 0;
+    waterCursor.setDate(waterCursor.getDate() + 1);
+  }
+
+  waterLogs?.forEach((row) => {
+    const key = (row.logged_at as string).slice(0, 10);
+    waterDays[key] = (waterDays[key] ?? 0) + Number(row.amount_ml ?? 0);
+  });
+
+  const waterChartData = Object.entries(waterDays).map(([date, total]) => ({
+    date,
+    label: new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    total_ml: total,
+    goal: 2000,
+  }));
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-2">
         <StatsClient data={chartData} targets={{ calories: calorieTarget, protein: proteinTarget }} />
         <WeightTrendChart data={weightChartData} />
+        <WaterTrendChart data={waterChartData} />
       </div>
-      <WeightLogger defaultWeight={latestWeight} />
+      <WeightLogger defaultWeight={latestWeight} initialLogs={weightLogs ?? []} />
     </div>
   );
 }

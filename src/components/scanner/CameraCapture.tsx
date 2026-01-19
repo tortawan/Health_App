@@ -19,6 +19,8 @@ type Props = {
   isApplyingTemplate: boolean;
   onFileChange: (file?: File) => void;
   analysisMessage?: string | null;
+  fileInputRef?: React.RefObject<HTMLInputElement>;
+  uploadInputId?: string;
 };
 
 export function CameraCapture({
@@ -36,6 +38,8 @@ export function CameraCapture({
   isApplyingTemplate,
   onFileChange,
   analysisMessage,
+  fileInputRef,
+  uploadInputId = "photo-upload",
 }: Props) {
   if (captureMode !== "photo") return null;
 
@@ -82,8 +86,15 @@ export function CameraCapture({
         </div>
       </div>
 
-      <label className="btn cursor-pointer">
-        <input accept="image/*" className="hidden" type="file" onChange={(event) => onFileChange(event.target.files?.[0])} />
+      <input
+        accept="image/*"
+        className="hidden"
+        id={uploadInputId}
+        ref={fileInputRef}
+        type="file"
+        onChange={(event) => onFileChange(event.target.files?.[0])}
+      />
+      <label className="btn cursor-pointer" htmlFor={uploadInputId}>
         {isUploading ? "Scanning..." : "Take Photo"}
       </label>
 

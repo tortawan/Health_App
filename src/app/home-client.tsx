@@ -5,6 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   getRecentFoods,
+  deleteFoodLog,
+  deleteWaterLog,
+  logWater,
+  updateFoodLog,
+  updateWaterLog,
   reportLogIssue,
   logCorrection,
 } from "./actions";
@@ -27,21 +32,31 @@ import {
   UserProfile,
 } from "../types/food";
 
+type WaterLog = {
+  id: string;
+  amount_ml: number;
+  logged_at: string;
+  isOptimistic?: boolean;
+};
+
 type Props = {
   initialLogs: FoodLogRecord[];
-  initialProfile: UserProfile | null;
-  initialStreak: number;
   initialTemplates: MealTemplate[];
   initialRecentFoods: RecentFood[];
   initialPortionMemories: PortionMemoryRow[];
+  initialProfile: UserProfile | null;
+  initialWaterLogs: WaterLog[];
+  initialSelectedDate: string;
 };
 
 export default function HomeClient({
   initialLogs,
-  initialProfile,
   initialRecentFoods,
   initialPortionMemories,
-  initialTemplates = [], 
+  initialProfile,
+  initialTemplates = [],
+  initialWaterLogs,
+  initialSelectedDate,
 }: Props) {
   const router = useRouter();
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
@@ -52,11 +67,29 @@ export default function HomeClient({
   const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories ?? []);
 
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedDate, setSelectedDate] = useState(
+    initialSelectedDate ?? new Date().toISOString().split("T")[0],
+  );
+  useEffect(() => {
+    if (initialSelectedDate) {
+      setSelectedDate(initialSelectedDate);
+    }
+  }, [initialSelectedDate]);
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
   const [isCopying] = useState(false);
   const [deletingId, setDeletingLogId] = useState<string | null>(null);
+  const [waterLogs, setWaterLogs] = useState<WaterLog[]>(initialWaterLogs ?? []);
+  const [waterAmount, setWaterAmount] = useState(250);
+  const [waterSaving, setWaterSaving] = useState(false);
+  const [editingWaterId, setEditingWaterId] = useState<string | null>(null);
+  const [editingWaterAmount, setEditingWaterAmount] = useState<number>(0);
+  const [deletingWaterId, setDeletingWaterId] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setWaterLogs(initialWaterLogs ?? []);
+  }, [initialWaterLogs]);
 
   const dailyTotals = useMemo(() => {
     return dailyLogs.reduce(
@@ -95,6 +128,12 @@ export default function HomeClient({
   const [flagNotes, setFlagNotes] = useState("");
   const [isFlagging, setIsFlagging] = useState(false);
   const optimisticScanIdRef = useRef<string | null>(null);
+  const waterGoal = 2000;
+  const waterTotal = useMemo(
+    () => waterLogs.reduce((total, log) => total + Number(log.amount_ml ?? 0), 0),
+    [waterLogs],
+  );
+  const waterProgress = Math.min(waterTotal / waterGoal, 1);
 
   const buildOptimisticLog = useCallback(
     (item: DraftLog, consumedAt: string, imageUrl: string | null): FoodLogRecord => {
@@ -173,6 +212,8 @@ export default function HomeClient({
     isImageUploading,
     imagePublicUrl,
     analysisMessage,
+    noFoodDetected,
+    resetAnalysis,
     handleImageUpload,
     setError,
   } = useScanner({
@@ -253,18 +294,40 @@ export default function HomeClient({
   const handleCancelEdit = () => { setEditingLogId(null); setEditForm({}); };
   const handleSaveEdits = async () => {
      if (!editingLogId) return;
-     setDailyLogs(prev => prev.map(log => 
+     const previousLogs = dailyLogs;
+     setDailyLogs(prev => prev.map(log =>
         log.id === editingLogId ? { ...log, ...editForm } as FoodLogRecord : log
      ));
-     toast.success("Log updated");
      setEditingLogId(null);
+     try {
+       await updateFoodLog(editingLogId, {
+         weight_g: editForm.weight_g,
+         calories: editForm.calories ?? null,
+         protein: editForm.protein ?? null,
+         carbs: editForm.carbs ?? null,
+         fat: editForm.fat ?? null,
+       });
+       toast.success("Log updated");
+     } catch (err) {
+       console.error(err);
+       setDailyLogs(previousLogs);
+       toast.error(err instanceof Error ? err.message : "Unable to update log");
+     }
   };
   const handleDeleteLog = async (id: string) => {
+      const previousLogs = dailyLogs;
       setDeletingLogId(id);
-      await new Promise(r => setTimeout(r, 500));
       setDailyLogs(prev => prev.filter(l => l.id !== id));
-      toast.success("Entry deleted");
-      setDeletingLogId(null);
+      try {
+        await deleteFoodLog(id);
+        toast.success("Entry deleted");
+      } catch (err) {
+        console.error(err);
+        setDailyLogs(previousLogs);
+        toast.error(err instanceof Error ? err.message : "Unable to delete entry");
+      } finally {
+        setDeletingLogId(null);
+      }
   }
   const handleShiftDate = (delta: number) => {
       const date = new Date(selectedDate);
@@ -438,11 +501,87 @@ export default function HomeClient({
     if (!flaggingLog) return;
     setIsFlagging(true);
     try {
-      await reportLogIssue(flaggingLog.id, flagNotes);
+      await reportLogIssue(flaggingLog.id, { notes: flagNotes });
       toast.success("Report submitted. Thank you!");
       setFlaggingLog(null); setFlagNotes("");
     } catch { toast.error("Failed to submit report"); } 
     finally { setIsFlagging(false); }
+  };
+
+  const handleAddWater = async (amount: number) => {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+
+    setWaterSaving(true);
+    const optimisticId = `water_${Date.now()}`;
+    const optimisticLog: WaterLog = {
+      id: optimisticId,
+      amount_ml: amount,
+      logged_at: new Date().toISOString(),
+      isOptimistic: true,
+    };
+    setWaterLogs((prev) => [optimisticLog, ...prev]);
+    try {
+      const saved = await logWater(amount);
+      setWaterLogs((prev) =>
+        prev.map((log) => (log.id === optimisticId ? { ...saved } : log)),
+      );
+      toast.success("Water logged");
+      setWaterAmount(amount);
+    } catch (err) {
+      console.error(err);
+      setWaterLogs((prev) => prev.filter((log) => log.id !== optimisticId));
+      toast.error(err instanceof Error ? err.message : "Unable to log water");
+    } finally {
+      setWaterSaving(false);
+    }
+  };
+
+  const startEditWater = (log: WaterLog) => {
+    setEditingWaterId(log.id);
+    setEditingWaterAmount(log.amount_ml);
+  };
+
+  const handleUpdateWater = async () => {
+    if (!editingWaterId) return;
+    const updatedAmount = Number(editingWaterAmount);
+    if (!Number.isFinite(updatedAmount) || updatedAmount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    const previousLogs = waterLogs;
+    setWaterLogs((prev) =>
+      prev.map((log) =>
+        log.id === editingWaterId ? { ...log, amount_ml: updatedAmount } : log,
+      ),
+    );
+    setEditingWaterId(null);
+    try {
+      await updateWaterLog(editingWaterId, updatedAmount);
+      toast.success("Water updated");
+    } catch (err) {
+      console.error(err);
+      setWaterLogs(previousLogs);
+      toast.error(err instanceof Error ? err.message : "Unable to update water");
+    }
+  };
+
+  const handleDeleteWater = async (id: string) => {
+    const previousLogs = waterLogs;
+    setDeletingWaterId(id);
+    setWaterLogs((prev) => prev.filter((log) => log.id !== id));
+    try {
+      await deleteWaterLog(id);
+      toast.success("Water deleted");
+    } catch (err) {
+      console.error(err);
+      setWaterLogs(previousLogs);
+      toast.error(err instanceof Error ? err.message : "Unable to delete water");
+    } finally {
+      setDeletingWaterId(null);
+    }
   };
 
   return (
@@ -469,8 +608,48 @@ export default function HomeClient({
                   onOpenTemplateManager={() => toast("Manager not implemented")}
                   isApplyingTemplate={false}
                   onFileChange={(file) => file && handleImageUpload(file)}
-                  analysisMessage={analysisMessage}
+                  analysisMessage={noFoodDetected ? null : analysisMessage}
+                  fileInputRef={photoInputRef}
                 />
+                {noFoodDetected && !isAnalyzing && !isImageUploading && (
+                  <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+                    <p className="text-base font-semibold">
+                      We couldn&apos;t detect any food in that photo.
+                    </p>
+                    <p className="mt-1 text-white/70">
+                      Try another angle, upload a new photo, or log manually.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          resetAnalysis();
+                          setShowScanner(true);
+                        }}
+                        type="button"
+                      >
+                        Try again
+                      </button>
+                      <button
+                        className="btn bg-white/10 text-white hover:bg-white/20"
+                        onClick={() => photoInputRef.current?.click()}
+                        type="button"
+                      >
+                        Upload another photo
+                      </button>
+                      <button
+                        className="btn bg-white/10 text-white hover:bg-white/20"
+                        onClick={() => {
+                          setManualOpenIndex(-1);
+                          setManualQuery("");
+                        }}
+                        type="button"
+                      >
+                        Search manually
+                      </button>
+                    </div>
+                  </div>
+                )}
               </CameraErrorBoundary>
             ) : (
               <DraftReview
@@ -499,6 +678,131 @@ export default function HomeClient({
           </div>
         ) : (
           <>
+             <section className="card space-y-4">
+               <div className="flex items-center justify-between">
+                 <div>
+                   <p className="text-sm uppercase tracking-wide text-emerald-200">Water</p>
+                   <h2 className="text-xl font-semibold text-white">Hydration tracker</h2>
+                   <p className="text-sm text-white/60">
+                     Today&apos;s total: {waterTotal} ml • Goal {waterGoal} ml
+                   </p>
+                 </div>
+                 <span className="pill bg-white/10 text-white/70">Daily goal</span>
+               </div>
+               <div className="space-y-2">
+                 <div className="h-3 w-full overflow-hidden rounded-full bg-white/10">
+                   <div
+                     className="h-full rounded-full bg-emerald-400 transition-all"
+                     style={{ width: `${waterProgress * 100}%` }}
+                   />
+                 </div>
+                 <div className="text-xs text-white/60">
+                   {Math.round(waterProgress * 100)}% of goal
+                 </div>
+               </div>
+               <div className="flex flex-wrap items-end gap-3">
+                 <label className="space-y-1 text-sm text-white/70">
+                   <span className="block text-xs uppercase tracking-wide text-white/60">
+                     Amount (ml)
+                   </span>
+                   <input
+                     className="w-32 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                     min={50}
+                     step={50}
+                     type="number"
+                     value={waterAmount}
+                     onChange={(event) => setWaterAmount(Number(event.target.value))}
+                   />
+                 </label>
+                 <button
+                   className="btn"
+                   disabled={waterSaving}
+                   onClick={() => handleAddWater(waterAmount)}
+                   type="button"
+                 >
+                   {waterSaving ? "Saving..." : "Add water"}
+                 </button>
+                 <div className="flex flex-wrap gap-2">
+                   {[250, 500, 750, 1000].map((amount) => (
+                     <button
+                       className="pill bg-white/10 text-white hover:bg-white/20"
+                       key={amount}
+                       onClick={() => handleAddWater(amount)}
+                       type="button"
+                     >
+                       +{amount} ml
+                     </button>
+                   ))}
+                 </div>
+               </div>
+               {waterLogs.length === 0 ? (
+                 <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-4 text-sm text-white/60">
+                   No water logs yet. Add your first entry to start tracking.
+                 </div>
+               ) : (
+                 <div className="space-y-2">
+                   <p className="text-xs uppercase tracking-wide text-white/50">Recent entries</p>
+                   {waterLogs.slice(0, 5).map((log) => (
+                     <div
+                       className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-900/60 p-3 text-sm text-white/80"
+                       key={log.id}
+                     >
+                       {editingWaterId === log.id ? (
+                         <div className="flex flex-wrap items-center gap-2">
+                           <input
+                             className="w-24 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
+                             min={50}
+                             step={50}
+                             type="number"
+                             value={editingWaterAmount}
+                             onChange={(event) => setEditingWaterAmount(Number(event.target.value))}
+                           />
+                           <button className="btn" onClick={handleUpdateWater} type="button">
+                             Save
+                           </button>
+                           <button
+                             className="btn bg-white/10 text-white hover:bg-white/20"
+                             onClick={() => setEditingWaterId(null)}
+                             type="button"
+                           >
+                             Cancel
+                           </button>
+                         </div>
+                       ) : (
+                         <>
+                           <div>
+                             <p className="text-base font-semibold text-white">{log.amount_ml} ml</p>
+                             <p className="text-xs text-white/60">
+                               {new Date(log.logged_at).toLocaleTimeString([], {
+                                 hour: "numeric",
+                                 minute: "2-digit",
+                               })}
+                             </p>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             <button
+                               className="pill bg-white/10 text-white hover:bg-white/20"
+                               onClick={() => startEditWater(log)}
+                               type="button"
+                             >
+                               ✏️ Edit
+                             </button>
+                             <button
+                               className="pill bg-red-500/20 text-red-100 hover:bg-red-500/30"
+                               disabled={deletingWaterId === log.id}
+                               onClick={() => handleDeleteWater(log.id)}
+                               type="button"
+                             >
+                               {deletingWaterId === log.id ? "Deleting..." : "🗑️ Delete"}
+                             </button>
+                           </div>
+                         </>
+                       )}
+                     </div>
+                   ))}
+                 </div>
+               )}
+             </section>
              <DailyLogList
                dailyLogs={dailyLogs}
                dailyTotals={dailyTotals}
