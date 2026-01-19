@@ -17,6 +17,7 @@ The Phase 2 tracker experience is live:
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET` (defaults to `user-images`, must be public for uploads)
    - `EMBEDDING_MODEL=Xenova/all-MiniLM-L6-v2`
+   - Optional circuit breaker + threshold tuning: `CIRCUIT_BREAKER_THRESHOLD`, `CIRCUIT_BREAKER_COOLDOWN_MS`, `MATCH_THRESHOLD_BASE`
    - Optional rate limiting: `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
 2. Install dependencies and run the dev server:
    ```bash
@@ -34,8 +35,8 @@ Create the `match_foods` helper used by `/api/analyze` and the manual search fal
 
 ```sql
 create or replace function match_foods (
-  query_embedding vector(384),
   query_text text,
+  query_embedding vector(384),
   match_threshold float,
   match_count int
 )

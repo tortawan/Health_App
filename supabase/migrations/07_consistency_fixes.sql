@@ -30,15 +30,11 @@ add column if not exists fat_target numeric;
 -- The local embedder uses 384 dimensions (all-MiniLM-L6-v2), but the previous migration used 1536.
 -- We must alter the column type. WARNING: This clears existing embeddings if they are incompatible.
 
--- First, ensure the foods table exists. If it was missing, we create it with the correct schema.
-create table if not exists public.foods (
-  id uuid primary key default gen_random_uuid(),
+-- First, ensure the USDA library table exists. If it was missing, we create it with the correct schema.
+create table if not exists public.usda_library (
+  id bigint primary key,
   description text not null,
-  brand_owner text,
-  ingredients text,
-  serving_size numeric,
-  serving_size_unit text,
-  household_serving_fulltext text,
+  embedding vector(384),
   kcal_100g numeric,
   protein_100g numeric,
   carbs_100g numeric,
@@ -46,8 +42,13 @@ create table if not exists public.foods (
   fiber_100g numeric,
   sugar_100g numeric,
   sodium_100g numeric,
-  embedding vector(384) -- Created directly with correct size
+  search_text tsvector generated always as (to_tsvector('english', description)) stored
 );
+
+alter table if exists public.usda_library
+  add column if not exists fiber_100g numeric,
+  add column if not exists sugar_100g numeric,
+  add column if not exists sodium_100g numeric;
 
 -- If the table existed but had the wrong embedding size (1536), we alter it.
 -- This block handles the case where the table already existed from a previous migration.
@@ -57,63 +58,75 @@ begin
   if exists (
     select 1 
     from information_schema.columns 
-    where table_name = 'foods' 
+    where table_name = 'usda_library' 
     and column_name = 'embedding' 
     and udt_name = 'vector' 
   ) then
      -- Drop the dependent function first to allow altering the column
      drop function if exists search_foods(text, vector, float, int);
+     drop function if exists match_foods(text, vector, float, int);
+     drop function if exists match_foods(vector(384), text, float, int);
+     drop function if exists match_foods(vector(384), text, float, int, uuid);
      
      -- Alter the column type to 384 dimensions
-     alter table public.foods 
+     alter table public.usda_library 
      alter column embedding type vector(384);
   end if;
 end $$;
 
 -- Recreate the search function with the correct dimension
-create or replace function search_foods(
+create or replace function match_foods(
   query_text text,
-  query_embedding vector(384), -- Changed from 1536 to 384
+  query_embedding vector(384),
   match_threshold float,
   match_count int
 )
 returns table (
-  id uuid,
+  id bigint,
   description text,
-  brand_owner text,
-  ingredients text,
-  serving_size real,
-  serving_size_unit text,
-  household_serving_fulltext text,
-  kcal_100g real,
-  protein_100g real,
-  carbs_100g real,
-  fat_100g real,
-  similarity double precision
+  kcal_100g numeric,
+  protein_100g numeric,
+  carbs_100g numeric,
+  fat_100g numeric,
+  fiber_100g numeric,
+  sugar_100g numeric,
+  sodium_100g numeric,
+  similarity double precision,
+  text_rank double precision
 )
 language plpgsql
+security invoker
 as $$
+declare
+  ts_query tsquery := null;
 begin
+  if coalesce(trim(query_text), '') <> '' then
+    ts_query := websearch_to_tsquery('english', query_text);
+  end if;
+
   return query
   select
-    foods.id,
-    foods.description,
-    foods.brand_owner,
-    foods.ingredients,
-    foods.serving_size::real,
-    foods.serving_size_unit,
-    foods.household_serving_fulltext,
-    foods.kcal_100g::real,
-    foods.protein_100g::real,
-    foods.carbs_100g::real,
-    foods.fat_100g::real,
-    (1 - (foods.embedding <=> query_embedding))::double precision as similarity
-  from foods
-  where 1 - (foods.embedding <=> query_embedding) > match_threshold
-  order by foods.embedding <=> query_embedding
+    usda_library.id,
+    usda_library.description,
+    usda_library.kcal_100g,
+    usda_library.protein_100g,
+    usda_library.carbs_100g,
+    usda_library.fat_100g,
+    usda_library.fiber_100g,
+    usda_library.sugar_100g,
+    usda_library.sodium_100g,
+    (1 - (usda_library.embedding <=> query_embedding))::double precision as similarity,
+    coalesce(ts_rank_cd(usda_library.search_text, ts_query), 0)::double precision as text_rank
+  from usda_library
+  where (1 - (usda_library.embedding <=> query_embedding)) > match_threshold
+    or (ts_query is not null and ts_query @@ usda_library.search_text)
+  order by ((1 - (usda_library.embedding <=> query_embedding)) * 0.7)
+    + (coalesce(ts_rank_cd(usda_library.search_text, ts_query), 0) * 0.3) desc
   limit match_count;
 end;
 $$;
+
+grant execute on function match_foods(text, vector, float, int) to authenticated, anon;
 
 -- 5. Create storage bucket if it doesn't exist (Audit Issue #3)
 -- Note: SQL cannot create buckets directly in standard Supabase migrations usually,

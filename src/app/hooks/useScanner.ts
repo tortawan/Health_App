@@ -83,6 +83,7 @@ export function useScanner(options: UseScannerOptions = {}) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isImageUploading, setIsImageUploading] = useState(false);
   const [imagePublicUrl, setImagePublicUrl] = useState<string | null>(null);
+  const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
 
   // --- Barcode State ---
   const [isScanningBarcode, setIsScanningBarcode] = useState(false);
@@ -94,6 +95,7 @@ export function useScanner(options: UseScannerOptions = {}) {
   const handleImageUpload = useCallback(async (file: File) => {
     console.log("📸 [DEBUG] handleImageUpload triggered");
     setError(null);
+    setAnalysisMessage(null);
     setIsImageUploading(true);
     onAnalysisStart?.();
     
@@ -145,6 +147,9 @@ export function useScanner(options: UseScannerOptions = {}) {
 
       const draftItems = Array.isArray(data.draft) ? data.draft : [];
       setDraft(draftItems);
+      if (data?.noFoodDetected || draftItems.length === 0) {
+        setAnalysisMessage("We couldn’t see any food. Try again?");
+      }
       onAnalysisComplete?.({ draft: draftItems, imageUrl: publicUrl });
     } catch (err: unknown) {
       console.error("💥 [DEBUG] Error:", err);
@@ -165,6 +170,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     setImagePublicUrl(null);
     setIsAnalyzing(false);
     setIsImageUploading(false);
+    setAnalysisMessage(null);
     setLastScannedCode(null);
     setIsScanningBarcode(false);
     if (scannerRef.current) {
@@ -299,6 +305,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     imagePublicUrl,
     handleCapture,
     handleImageUpload,
+    analysisMessage,
     hasScannerInstance,
     isScanningBarcode,
     scannerError: error,

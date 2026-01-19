@@ -1,8 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "@xenova/transformers";
+import {
+  EMBEDDING_MODEL,
+  validateEmbeddingDimensions,
+  validateEmbeddingModel,
+} from "@/lib/embedding-constants";
 
-const modelId = process.env.EMBEDDING_MODEL ?? "Xenova/all-MiniLM-L6-v2";
+const modelId = validateEmbeddingModel(process.env.EMBEDDING_MODEL ?? EMBEDDING_MODEL);
 const localModelDir =
   process.env.LOCAL_EMBEDDING_MODEL_PATH ??
   path.join(process.cwd(), "public", "models", modelId.split("/").pop() ?? modelId);
@@ -52,7 +57,9 @@ export async function getEmbedder() {
       localFilesOnly: usingLocalModel,
     });
     const data = Array.from(result.data as Float32Array);
-    return { data, dims: result.dims ?? data.length };
+    const dims = result.dims ?? data.length;
+    validateEmbeddingDimensions(dims, "runtime embedder");
+    return { data, dims };
   };
 
   return cachedEmbedder;

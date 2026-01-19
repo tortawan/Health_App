@@ -147,6 +147,7 @@ export function DraftReview({
               : { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
             const weightChange = getWeightChange(index, item.weight);
+            const manualSearchLabel = item.match ? "Reject match" : "Manual search";
 
             return (
               <div
@@ -163,10 +164,15 @@ export function DraftReview({
                       {item.food_name}
                     </h3>
                     {!item.match && (
-                      <p className="flex items-center gap-1.5 text-xs font-medium text-amber-400">
-                        <span className="block h-1.5 w-1.5 rounded-full bg-amber-400" />
-                        Needs match
-                      </p>
+                      <>
+                        <p className="flex items-center gap-1.5 text-xs font-medium text-amber-400">
+                          <span className="block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                          Needs match
+                        </p>
+                        <p className="mt-1 text-xs text-amber-200/80">
+                          0 matches found. Try a manual search to pick the right food.
+                        </p>
+                      </>
                     )}
                   </div>
                   <div className="text-right">
@@ -302,7 +308,7 @@ export function DraftReview({
                     onClick={() => onManualSearch(index)}
                     type="button"
                   >
-                    Manual search
+                    {manualSearchLabel}
                   </button>
                 </div>
               </div>

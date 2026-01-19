@@ -171,6 +171,7 @@ export default function HomeClient({
     isAnalyzing,
     isImageUploading,
     imagePublicUrl,
+    analysisMessage,
     handleImageUpload,
     setError,
   } = useScanner({
@@ -437,6 +438,7 @@ export default function HomeClient({
                 onOpenTemplateManager={() => toast("Manager not implemented")}
                 isApplyingTemplate={false}
                 onFileChange={(file) => file && handleImageUpload(file)}
+                analysisMessage={analysisMessage}
               />
             ) : (
               <DraftReview

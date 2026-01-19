@@ -18,6 +18,7 @@ type Props = {
   onOpenTemplateManager: () => void;
   isApplyingTemplate: boolean;
   onFileChange: (file?: File) => void;
+  analysisMessage?: string | null;
 };
 
 export function CameraCapture({
@@ -34,6 +35,7 @@ export function CameraCapture({
   onOpenTemplateManager,
   isApplyingTemplate,
   onFileChange,
+  analysisMessage,
 }: Props) {
   if (captureMode !== "photo") return null;
 
@@ -87,7 +89,13 @@ export function CameraCapture({
 
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40">
         {filePreview ? (
-          <Image alt="Uploaded meal preview" className="h-80 w-full object-cover" height={320} src={filePreview} width={640} />
+          <Image
+            alt="Uploaded meal preview"
+            className={`h-80 w-full object-cover transition ${isUploading ? "blur-sm" : ""}`}
+            height={320}
+            src={filePreview}
+            width={640}
+          />
         ) : (
           <div className="flex h-80 items-center justify-center text-white/40">Upload a photo to start the Visual RAG flow.</div>
         )}
@@ -110,9 +118,37 @@ export function CameraCapture({
                 {isImageUploading ? "Uploading to Supabase Storage..." : "Matching against USDA vectors..."}
               </p>
             </div>
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute inset-x-0 top-0 h-1 bg-emerald-400/70 shadow-[0_0_12px_rgba(16,185,129,0.8)] scan-line" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-400/40 border-t-emerald-300" />
+              </div>
+            </div>
           </div>
         )}
       </div>
+      {analysisMessage && !isUploading && (
+        <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+          {analysisMessage}
+        </div>
+      )}
+      <style jsx>{`
+        @keyframes scan {
+          0% {
+            transform: translateY(0%);
+          }
+          50% {
+            transform: translateY(320px);
+          }
+          100% {
+            transform: translateY(0%);
+          }
+        }
+
+        .scan-line {
+          animation: scan 2.2s ease-in-out infinite;
+        }
+      `}</style>
     </>
   );
 }

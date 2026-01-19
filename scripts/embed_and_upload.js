@@ -14,6 +14,12 @@ import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
+import {
+  EMBEDDING_DIMS,
+  EMBEDDING_MODEL,
+  validateEmbeddingDimensions,
+  validateEmbeddingModel,
+} from "../src/lib/embedding-constants";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,18 +57,23 @@ async function getSupabaseClient() {
 
 async function getEmbedder() {
   const { pipeline } = await import("@xenova/transformers");
-  const modelId = process.env.EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2";
+  const modelId = validateEmbeddingModel(process.env.EMBEDDING_MODEL ?? EMBEDDING_MODEL);
   
   if (!process.env.EMBEDDING_MODEL) {
     console.warn(
       "EMBEDDING_MODEL not set. Defaulting to Xenova/all-MiniLM-L6-v2 — ensure this matches your API runtime.",
     );
   }
+  if (process.env.EMBEDDING_MODEL) {
+    console.log(`Using embedding model: ${modelId} (${EMBEDDING_DIMS} dims).`);
+  }
   const pipe = await pipeline("feature-extraction", modelId);
 
   return async (text) => {
     const result = await pipe(text, { pooling: "mean", normalize: true });
-    return Array.from(result.data);
+    const data = Array.from(result.data);
+    validateEmbeddingDimensions(result.dims ?? data.length, "ingestion script");
+    return data;
   };
 }
 
