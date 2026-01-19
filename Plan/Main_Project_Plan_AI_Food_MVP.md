@@ -18,7 +18,7 @@ The absolute core of this project is a "Visual RAG" loop:
 #### User Flow (Revised for Visual RAG):
 1.  **Capture:** User opens app and clicks "Take Photo".
 2.  **Optimistic UI:** App shows the image immediately ("Scanning...").
-3.  **AI Analysis:** Gemini 1.5 Flash analyzes the image to find:
+3.  **AI Analysis:** gemini‑2.5‑flash analyzes the image to find:
     * Food Name (e.g., "Grilled Chicken Breast")
     * Visual Quantity Estimate (e.g., "Medium size, approx 150g")
 4.  **Vector Search:** App converts the food name into an embedding and finds the exact match in our self-hosted USDA database.
@@ -36,7 +36,7 @@ The absolute core of this project is a "Visual RAG" loop:
 ### 🛠 TECH STACK & DATA SOURCES (FINALIZED)
 
 #### 1. Food Identification (AI Vision)
-* **Selected:** **Gemini 1.5 Flash** (Google)
+* **Selected:** **gemini‑2.5‑flash** (Google)
 * **Role:** Strictly for visual recognition and portion estimation. Does NOT generate nutritional numbers directly.
 * **Cost:** Free Tier (1,500 reqs/day).
 
