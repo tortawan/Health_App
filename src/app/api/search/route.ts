@@ -8,15 +8,20 @@ export async function GET(request: Request) {
 
   if (!query) return NextResponse.json([]);
 
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   const embed = await getEmbedder();
   const { data: embedding } = await embed(query);
 
-  const supabase = await createSupabaseServerClient();
   const { data } = await supabase.rpc("match_foods", {
-    query_embedding: embedding,
-    query_text: query,
-    match_threshold: 0.6,
-    match_count: 5,
+    query_embedding: embedding ?? null,
+    query_text: query ?? null,
+    match_threshold: Number(0.6),
+    match_count: Number(5),
+    p_user_id: session?.user?.id ?? null,
   });
 
   return NextResponse.json(data || []);

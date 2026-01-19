@@ -199,7 +199,7 @@ describe("analyze route", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(500);
-    expect(payload.code).toBe("MATCH_FOODS_RPC_ERROR");
+    expect(payload.code).toBe("DB_RPC_ERROR");
   });
 
   it("derives an adaptive threshold from correction data", async () => {
