@@ -14,6 +14,12 @@ import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
+import {
+  EMBEDDING_DIMS,
+  EMBEDDING_MODEL,
+  validateEmbeddingDimensions,
+  validateEmbeddingModel,
+} from "../src/lib/embedding-constants";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,18 +57,23 @@ async function getSupabaseClient() {
 
 async function getEmbedder() {
   const { pipeline } = await import("@xenova/transformers");
-  const modelId = process.env.EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2";
+  const modelId = validateEmbeddingModel(process.env.EMBEDDING_MODEL ?? EMBEDDING_MODEL);
   
   if (!process.env.EMBEDDING_MODEL) {
     console.warn(
       "EMBEDDING_MODEL not set. Defaulting to Xenova/all-MiniLM-L6-v2 — ensure this matches your API runtime.",
     );
   }
+  if (process.env.EMBEDDING_MODEL) {
+    console.log(`Using embedding model: ${modelId} (${EMBEDDING_DIMS} dims).`);
+  }
   const pipe = await pipeline("feature-extraction", modelId);
 
   return async (text) => {
     const result = await pipe(text, { pooling: "mean", normalize: true });
-    return Array.from(result.data);
+    const data = Array.from(result.data);
+    validateEmbeddingDimensions(result.dims ?? data.length, "ingestion script");
+    return data;
   };
 }
 
@@ -72,6 +83,49 @@ function chunk(array, size) {
     chunks.push(array.slice(i, i + size));
   }
   return chunks;
+}
+
+async function buildPayloadForBatch(batch, embed) {
+  const payload = [];
+
+  for (const item of batch) {
+    const embedding = await embed(item.description);
+    payload.push({
+      id: item.id,
+      description: item.description,
+      kcal_100g: item.kcal_100g,
+      protein_100g: item.protein_100g,
+      carbs_100g: item.carbs_100g,
+      fat_100g: item.fat_100g,
+      fiber_100g: item.fiber_100g,
+      sugar_100g: item.sugar_100g,
+      sodium_100g: item.sodium_100g,
+      embedding,
+    });
+  }
+
+  return payload;
+}
+
+async function uploadBatches({ foods, batchSize, embed, supabase }) {
+  const batches = chunk(foods, batchSize);
+
+  for (let i = 0; i < batches.length; i += 1) {
+    const batch = batches[i];
+    const payload = await buildPayloadForBatch(batch, embed);
+
+    const { error } = await supabase.from("usda_library").upsert(payload, {
+      onConflict: "id",
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    console.log(
+      `Inserted batch ${i + 1}/${batches.length} (${payload.length} rows).`,
+    );
+  }
 }
 
 async function main() {
@@ -87,48 +141,21 @@ async function main() {
   const embed = await getEmbedder();
   const supabase = await getSupabaseClient();
 
-  const batches = chunk(foods, BATCH_SIZE);
-
-  for (let i = 0; i < batches.length; i += 1) {
-    const batch = batches[i];
-    const payload = [];
-
-    for (const item of batch) {
-      // Generate the vector for the food description
-      const embedding = await embed(item.description);
-      
-      payload.push({
-        id: item.id,
-        description: item.description,
-        kcal_100g: item.kcal_100g,
-        protein_100g: item.protein_100g,
-        carbs_100g: item.carbs_100g,
-        fat_100g: item.fat_100g,
-        fiber_100g: item.fiber_100g,
-        sugar_100g: item.sugar_100g,
-        sodium_100g: item.sodium_100g,
-        embedding,
-      });
-    }
-
-    // Upsert into Supabase
-    const { error } = await supabase.from("usda_library").upsert(payload, {
-      onConflict: "id",
-    });
-
-    if (error) {
-      throw error;
-    }
-
-    console.log(
-      `Inserted batch ${i + 1}/${batches.length} (${payload.length} rows).`,
-    );
-  }
+  await uploadBatches({
+    foods,
+    batchSize: BATCH_SIZE,
+    embed,
+    supabase,
+  });
 
   console.log("Upload complete.");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (import.meta.url === new URL(process.argv[1], "file://").href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
+
+export { chunk, buildPayloadForBatch, uploadBatches };

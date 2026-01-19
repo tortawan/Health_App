@@ -21,16 +21,18 @@ export async function POST(request: Request) {
 
     const supabase = await createSupabaseServerClient();
     const { original, final, correctedField } = await request.json();
+    const originalSearch = original.search_term || original.food_name || "";
+    const finalMatchDesc = final.match?.description || final.food_name || "";
 
     // Ideally, insert this into a dedicated 'ai_corrections' table.
     // For now, we log to Supabase if the table exists, or console for simple tracking.
     const { error } = await supabase.from("ai_corrections").insert({
+      original_search: originalSearch,
+      final_match_desc: finalMatchDesc,
       original_food: original.food_name,
-      original_search: original.search_term,
       original_match_id: original.match?.id, // Assuming match has an ID or description
       original_match_desc: original.match?.description,
       final_weight: final.weight,
-      final_match_desc: final.match?.description,
       correction_type: correctedField, // 'weight', 'match', or 'manual_search'
       logged_at: new Date().toISOString(),
     });

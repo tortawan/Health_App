@@ -33,10 +33,30 @@ function loadJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+function buildMacroMapFromRows(rows) {
+  const macroMap = new Map();
+
+  for (const row of rows) {
+    const nutrientId = Number(row.nutrient_id);
+    const macroKey = Object.entries(MACRO_IDS).find(
+      ([, id]) => id === nutrientId,
+    )?.[0];
+
+    if (!macroKey) continue;
+
+    const foodId = Number(row.fdc_id);
+    if (!macroMap.has(foodId)) {
+      macroMap.set(foodId, {});
+    }
+    macroMap.get(foodId)[macroKey] = Number(row.amount);
+  }
+
+  return macroMap;
+}
+
 // FIX: Stream the CSV instead of loading a giant JSON
 async function buildMacroMap() {
   console.log("Streaming nutrient data (this filters rows on the fly)...");
-  const macroMap = new Map();
   
   if (!fs.existsSync(RAW_NUTRIENT_CSV)) {
     throw new Error(`Missing ${RAW_NUTRIENT_CSV}. Run download_usda.js first.`);
@@ -47,12 +67,12 @@ async function buildMacroMap() {
   );
 
   let rowsProcessed = 0;
+  const macroMap = new Map();
 
   for await (const row of parser) {
     rowsProcessed++;
     if (rowsProcessed % 500000 === 0) process.stdout.write(".");
 
-    // Only keep the nutrient IDs we care about
     const nutrientId = Number(row.nutrient_id);
     const macroKey = Object.entries(MACRO_IDS).find(
       ([, id]) => id === nutrientId,
@@ -114,7 +134,11 @@ async function main() {
   console.log(`Success! Wrote ${flattened.length} flattened foods to ${OUTPUT_FILE}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (import.meta.url === new URL(process.argv[1], "file://").href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
+
+export { flattenFoods, buildMacroMapFromRows, MACRO_IDS };

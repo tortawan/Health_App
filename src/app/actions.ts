@@ -155,11 +155,12 @@ export async function logCorrection(payload: {
       // Attempt to store in DB (safe fail if table missing)
       await supabase.from("ai_corrections").insert({
         user_id: session.user.id,
+        original_search: payload.foodName,
+        final_match_desc: payload.foodName,
+        correction_type: "weight",
         original_weight: payload.original,
         corrected_weight: payload.corrected,
-        food_name: payload.foodName,
-        correction_type: 'weight',
-        logged_at: new Date().toISOString()
+        logged_at: new Date().toISOString(),
       });
     }
     

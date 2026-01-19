@@ -6,6 +6,9 @@ import { generateDraftId } from "@/lib/uuid";
 import { getEmbedder } from "@/lib/embedder";
 import { analyzeLimiter } from "@/lib/ratelimit";
 import { logGeminiRequest } from "@/lib/logger";
+import { Redis } from "@upstash/redis";
+
+export const maxDuration = 60;
 
 type GeminiItem = {
   food_name: string;
@@ -13,34 +16,44 @@ type GeminiItem = {
   quantity_estimate: string;
 };
 
-const MANUAL_FALLBACK: GeminiItem[] = [
-  {
-    food_name: "Lean protein (e.g., chicken, fish)",
-    search_term: "lean protein",
-    quantity_estimate: "medium portion, ~150g",
-  },
-  {
-    food_name: "Non-starchy vegetables",
-    search_term: "non-starchy vegetables",
-    quantity_estimate: "1 cup (~90g)",
-  },
-  {
-    food_name: "Whole grains or starches",
-    search_term: "whole grains",
-    quantity_estimate: "1 cup (~150g)",
-  },
-];
-
 const IDENTIFICATION_FAILURE_PATTERN = /i can't identify|cannot identify|can't identify|unable to identify/i;
 
-const CIRCUIT_BREAKER_THRESHOLD = 3;
-const CIRCUIT_BREAKER_COOLDOWN_MS = 60 * 1000;
-const circuitBreakerState = {
-  failures: 0,
-  openedAt: 0,
+const parseNumberEnv = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const MATCH_THRESHOLD_BASE = 0.6;
+const CIRCUIT_BREAKER_THRESHOLD = parseNumberEnv(process.env.CIRCUIT_BREAKER_THRESHOLD, 3);
+const CIRCUIT_BREAKER_COOLDOWN_MS = parseNumberEnv(
+  process.env.CIRCUIT_BREAKER_COOLDOWN_MS,
+  60 * 1000,
+);
+const MATCH_THRESHOLD_BASE = parseNumberEnv(process.env.MATCH_THRESHOLD_BASE, 0.6);
+
+console.info("[Analyze] Config", {
+  circuitBreakerThreshold: CIRCUIT_BREAKER_THRESHOLD,
+  circuitBreakerCooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS,
+  matchThresholdBase: MATCH_THRESHOLD_BASE,
+});
+
+const redis =
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+    : null;
+
+if (!redis) {
+  console.warn("[Analyze] Upstash Redis not configured; circuit breaker persistence disabled.");
+}
+
+const CIRCUIT_BREAKER_KEY = "gemini_cb_global";
+
+type CircuitBreakerState = {
+  failures: number;
+  openedAt: number;
+};
 let adaptiveThresholdCache = {
   value: MATCH_THRESHOLD_BASE,
   expiresAt: 0,
@@ -48,43 +61,85 @@ let adaptiveThresholdCache = {
 
 class AnalyzeRequestError extends Error {
   status: number;
+  code: string;
 
-  constructor(message: string, status = 400) {
+  constructor(message: string, status = 400, code = "ANALYZE_REQUEST_ERROR") {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
-function isCircuitBreakerOpen() {
-  if (circuitBreakerState.failures < CIRCUIT_BREAKER_THRESHOLD) {
+const defaultCircuitBreakerState: CircuitBreakerState = {
+  failures: 0,
+  openedAt: 0,
+};
+
+async function getCircuitBreakerState(): Promise<CircuitBreakerState> {
+  if (!redis) return defaultCircuitBreakerState;
+  const state = await redis.get<CircuitBreakerState>(CIRCUIT_BREAKER_KEY);
+  return state ?? defaultCircuitBreakerState;
+}
+
+async function setCircuitBreakerState(state: CircuitBreakerState) {
+  if (!redis) return;
+  await redis.set(CIRCUIT_BREAKER_KEY, state);
+}
+
+async function clearCircuitBreakerState() {
+  if (!redis) return;
+  await redis.del(CIRCUIT_BREAKER_KEY);
+}
+
+async function isCircuitBreakerOpen() {
+  const state = await getCircuitBreakerState();
+  if (state.failures < CIRCUIT_BREAKER_THRESHOLD) {
     return false;
   }
+
+  const openedAt = state.openedAt || Date.now();
+  if (!state.openedAt) {
+    console.warn("[Analyze] Circuit breaker opened.", {
+      failures: state.failures,
+      openedAt,
+    });
+    await setCircuitBreakerState({ failures: state.failures, openedAt });
+  }
+
   const now = Date.now();
-  if (now - circuitBreakerState.openedAt > CIRCUIT_BREAKER_COOLDOWN_MS) {
-    circuitBreakerState.failures = 0;
-    circuitBreakerState.openedAt = 0;
+  if (now - openedAt > CIRCUIT_BREAKER_COOLDOWN_MS) {
+    await clearCircuitBreakerState();
+    console.info("[Analyze] Circuit breaker closed after cooldown.", { cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS });
     return false;
   }
+
   return true;
 }
 
-function recordGeminiFailure() {
-  circuitBreakerState.failures += 1;
-  if (circuitBreakerState.failures >= CIRCUIT_BREAKER_THRESHOLD) {
-    circuitBreakerState.openedAt = Date.now();
+async function recordGeminiFailure() {
+  const state = await getCircuitBreakerState();
+  const failures = state.failures + 1;
+  const wasOpen = state.failures >= CIRCUIT_BREAKER_THRESHOLD && state.openedAt > 0;
+  const shouldOpen = failures >= CIRCUIT_BREAKER_THRESHOLD;
+  const openedAt = shouldOpen ? state.openedAt || Date.now() : state.openedAt;
+
+  if (!wasOpen && shouldOpen) {
+    console.warn("[Analyze] Circuit breaker opened.", {
+      failures,
+      openedAt,
+    });
   }
+
+  await setCircuitBreakerState({ failures, openedAt });
 }
 
-function recordGeminiSuccess() {
-  circuitBreakerState.failures = 0;
-  circuitBreakerState.openedAt = 0;
-}
-
-function getManualFallbackItems(reason?: string): GeminiItem[] {
-  if (reason) {
-    console.warn(`[Analyze] Manual fallback used: ${reason}`);
+async function recordGeminiSuccess() {
+  const state = await getCircuitBreakerState();
+  const wasOpen = state.failures >= CIRCUIT_BREAKER_THRESHOLD && state.openedAt > 0;
+  if (wasOpen || state.failures > 0) {
+    console.info("[Analyze] Circuit breaker closed after success.");
   }
-  return MANUAL_FALLBACK;
+  await clearCircuitBreakerState();
 }
 
 async function validateAnalyzeRequest(request: Request) {
@@ -235,10 +290,11 @@ export async function POST(request: Request) {
 
     // 2. Process with Gemini
     const imageData = imageBuffer.toString("base64");
-    let items: GeminiItem[] = getManualFallbackItems("default");
-    let usedFallback = true;
+    let items: GeminiItem[] = [];
+    let usedFallback = false;
+    let noFoodDetectedReason: string | null = null;
 
-    if (geminiClient && !isCircuitBreakerOpen()) {
+    if (geminiClient && !(await isCircuitBreakerOpen())) {
       const geminiStart = Date.now();
       try {
         const model = geminiClient.getGenerativeModel({
@@ -270,7 +326,9 @@ export async function POST(request: Request) {
 
         if (IDENTIFICATION_FAILURE_PATTERN.test(responseText)) {
           logGeminiRequest({ duration, status: "fallback", reason: "unidentifiable" });
-          recordGeminiFailure();
+          usedFallback = true;
+          noFoodDetectedReason = "unidentifiable";
+          await recordGeminiFailure();
         } else {
           const cleanJson = responseText.replace(/```json|```/g, "").trim();
           const parsed = JSON.parse(cleanJson);
@@ -280,10 +338,12 @@ export async function POST(request: Request) {
             items = parsedItems;
             usedFallback = false;
             logGeminiRequest({ duration, status: "success" });
-            recordGeminiSuccess();
+            await recordGeminiSuccess();
           } else {
             logGeminiRequest({ duration, status: "fallback", reason: "empty_result" });
-            recordGeminiFailure();
+            usedFallback = true;
+            noFoodDetectedReason = "empty_result";
+            await recordGeminiFailure();
           }
         }
       } catch (error) {
@@ -295,29 +355,46 @@ export async function POST(request: Request) {
         const reason = statusCode ? `http_${statusCode}` : "exception";
 
         logGeminiRequest({ duration, status: "failure", reason });
-        recordGeminiFailure();
+        usedFallback = true;
+        noFoodDetectedReason = "gemini_error";
+        await recordGeminiFailure();
         console.warn("Gemini call failed, using fallback:", error);
       }
     } else if (!geminiClient) {
-      items = getManualFallbackItems("gemini_unavailable");
+      usedFallback = true;
+      noFoodDetectedReason = "gemini_unavailable";
     } else {
-      items = getManualFallbackItems("circuit_breaker_open");
+      usedFallback = true;
+      noFoodDetectedReason = "circuit_breaker_open";
     }
 
     // 3. Match with Database (Embeddings)
     const embed = await getEmbedder();
     const matchThreshold = await deriveMatchThreshold(embed);
+    const noFoodDetected = items.length === 0;
 
     const drafts = await Promise.all(
       items.map(async (item) => {
         const { data: embedding } = await embed(item.search_term);
 
-        const { data: matches } = await supabase.rpc("match_foods", {
+        const { data: matches, error: rpcError } = await supabase.rpc("match_foods", {
           query_embedding: embedding,
           query_text: item.search_term,
           match_threshold: matchThreshold,
           match_count: 3,
         });
+
+        if (rpcError) {
+          console.error("[Analyze] match_foods RPC failed", {
+            searchTerm: item.search_term,
+            error: rpcError,
+          });
+          throw new AnalyzeRequestError(
+            "Failed to match foods.",
+            500,
+            "MATCH_FOODS_RPC_ERROR",
+          );
+        }
 
         const mappedMatches = Array.isArray(matches)
           ? matches.map((top) => ({
@@ -347,12 +424,22 @@ export async function POST(request: Request) {
       draft: drafts,
       imagePath: `data:${mimeType};base64,${imageData}`,
       usedFallback,
+      noFoodDetected,
+      noFoodDetectedReason,
     });
   } catch (error) {
     if (error instanceof AnalyzeRequestError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status },
+      );
     }
     console.error("[Analyze] Unhandled error:", error);
     return NextResponse.json({ error: "Failed to analyze image." }, { status: 500 });
   }
 }
+
+export const __test__ = {
+  deriveMatchThreshold,
+  parseNumberEnv,
+};
