@@ -286,6 +286,10 @@ export async function POST(request: Request) {
       }
     }
     const supabase = await createSupabaseServerClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const userId = session?.user?.id ?? null;
     const { imageBuffer, mimeType } = await validateAnalyzeRequest(request);
 
     // 2. Process with Gemini
@@ -373,52 +377,60 @@ export async function POST(request: Request) {
     const matchThreshold = await deriveMatchThreshold(embed);
     const noFoodDetected = items.length === 0;
 
-    const drafts = await Promise.all(
-      items.map(async (item) => {
-        const { data: embedding } = await embed(item.search_term);
+    const drafts = [];
+    const matchCount = Number(3);
+    const matchThresholdValue = Number(matchThreshold);
 
-        const { data: matches, error: rpcError } = await supabase.rpc("match_foods", {
-          query_embedding: embedding,
-          query_text: item.search_term,
-          match_threshold: matchThreshold,
-          match_count: 3,
-        });
+    for (const item of items) {
+      const { data: queryEmbedding } = await embed(item.search_term);
+      const queryText = item.search_term ?? null;
 
-        if (rpcError) {
-          console.error("[Analyze] match_foods RPC failed", {
-            searchTerm: item.search_term,
-            error: rpcError,
-          });
-          throw new AnalyzeRequestError(
-            "Failed to match foods.",
-            500,
-            "MATCH_FOODS_RPC_ERROR",
-          );
-        }
+      console.log("match_foods payload", {
+        query_embedding: queryEmbedding ? `dims=${queryEmbedding.length}` : null,
+        query_text: queryText,
+        match_threshold: matchThresholdValue,
+        match_count: matchCount,
+        p_user_id: userId,
+      });
 
-        const mappedMatches = Array.isArray(matches)
-          ? matches.map((top) => ({
-              description: top.description,
-              kcal_100g: top.kcal_100g,
-              protein_100g: top.protein_100g,
-              carbs_100g: top.carbs_100g,
-              fat_100g: top.fat_100g,
-              fiber_100g: top.fiber_100g,
-              sugar_100g: top.sugar_100g,
-              sodium_100g: top.sodium_100g,
-              similarity: top.similarity ?? (typeof top.distance === "number" ? 1 - top.distance : null) ?? null,
-              text_rank: top.text_rank ?? null,
-            }))
-          : [];
+      const { data: matches, error: rpcError } = await supabase.rpc("match_foods", {
+        query_embedding: queryEmbedding ?? null,
+        query_text: queryText,
+        match_threshold: matchThresholdValue,
+        match_count: matchCount,
+        p_user_id: userId,
+      });
 
-        return {
-          id: generateDraftId(),
-          ...item,
-          match: mappedMatches[0] ?? undefined,
-          matches: mappedMatches.slice(0, 3),
-        };
-      }),
-    );
+      if (rpcError) {
+        console.error("match_foods RPC failed", { rpcError, queryText, userId });
+        return NextResponse.json(
+          { code: "DB_RPC_ERROR", error: "match_foods failed", detail: rpcError.message },
+          { status: 500 },
+        );
+      }
+
+      const mappedMatches = Array.isArray(matches)
+        ? matches.map((top) => ({
+            description: top.description,
+            kcal_100g: top.kcal_100g,
+            protein_100g: top.protein_100g,
+            carbs_100g: top.carbs_100g,
+            fat_100g: top.fat_100g,
+            fiber_100g: top.fiber_100g,
+            sugar_100g: top.sugar_100g,
+            sodium_100g: top.sodium_100g,
+            similarity: top.similarity ?? (typeof top.distance === "number" ? 1 - top.distance : null) ?? null,
+            text_rank: top.text_rank ?? null,
+          }))
+        : [];
+
+      drafts.push({
+        id: generateDraftId(),
+        ...item,
+        match: mappedMatches[0] ?? undefined,
+        matches: mappedMatches.slice(0, 3),
+      });
+    }
 
     return NextResponse.json({
       draft: drafts,

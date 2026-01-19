@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getEmbedder } from "@/lib/embedder";
 import { calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
@@ -187,14 +186,12 @@ export async function manualSearch(searchTerm: string) {
     throw new Error("You must be signed in to search.");
   }
 
-  const embed = await getEmbedder();
-  const { data: embedding } = await embed(query);
-
   const { data, error } = await supabase.rpc("match_foods", {
-    query_embedding: embedding,
-    query_text: query,
-    match_threshold: 0.6,
-    match_count: 5,
+    query_embedding: null,
+    query_text: query ?? null,
+    match_threshold: 0.0,
+    match_count: 10,
+    p_user_id: session.user.id ?? null,
   });
 
   if (error) {
