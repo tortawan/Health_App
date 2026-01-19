@@ -14,6 +14,7 @@ import { CameraCapture } from "../components/scanner/CameraCapture";
 import { DailyLogList } from "../components/dashboard/DailyLogList";
 import { DraftReview } from "../components/logging/DraftReview";
 import { ManualSearchModal } from "../components/logging/ManualSearchModal";
+import { CameraErrorBoundary } from "../components/CameraErrorBoundary";
 import { generateDraftId } from "@/lib/uuid";
 import { adjustedMacros } from "@/lib/nutrition";
 import {
@@ -386,6 +387,24 @@ export default function HomeClient({
     finally { setIsSearching(false); }
   };
 
+  const logManualCorrection = useCallback(async (originalSearch: string, finalMatchDesc: string) => {
+    try {
+      const response = await fetch("/api/corrections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          original_search: originalSearch,
+          final_match_desc: finalMatchDesc,
+        }),
+      });
+      if (!response.ok) {
+        console.warn("[Corrections] Failed to log correction", await response.json());
+      }
+    } catch (error) {
+      console.warn("[Corrections] Non-blocking log failed", error);
+    }
+  }, []);
+
   const applyManualResult = (match: MacroMatch) => {
     if (manualOpenIndex === -1 || manualOpenIndex === null) {
       const newDraftItem: DraftLog = {
@@ -401,8 +420,16 @@ export default function HomeClient({
       setShowScanner(true); 
     } else {
       const newDraft = [...draft];
-      newDraft[manualOpenIndex] = { ...newDraft[manualOpenIndex], food_name: match.description, match };
+      const originalItem = newDraft[manualOpenIndex];
+      newDraft[manualOpenIndex] = { ...originalItem, food_name: match.description, match };
       setDraft(newDraft);
+      if (
+        originalItem?.match?.description &&
+        originalItem.match.description !== match.description
+      ) {
+        const originalSearch = originalItem.search_term || originalItem.food_name || "";
+        void logManualCorrection(originalSearch, match.description);
+      }
     }
     setManualOpenIndex(null); setManualQuery(""); setSearchResults([]);
   };
@@ -424,22 +451,27 @@ export default function HomeClient({
         {(shouldShowScanner || draft.length > 0) ? (
           <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
             {draft.length === 0 ? (
-              <CameraCapture
-                captureMode="photo"
-                isUploading={isAnalyzing || isImageUploading}
-                isImageUploading={isImageUploading}
-                filePreview={imagePublicUrl}
-                templateList={initialTemplates}
-                selectedTemplateId={selectedTemplateId}
-                templateScale={templateScale}
-                onTemplateChange={setSelectedTemplateId}
-                onTemplateScaleChange={setTemplateScale}
-                onApplyTemplate={() => toast("Templates not implemented in demo")}
-                onOpenTemplateManager={() => toast("Manager not implemented")}
-                isApplyingTemplate={false}
-                onFileChange={(file) => file && handleImageUpload(file)}
-                analysisMessage={analysisMessage}
-              />
+              <CameraErrorBoundary
+                onManualUpload={handleImageUpload}
+                onRetry={() => setShowScanner(true)}
+              >
+                <CameraCapture
+                  captureMode="photo"
+                  isUploading={isAnalyzing || isImageUploading}
+                  isImageUploading={isImageUploading}
+                  filePreview={imagePublicUrl}
+                  templateList={initialTemplates}
+                  selectedTemplateId={selectedTemplateId}
+                  templateScale={templateScale}
+                  onTemplateChange={setSelectedTemplateId}
+                  onTemplateScaleChange={setTemplateScale}
+                  onApplyTemplate={() => toast("Templates not implemented in demo")}
+                  onOpenTemplateManager={() => toast("Manager not implemented")}
+                  isApplyingTemplate={false}
+                  onFileChange={(file) => file && handleImageUpload(file)}
+                  analysisMessage={analysisMessage}
+                />
+              </CameraErrorBoundary>
             ) : (
               <DraftReview
                 confidenceLabel="High confidence" 

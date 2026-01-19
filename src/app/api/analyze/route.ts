@@ -8,6 +8,8 @@ import { analyzeLimiter } from "@/lib/ratelimit";
 import { logGeminiRequest } from "@/lib/logger";
 import { Redis } from "@upstash/redis";
 
+export const maxDuration = 60;
+
 type GeminiItem = {
   food_name: string;
   search_term: string;
@@ -436,3 +438,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to analyze image." }, { status: 500 });
   }
 }
+
+export const __test__ = {
+  deriveMatchThreshold,
+  parseNumberEnv,
+};

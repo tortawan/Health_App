@@ -26,35 +26,41 @@ let cachedEmbedder:
   | ((
       input: string,
     ) => Promise<{ data: number[]; dims: number }>) = null;
+let cachedPipeline: Awaited<ReturnType<typeof pipeline>> | null = null;
+let pipelinePromise: Promise<Awaited<ReturnType<typeof pipeline>>> | null = null;
+let usingLocalModelCache = false;
 
 export async function getEmbedder() {
   if (cachedEmbedder) return cachedEmbedder;
 
-  let pipe = null;
-  let usingLocalModel = false;
+  if (!cachedPipeline) {
+    if (!pipelinePromise) {
+      pipelinePromise = (async () => {
+        if (hasLocalModel) {
+          try {
+            const localPipe = await pipeline("feature-extraction", localModelDir, {
+              localFilesOnly: true,
+              cacheDir: localModelDir,
+            });
+            usingLocalModelCache = true;
+            return localPipe;
+          } catch (error) {
+            console.warn("Failed to load local embedding model, falling back to remote:", error);
+          }
+        }
 
-  if (hasLocalModel) {
-    try {
-      pipe = await pipeline("feature-extraction", localModelDir, {
-        localFilesOnly: true,
-        cacheDir: localModelDir,
-      });
-      usingLocalModel = true;
-    } catch (error) {
-      console.warn("Failed to load local embedding model, falling back to remote:", error);
-      pipe = null;
+        return pipeline("feature-extraction", modelId);
+      })();
     }
-  }
 
-  if (!pipe) {
-    pipe = await pipeline("feature-extraction", modelId);
+    cachedPipeline = await pipelinePromise;
   }
 
   cachedEmbedder = async (input: string) => {
-    const result = await pipe(input, {
+    const result = await cachedPipeline(input, {
       pooling: "mean",
       normalize: true,
-      localFilesOnly: usingLocalModel,
+      localFilesOnly: usingLocalModelCache,
     });
     const data = Array.from(result.data as Float32Array);
     const dims = result.dims ?? data.length;
