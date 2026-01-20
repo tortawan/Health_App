@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { original_search, final_match_desc } = await request.json();
+    const { original_search, final_match_desc, correction_type } = await request.json();
 
     if (!original_search || !final_match_desc) {
       return NextResponse.json(
@@ -25,11 +25,12 @@ export async function POST(request: Request) {
       user_id: session.user.id,
       original_search,
       final_match_desc,
+      correction_type: correction_type ?? "manual_match",
       logged_at: new Date().toISOString(),
     });
 
     if (error) {
-      console.error("[Corrections] Insert failed", error);
+      console.warn("[Corrections] Insert failed", error);
       return NextResponse.json({ error: "Insert failed" }, { status: 500 });
     }
 

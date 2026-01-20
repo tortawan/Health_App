@@ -23,18 +23,87 @@ const parseNumberEnv = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const CIRCUIT_BREAKER_THRESHOLD = parseNumberEnv(process.env.CIRCUIT_BREAKER_THRESHOLD, 3);
-const CIRCUIT_BREAKER_COOLDOWN_MS = parseNumberEnv(
-  process.env.CIRCUIT_BREAKER_COOLDOWN_MS,
-  60 * 1000,
-);
-const MATCH_THRESHOLD_BASE = parseNumberEnv(process.env.MATCH_THRESHOLD_BASE, 0.6);
+const parseNumberValue = (value: string | null | undefined, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
-console.info("[Analyze] Config", {
-  circuitBreakerThreshold: CIRCUIT_BREAKER_THRESHOLD,
-  circuitBreakerCooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS,
-  matchThresholdBase: MATCH_THRESHOLD_BASE,
-});
+type AnalyzeConfig = {
+  circuitBreakerThreshold: number;
+  circuitBreakerCooldownMs: number;
+  matchThresholdBase: number;
+  geminiModel: string;
+};
+
+const configCache = {
+  value: null as AnalyzeConfig | null,
+  expiresAt: 0,
+};
+
+async function getAnalyzeConfig(): Promise<AnalyzeConfig> {
+  const now = Date.now();
+  if (configCache.value && configCache.expiresAt > now) {
+    return configCache.value;
+  }
+
+  const fallbackConfig: AnalyzeConfig = {
+    circuitBreakerThreshold: parseNumberEnv(process.env.CIRCUIT_BREAKER_THRESHOLD, 3),
+    circuitBreakerCooldownMs: parseNumberEnv(
+      process.env.CIRCUIT_BREAKER_COOLDOWN_MS,
+      60 * 1000,
+    ),
+    matchThresholdBase: parseNumberEnv(process.env.MATCH_THRESHOLD_BASE, 0.6),
+    geminiModel: process.env.GEMINI_MODEL ?? MODEL_NAME,
+  };
+
+  const service = createSupabaseServiceClient();
+  if (!service) {
+    configCache.value = fallbackConfig;
+    configCache.expiresAt = now + 60 * 1000;
+    console.info("[Analyze] Config", fallbackConfig);
+    return fallbackConfig;
+  }
+
+  const { data, error } = await service
+    .from("app_config")
+    .select("key, value")
+    .in("key", [
+      "MATCH_THRESHOLD_BASE",
+      "CIRCUIT_BREAKER_THRESHOLD",
+      "CIRCUIT_BREAKER_COOLDOWN_MS",
+      "GEMINI_MODEL",
+    ]);
+
+  if (error) {
+    console.warn("[Analyze] Failed to load app_config; using env defaults.", error);
+    configCache.value = fallbackConfig;
+    configCache.expiresAt = now + 60 * 1000;
+    console.info("[Analyze] Config", fallbackConfig);
+    return fallbackConfig;
+  }
+
+  const configByKey = new Map(data?.map((row) => [row.key, row.value]) ?? []);
+  const resolvedConfig: AnalyzeConfig = {
+    circuitBreakerThreshold: parseNumberValue(
+      configByKey.get("CIRCUIT_BREAKER_THRESHOLD"),
+      fallbackConfig.circuitBreakerThreshold,
+    ),
+    circuitBreakerCooldownMs: parseNumberValue(
+      configByKey.get("CIRCUIT_BREAKER_COOLDOWN_MS"),
+      fallbackConfig.circuitBreakerCooldownMs,
+    ),
+    matchThresholdBase: parseNumberValue(
+      configByKey.get("MATCH_THRESHOLD_BASE"),
+      fallbackConfig.matchThresholdBase,
+    ),
+    geminiModel: configByKey.get("GEMINI_MODEL") ?? fallbackConfig.geminiModel,
+  };
+
+  configCache.value = resolvedConfig;
+  configCache.expiresAt = now + 60 * 1000;
+  console.info("[Analyze] Config", resolvedConfig);
+  return resolvedConfig;
+}
 
 const redis =
   process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
@@ -54,10 +123,13 @@ type CircuitBreakerState = {
   failures: number;
   openedAt: number;
 };
-let adaptiveThresholdCache = {
-  value: MATCH_THRESHOLD_BASE,
-  expiresAt: 0,
+type ThresholdCacheEntry = {
+  value: number;
+  expiresAt: number;
+  baseThreshold: number;
 };
+
+const adaptiveThresholdCache = new Map<string, ThresholdCacheEntry>();
 
 class AnalyzeRequestError extends Error {
   status: number;
@@ -91,9 +163,9 @@ async function clearCircuitBreakerState() {
   await redis.del(CIRCUIT_BREAKER_KEY);
 }
 
-async function isCircuitBreakerOpen() {
+async function isCircuitBreakerOpen(config: AnalyzeConfig) {
   const state = await getCircuitBreakerState();
-  if (state.failures < CIRCUIT_BREAKER_THRESHOLD) {
+  if (state.failures < config.circuitBreakerThreshold) {
     return false;
   }
 
@@ -107,20 +179,23 @@ async function isCircuitBreakerOpen() {
   }
 
   const now = Date.now();
-  if (now - openedAt > CIRCUIT_BREAKER_COOLDOWN_MS) {
+  if (now - openedAt > config.circuitBreakerCooldownMs) {
     await clearCircuitBreakerState();
-    console.info("[Analyze] Circuit breaker closed after cooldown.", { cooldownMs: CIRCUIT_BREAKER_COOLDOWN_MS });
+    console.info("[Analyze] Circuit breaker closed after cooldown.", {
+      cooldownMs: config.circuitBreakerCooldownMs,
+    });
     return false;
   }
 
   return true;
 }
 
-async function recordGeminiFailure() {
+async function recordGeminiFailure(config: AnalyzeConfig) {
   const state = await getCircuitBreakerState();
   const failures = state.failures + 1;
-  const wasOpen = state.failures >= CIRCUIT_BREAKER_THRESHOLD && state.openedAt > 0;
-  const shouldOpen = failures >= CIRCUIT_BREAKER_THRESHOLD;
+  const wasOpen =
+    state.failures >= config.circuitBreakerThreshold && state.openedAt > 0;
+  const shouldOpen = failures >= config.circuitBreakerThreshold;
   const openedAt = shouldOpen ? state.openedAt || Date.now() : state.openedAt;
 
   if (!wasOpen && shouldOpen) {
@@ -133,9 +208,10 @@ async function recordGeminiFailure() {
   await setCircuitBreakerState({ failures, openedAt });
 }
 
-async function recordGeminiSuccess() {
+async function recordGeminiSuccess(config: AnalyzeConfig) {
   const state = await getCircuitBreakerState();
-  const wasOpen = state.failures >= CIRCUIT_BREAKER_THRESHOLD && state.openedAt > 0;
+  const wasOpen =
+    state.failures >= config.circuitBreakerThreshold && state.openedAt > 0;
   if (wasOpen || state.failures > 0) {
     console.info("[Analyze] Circuit breaker closed after success.");
   }
@@ -189,89 +265,126 @@ async function validateAnalyzeRequest(request: Request) {
   };
 }
 
-function cosineSimilarity(a: number[], b: number[]) {
-  const length = Math.min(a.length, b.length);
-  if (!length) return 0;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < length; i += 1) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom ? dot / denom : 0;
-}
+type SupabaseClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
-async function deriveMatchThreshold(embed: Awaited<ReturnType<typeof getEmbedder>>) {
+async function deriveMatchThreshold({
+  supabase,
+  userId,
+  baseThreshold,
+}: {
+  supabase: SupabaseClient;
+  userId: string | null;
+  baseThreshold: number;
+}) {
   const now = Date.now();
-  if (adaptiveThresholdCache.expiresAt > now) {
-    return adaptiveThresholdCache.value;
+  const cacheKey = userId ?? "anonymous";
+  const cached = adaptiveThresholdCache.get(cacheKey);
+  if (cached && cached.expiresAt > now && cached.baseThreshold === baseThreshold) {
+    return cached.value;
   }
 
-  const service = createSupabaseServiceClient();
-  if (!service) {
-    adaptiveThresholdCache = {
-      value: MATCH_THRESHOLD_BASE,
+  if (!userId) {
+    const value = Math.max(0.55, Math.min(0.85, baseThreshold));
+    adaptiveThresholdCache.set(cacheKey, {
+      value,
       expiresAt: now + 5 * 60 * 1000,
-    };
-    return MATCH_THRESHOLD_BASE;
+      baseThreshold,
+    });
+    console.info("[Analyze] Derived match threshold", {
+      baseThreshold,
+      correctionsCount: 0,
+      finalThreshold: value,
+      reason: "no_user",
+    });
+    return value;
   }
 
-  const { data, error } = await service
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { count, error } = await supabase
     .from("ai_corrections")
-    .select("original_search, final_match_desc")
-    .not("original_search", "is", null)
-    .not("final_match_desc", "is", null)
-    .order("logged_at", { ascending: false })
-    .limit(25);
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("correction_type", "manual_match")
+    .gte("logged_at", since);
 
-  if (error || !data?.length) {
-    adaptiveThresholdCache = {
-      value: MATCH_THRESHOLD_BASE,
-      expiresAt: now + 5 * 60 * 1000,
-    };
-    return MATCH_THRESHOLD_BASE;
+  const correctionsCount = count ?? 0;
+  if (error) {
+    console.warn("[Analyze] Failed to load ai_corrections; using base threshold.", error);
   }
 
-  const similarities: number[] = [];
-  for (const entry of data) {
-    const [search, final] = await Promise.all([
-      embed(entry.original_search ?? ""),
-      embed(entry.final_match_desc ?? ""),
-    ]);
-
-    const similarity = cosineSimilarity(search.data, final.data);
-    if (Number.isFinite(similarity)) {
-      similarities.push(similarity);
-    }
+  let adjusted = baseThreshold;
+  if (correctionsCount >= 5) {
+    adjusted = baseThreshold + 0.05;
+  } else if (correctionsCount >= 2) {
+    adjusted = baseThreshold + 0.02;
   }
 
-  if (!similarities.length) {
-    adaptiveThresholdCache = {
-      value: MATCH_THRESHOLD_BASE,
-      expiresAt: now + 5 * 60 * 1000,
-    };
-    return MATCH_THRESHOLD_BASE;
-  }
+  const value = Math.max(0.55, Math.min(0.85, adjusted));
 
-  const sorted = [...similarities].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  const lowestAccepted = sorted[0];
-  const tuned = Math.max(0.55, Math.min(0.85, (median ?? MATCH_THRESHOLD_BASE) - 0.05));
-  const buffered = Math.max(0.55, Math.min(0.8, (lowestAccepted ?? MATCH_THRESHOLD_BASE) - 0.02));
-  const value = Math.max(0.55, Math.min(0.8, Math.min(tuned, buffered)));
-
-  adaptiveThresholdCache = {
+  adaptiveThresholdCache.set(cacheKey, {
     value,
-    expiresAt: now + 10 * 60 * 1000,
-  };
+    expiresAt: now + 5 * 60 * 1000,
+    baseThreshold,
+  });
+
+  console.info("[Analyze] Derived match threshold", {
+    baseThreshold,
+    correctionsCount,
+    finalThreshold: value,
+  });
 
   return value;
 }
 
+async function logRequestMetrics({
+  userId,
+  durationMs,
+  geminiStatus,
+  matchThresholdUsed,
+  matchesCount,
+  rpcErrorCode,
+}: {
+  userId: string | null;
+  durationMs: number;
+  geminiStatus: "success" | "fail" | "cb_open";
+  matchThresholdUsed: number | null;
+  matchesCount: number | null;
+  rpcErrorCode: string | null;
+}) {
+  try {
+    const service = createSupabaseServiceClient();
+    const client = service ?? (await createSupabaseServerClient());
+    if (!client || typeof client.from !== "function") {
+      console.warn("[Analyze] Metrics client unavailable; skipping request_metrics insert.");
+      return;
+    }
+
+    const { error } = await client.from("request_metrics").insert({
+      user_id: userId,
+      duration_ms: durationMs,
+      gemini_status: geminiStatus,
+      match_threshold_used: matchThresholdUsed,
+      matches_count: matchesCount,
+      rpc_error_code: rpcErrorCode,
+    });
+
+    if (error) {
+      console.warn("[Analyze] Failed to log request metrics", error);
+    }
+  } catch (error) {
+    console.warn("[Analyze] Failed to log request metrics", error);
+  }
+}
+
 export async function POST(request: Request) {
+  const requestStart = Date.now();
+  let geminiStatus: "success" | "fail" | "cb_open" = "fail";
+  let rpcErrorCode: string | null = null;
+  let matchThresholdUsed: number | null = null;
+  let matchesCount: number | null = null;
+  let userId: string | null = null;
+  const config = await getAnalyzeConfig();
+
   try {
     // 1. Rate Limit Check
     if (analyzeLimiter) {
@@ -289,7 +402,7 @@ export async function POST(request: Request) {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    const userId = session?.user?.id ?? null;
+    userId = session?.user?.id ?? null;
     const { imageBuffer, mimeType } = await validateAnalyzeRequest(request);
 
     // 2. Process with Gemini
@@ -298,11 +411,11 @@ export async function POST(request: Request) {
     let usedFallback = false;
     let noFoodDetectedReason: string | null = null;
 
-    if (geminiClient && !(await isCircuitBreakerOpen())) {
+    if (geminiClient && !(await isCircuitBreakerOpen(config))) {
       const geminiStart = Date.now();
       try {
         const model = geminiClient.getGenerativeModel({
-          model: MODEL_NAME,
+          model: config.geminiModel,
         });
 
         const result = await model.generateContent({
@@ -332,7 +445,8 @@ export async function POST(request: Request) {
           logGeminiRequest({ duration, status: "fallback", reason: "unidentifiable" });
           usedFallback = true;
           noFoodDetectedReason = "unidentifiable";
-          await recordGeminiFailure();
+          geminiStatus = "fail";
+          await recordGeminiFailure(config);
         } else {
           const cleanJson = responseText.replace(/```json|```/g, "").trim();
           const parsed = JSON.parse(cleanJson);
@@ -342,12 +456,14 @@ export async function POST(request: Request) {
             items = parsedItems;
             usedFallback = false;
             logGeminiRequest({ duration, status: "success" });
-            await recordGeminiSuccess();
+            geminiStatus = "success";
+            await recordGeminiSuccess(config);
           } else {
             logGeminiRequest({ duration, status: "fallback", reason: "empty_result" });
             usedFallback = true;
             noFoodDetectedReason = "empty_result";
-            await recordGeminiFailure();
+            geminiStatus = "fail";
+            await recordGeminiFailure(config);
           }
         }
       } catch (error) {
@@ -361,25 +477,34 @@ export async function POST(request: Request) {
         logGeminiRequest({ duration, status: "failure", reason });
         usedFallback = true;
         noFoodDetectedReason = "gemini_error";
-        await recordGeminiFailure();
+        geminiStatus = "fail";
+        await recordGeminiFailure(config);
         console.warn("Gemini call failed, using fallback:", error);
       }
     } else if (!geminiClient) {
       usedFallback = true;
       noFoodDetectedReason = "gemini_unavailable";
+      geminiStatus = "fail";
     } else {
       usedFallback = true;
       noFoodDetectedReason = "circuit_breaker_open";
+      geminiStatus = "cb_open";
     }
 
     // 3. Match with Database (Embeddings)
     const embed = await getEmbedder();
-    const matchThreshold = await deriveMatchThreshold(embed);
+    const matchThreshold = await deriveMatchThreshold({
+      supabase,
+      userId,
+      baseThreshold: config.matchThresholdBase,
+    });
     const noFoodDetected = items.length === 0;
 
     const drafts = [];
     const matchCount = Number(3);
     const matchThresholdValue = Number(matchThreshold);
+    matchThresholdUsed = matchThresholdValue;
+    let totalMatches = 0;
 
     for (const item of items) {
       const { data: queryEmbedding } = await embed(item.search_term);
@@ -403,6 +528,15 @@ export async function POST(request: Request) {
 
       if (rpcError) {
         console.error("match_foods RPC failed", { rpcError, queryText, userId });
+        rpcErrorCode = (rpcError as { code?: string; message?: string })?.code ?? rpcError.message;
+        void logRequestMetrics({
+          userId,
+          durationMs: Date.now() - requestStart,
+          geminiStatus,
+          matchThresholdUsed,
+          matchesCount: totalMatches,
+          rpcErrorCode,
+        });
         return NextResponse.json(
           { code: "DB_RPC_ERROR", error: "match_foods failed", detail: rpcError.message },
           { status: 500 },
@@ -423,6 +557,7 @@ export async function POST(request: Request) {
             text_rank: top.text_rank ?? null,
           }))
         : [];
+      totalMatches += mappedMatches.length;
 
       drafts.push({
         id: generateDraftId(),
@@ -432,6 +567,15 @@ export async function POST(request: Request) {
       });
     }
 
+    matchesCount = totalMatches;
+    void logRequestMetrics({
+      userId,
+      durationMs: Date.now() - requestStart,
+      geminiStatus,
+      matchThresholdUsed,
+      matchesCount,
+      rpcErrorCode,
+    });
     return NextResponse.json({
       draft: drafts,
       imagePath: `data:${mimeType};base64,${imageData}`,
@@ -441,12 +585,28 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof AnalyzeRequestError) {
+      void logRequestMetrics({
+        userId,
+        durationMs: Date.now() - requestStart,
+        geminiStatus,
+        matchThresholdUsed,
+        matchesCount,
+        rpcErrorCode,
+      });
       return NextResponse.json(
         { error: error.message, code: error.code },
         { status: error.status },
       );
     }
     console.error("[Analyze] Unhandled error:", error);
+    void logRequestMetrics({
+      userId,
+      durationMs: Date.now() - requestStart,
+      geminiStatus,
+      matchThresholdUsed,
+      matchesCount,
+      rpcErrorCode,
+    });
     return NextResponse.json({ error: "Failed to analyze image." }, { status: 500 });
   }
 }
