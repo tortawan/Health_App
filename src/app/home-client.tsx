@@ -12,6 +12,10 @@ import {
   updateWaterLog,
   reportLogIssue,
   logCorrection,
+  applyMealTemplate,
+  deleteMealTemplate,
+  saveMealTemplate,
+  saveMealTemplateFromLogs,
 } from "./actions";
 import { useProfileForm } from "./hooks/useProfileForm";
 import { useScanner } from "./hooks/useScanner";
@@ -65,6 +69,9 @@ export default function HomeClient({
   }, [initialLogs]);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
   const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories ?? []);
+  useEffect(() => {
+    setTemplateList(initialTemplates);
+  }, [initialTemplates]);
 
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
   const [selectedDate, setSelectedDate] = useState(
@@ -121,9 +128,14 @@ export default function HomeClient({
   const [searchResults, setSearchResults] = useState<MacroMatch[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [templateName, setTemplateName] = useState("");
-  const [isSavingTemplate] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [templateList, setTemplateList] = useState<MealTemplate[]>(initialTemplates);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [templateScale, setTemplateScale] = useState(1);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false);
+  const [templateFromLogsName, setTemplateFromLogsName] = useState("");
+  const [isSavingFromLogs, setIsSavingFromLogs] = useState(false);
   const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
   const [flagNotes, setFlagNotes] = useState("");
   const [isFlagging, setIsFlagging] = useState(false);
@@ -213,6 +225,8 @@ export default function HomeClient({
     imagePublicUrl,
     analysisMessage,
     noFoodDetected,
+    queuedCount,
+    queueNotice,
     resetAnalysis,
     handleImageUpload,
     setError,
@@ -246,6 +260,105 @@ export default function HomeClient({
       setIsLoadingRecentFoods(false);
     }
   }, []);
+
+  const handleSaveTemplate = useCallback(async () => {
+    const name = templateName.trim();
+    if (!name) {
+      toast.error("Enter a template name.");
+      return;
+    }
+    const items = draft
+      .map((item) => ({
+        usda_id: item.match?.usda_id,
+        grams: item.weight,
+      }))
+      .filter((item): item is { usda_id: number; grams: number } =>
+        Number.isFinite(item.usda_id),
+      );
+
+    if (items.length !== draft.length) {
+      toast.error("All items must have a USDA match to save a template.");
+      return;
+    }
+
+    setIsSavingTemplate(true);
+    try {
+      const saved = await saveMealTemplate(name, items);
+      setTemplateList((prev) => [saved, ...prev]);
+      setTemplateName("");
+      toast.success("Template saved.");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to save template.");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }, [draft, templateName]);
+
+  const handleSaveTemplateFromLogs = useCallback(async () => {
+    const name = templateFromLogsName.trim();
+    if (!name) {
+      toast.error("Enter a template name.");
+      return;
+    }
+    const logItems = dailyLogs
+      .filter((log) => Number.isFinite(log.weight_g) && log.weight_g > 0)
+      .map((log) => ({
+        food_name: log.food_name,
+        weight_g: log.weight_g,
+      }));
+
+    if (!logItems.length) {
+      toast.error("No logs available to save.");
+      return;
+    }
+
+    setIsSavingFromLogs(true);
+    try {
+      const saved = await saveMealTemplateFromLogs(name, logItems);
+      setTemplateList((prev) => [saved, ...prev]);
+      setTemplateFromLogsName("");
+      toast.success("Template created from today’s logs.");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to save template.");
+    } finally {
+      setIsSavingFromLogs(false);
+    }
+  }, [dailyLogs, templateFromLogsName]);
+
+  const handleApplyTemplate = useCallback(async () => {
+    if (!selectedTemplateId) return;
+    setIsApplyingTemplate(true);
+    try {
+      const inserted = await applyMealTemplate(selectedTemplateId, templateScale);
+      if (Array.isArray(inserted)) {
+        setDailyLogs((prev) => [...inserted, ...prev]);
+      }
+      toast.success("Template applied.");
+      setSelectedTemplateId(null);
+      setTemplateScale(1);
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to apply template.");
+    } finally {
+      setIsApplyingTemplate(false);
+    }
+  }, [selectedTemplateId, templateScale]);
+
+  const handleDeleteTemplate = useCallback(async (id: string) => {
+    try {
+      await deleteMealTemplate(id);
+      setTemplateList((prev) => prev.filter((template) => template.id !== id));
+      if (selectedTemplateId === id) {
+        setSelectedTemplateId(null);
+      }
+      toast.success("Template deleted.");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to delete template.");
+    }
+  }, [selectedTemplateId]);
 
   const bumpPortionMemory = (foodName: string, weight: number) => {
     setPortionMemories((prev) => {
@@ -589,6 +702,84 @@ export default function HomeClient({
   return (
     <div className="min-h-screen bg-black text-white pb-24">
       <main className="mx-auto max-w-md px-4 pt-6 space-y-8">
+        {isTemplateManagerOpen && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-wide text-emerald-200">Meal templates</p>
+                  <h3 className="text-lg font-semibold text-white">Manage your favorites</h3>
+                </div>
+                <button className="text-white/70 hover:text-white" onClick={() => setIsTemplateManagerOpen(false)} type="button">
+                  ✕
+                </button>
+              </div>
+              <div className="mt-4 space-y-4">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm font-medium text-white">Create from today’s logs</p>
+                  <p className="text-xs text-white/60">Save everything you logged today as a reusable meal template.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <input
+                      className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/40 focus:border-emerald-400 focus:outline-none"
+                      placeholder="Template name"
+                      value={templateFromLogsName}
+                      onChange={(event) => setTemplateFromLogsName(event.target.value)}
+                    />
+                    <button
+                      className="btn"
+                      disabled={isSavingFromLogs}
+                      onClick={handleSaveTemplateFromLogs}
+                      type="button"
+                    >
+                      {isSavingFromLogs ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-white/50">Saved templates</p>
+                  {templateList.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-4 text-sm text-white/60">
+                      No templates yet. Save one from a draft or today’s logs.
+                    </div>
+                  ) : (
+                    templateList.map((template) => (
+                      <div
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3"
+                        key={template.id}
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-white">{template.name}</p>
+                          <p className="text-xs text-white/60">
+                            {template.items.length} item{template.items.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="btn"
+                            onClick={() => {
+                              setSelectedTemplateId(template.id);
+                              setIsTemplateManagerOpen(false);
+                            }}
+                            type="button"
+                          >
+                            Use
+                          </button>
+                          <button
+                            className="btn bg-white/10 text-white hover:bg-white/20"
+                            onClick={() => handleDeleteTemplate(template.id)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {(shouldShowScanner || draft.length > 0) ? (
           <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
             {draft.length === 0 ? (
@@ -601,16 +792,18 @@ export default function HomeClient({
                   isUploading={isAnalyzing || isImageUploading}
                   isImageUploading={isImageUploading}
                   filePreview={imagePublicUrl}
-                  templateList={initialTemplates}
+                  templateList={templateList}
                   selectedTemplateId={selectedTemplateId}
                   templateScale={templateScale}
                   onTemplateChange={setSelectedTemplateId}
                   onTemplateScaleChange={setTemplateScale}
-                  onApplyTemplate={() => toast("Templates not implemented in demo")}
-                  onOpenTemplateManager={() => toast("Manager not implemented")}
-                  isApplyingTemplate={false}
+                  onApplyTemplate={handleApplyTemplate}
+                  onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
+                  isApplyingTemplate={isApplyingTemplate}
                   onFileChange={(file) => file && handleImageUpload(file)}
                   analysisMessage={noFoodDetected ? null : analysisMessage}
+                  queuedCount={queuedCount}
+                  queueNotice={queueNotice}
                   fileInputRef={photoInputRef}
                 />
                 {noFoodDetected && !isAnalyzing && !isImageUploading && (
@@ -670,7 +863,7 @@ export default function HomeClient({
                 onManualSearch={(idx) => {
                   setManualOpenIndex(idx); setManualQuery(draft[idx].search_term || draft[idx].food_name);
                 }}
-                onSaveTemplate={() => {}}
+                onSaveTemplate={handleSaveTemplate}
                 onTemplateNameChange={setTemplateName}
                 onToggleWeightEdit={(idx) => setEditingWeightIndex(editingWeightIndex === idx ? null : idx)}
                 onUpdateWeight={(idx, w) => { const d = [...draft]; d[idx].weight = w; setDraft(d); }}

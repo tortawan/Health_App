@@ -74,10 +74,26 @@ export default async function HomePage({
 
   const { data: templates } = await supabase
     .from("meal_templates")
-    .select("id, name, items")
+    .select(
+      "id, name, created_at, meal_template_items (id, usda_id, grams, usda_library (description))",
+    )
     .eq("user_id", session.user.id)
     .order("created_at", { ascending: false })
     .limit(20);
+
+  const resolvedTemplates: MealTemplate[] =
+    templates?.map((template) => ({
+      id: template.id,
+      name: template.name,
+      created_at: template.created_at,
+      items:
+        template.meal_template_items?.map((item) => ({
+          id: item.id,
+          usda_id: item.usda_id,
+          grams: Number(item.grams),
+          description: item.usda_library?.description ?? undefined,
+        })) ?? [],
+    })) ?? [];
 
   const { data: portionMemoryRaw } = await supabase
     .from("food_logs")
@@ -127,7 +143,7 @@ export default async function HomePage({
       initialLogs={logs ?? []}
       initialSelectedDate={formatDateParam(dayStart)}
       initialProfile={profile as UserProfile | null}
-      initialTemplates={(templates as MealTemplate[] | null) ?? []}
+      initialTemplates={resolvedTemplates}
       // ✅ FIX: Passed the correct prop name to match HomeClient props
       initialPortionMemories={portionMemory}
       initialRecentFoods={recentFoods ?? []}

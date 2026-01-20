@@ -25,6 +25,7 @@ export type DraftLog = {
  */
 export type MacroMatch = {
   id: string;  // ✅ NEW: Unique ID for this match
+  usda_id?: number | null;
   food_name: string;  // e.g., "Boneless Chicken Breast"
   calories: number;  // Total calories
   protein: number;  // grams
@@ -43,4 +44,52 @@ export type ConfirmResult = {
   itemId: string;
   success: boolean;
   error?: string;
+};
+
+export type FoodLogRecord = {
+  id: string;
+  food_name: string;
+  weight_g: number;
+  calories: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+  fiber?: number | null;
+  sugar?: number | null;
+  sodium?: number | null;
+  consumed_at: string;
+  image_path?: string | null;
+  isOptimistic?: boolean;
+};
+
+export type MealTemplateItem = {
+  id: string;
+  usda_id: number;
+  grams: number;
+  description?: string;
+};
+
+export type MealTemplate = {
+  id: string;
+  name: string;
+  created_at: string;
+  items: MealTemplateItem[];
+};
+
+export type PortionMemoryRow = {
+  food_name: string;
+  weight_g: number;
+  count: number;
+};
+
+export type RecentFood = MacroMatch;
+
+export type UserProfile = {
+  user_id: string;
+  calorie_target?: number | null;
+  protein_target?: number | null;
+  carbs_target?: number | null;
+  fat_target?: number | null;
+  daily_calorie_target?: number | null;
+  daily_protein_target?: number | null;
 };

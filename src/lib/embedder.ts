@@ -6,6 +6,7 @@ import {
   validateEmbeddingDimensions,
   validateEmbeddingModel,
 } from "@/lib/embedding-constants";
+import { LruCache } from "@/lib/lru-cache";
 
 const modelId = validateEmbeddingModel(process.env.EMBEDDING_MODEL ?? EMBEDDING_MODEL);
 const localModelDir =
@@ -29,6 +30,15 @@ let cachedEmbedder:
 let cachedPipeline: Awaited<ReturnType<typeof pipeline>> | null = null;
 let pipelinePromise: Promise<Awaited<ReturnType<typeof pipeline>>> | null = null;
 let usingLocalModelCache = false;
+const embeddingCache = new LruCache<string, number[]>({ maxSize: 500 });
+
+const shouldDebugCache = Boolean(process.env.DEBUG_EMBED_CACHE);
+const logCacheEvent = (event: "hit" | "miss", key: string) => {
+  if (!shouldDebugCache) return;
+  console.debug(`[Embedder Cache] ${event}`, { key });
+};
+
+const normalizeEmbeddingKey = (input: string) => input.trim().toLowerCase();
 
 export async function getEmbedder() {
   if (cachedEmbedder) return cachedEmbedder;
@@ -57,6 +67,16 @@ export async function getEmbedder() {
   }
 
   cachedEmbedder = async (input: string) => {
+    const normalizedKey = normalizeEmbeddingKey(input);
+    const cachedEmbedding = embeddingCache.get(normalizedKey);
+    if (cachedEmbedding) {
+      logCacheEvent("hit", normalizedKey);
+      const dims = cachedEmbedding.length;
+      validateEmbeddingDimensions(dims, "runtime embedder");
+      return { data: cachedEmbedding, dims };
+    }
+
+    logCacheEvent("miss", normalizedKey);
     const result = await cachedPipeline(input, {
       pooling: "mean",
       normalize: true,
@@ -65,6 +85,7 @@ export async function getEmbedder() {
     const data = Array.from(result.data as Float32Array);
     const dims = result.dims ?? data.length;
     validateEmbeddingDimensions(dims, "runtime embedder");
+    embeddingCache.set(normalizedKey, data);
     return { data, dims };
   };
 

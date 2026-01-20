@@ -4,6 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import type { DraftLog, MacroMatch } from "@/types/food";
 import { createClient } from "@/lib/supabase-browser";
+import {
+  countQueuedPhotos,
+  enqueuePhoto,
+  listQueuedPhotos,
+  removeQueuedPhoto,
+  updateQueuedPhotoStatus,
+} from "@/lib/offline-queue";
 
 function generateId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -85,19 +92,133 @@ export function useScanner(options: UseScannerOptions = {}) {
   const [imagePublicUrl, setImagePublicUrl] = useState<string | null>(null);
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
   const [noFoodDetected, setNoFoodDetected] = useState(false);
+  const [queuedCount, setQueuedCount] = useState(0);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
 
   // --- Barcode State ---
   const [isScanningBarcode, setIsScanningBarcode] = useState(false);
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
   const [hasScannerInstance, setHasScannerInstance] = useState(false);
   const scannerRef = useRef<Html5QrcodeInstance | null>(null);
+  const isProcessingQueueRef = useRef(false);
+  const previewUrlRef = useRef<string | null>(null);
 
   // --- Image Handling Logic ---
+  const refreshQueuedCount = useCallback(async () => {
+    try {
+      const count = await countQueuedPhotos();
+      setQueuedCount(count);
+    } catch (err) {
+      console.warn("Failed to load queued photo count", err);
+    }
+  }, []);
+
+  const analyzeImage = useCallback(
+    async (imageBlob: Blob, imageUrl: string | null) => {
+      setIsAnalyzing(true);
+      setQueueNotice(null);
+      console.log("🧠 [DEBUG] Sending to AI analysis...");
+
+      try {
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: {
+            "Content-Type": imageBlob.type || "image/jpeg",
+          },
+          body: imageBlob,
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          const message =
+            typeof data?.message === "string" ? data.message : "Analysis failed";
+          throw new Error(message);
+        }
+
+        console.log("✅ [DEBUG] Analysis Results:", data);
+        const draftItems = Array.isArray(data.draft) ? data.draft : [];
+        setDraft(draftItems);
+
+        const resolvedImageUrl = imageUrl ?? data.imagePath ?? null;
+        if (resolvedImageUrl) {
+          setImagePublicUrl(resolvedImageUrl);
+        }
+
+        if (data?.noFoodDetected || draftItems.length === 0) {
+          setNoFoodDetected(true);
+          setAnalysisMessage("We couldn’t detect any food in that photo.");
+        } else {
+          setNoFoodDetected(false);
+          setAnalysisMessage(null);
+        }
+
+        onAnalysisComplete?.({ draft: draftItems, imageUrl: resolvedImageUrl });
+      } finally {
+        setIsAnalyzing(false);
+      }
+    },
+    [onAnalysisComplete],
+  );
+
+  const processQueue = useCallback(async () => {
+    if (!navigator.onLine || isProcessingQueueRef.current) return;
+    isProcessingQueueRef.current = true;
+    try {
+      const queued = await listQueuedPhotos();
+      for (const item of queued) {
+        if (item.status === "processing") continue;
+        await updateQueuedPhotoStatus(item.id, "processing");
+        try {
+          await analyzeImage(item.blob, null);
+          await removeQueuedPhoto(item.id);
+        } catch (err) {
+          console.error("Failed to process queued photo", err);
+          await updateQueuedPhotoStatus(item.id, "failed");
+        }
+      }
+    } finally {
+      await refreshQueuedCount();
+      isProcessingQueueRef.current = false;
+    }
+  }, [analyzeImage, refreshQueuedCount]);
+
   const handleImageUpload = useCallback(async (file: File) => {
     console.log("📸 [DEBUG] handleImageUpload triggered");
     setError(null);
     setAnalysisMessage(null);
     setNoFoodDetected(false);
+
+    if (!navigator.onLine) {
+      try {
+        const { duplicate } = await enqueuePhoto(file);
+        if (previewUrlRef.current) {
+          URL.revokeObjectURL(previewUrlRef.current);
+        }
+        const previewUrl = URL.createObjectURL(file);
+        previewUrlRef.current = previewUrl;
+        setImagePublicUrl(previewUrl);
+        setQueueNotice(
+          duplicate ? "Photo already queued for upload." : "Queued for upload.",
+        );
+        setAnalysisMessage("Queued for upload.");
+        await refreshQueuedCount();
+        toast.success(
+          duplicate
+            ? "Already queued for upload."
+            : "Photo queued for upload.",
+        );
+      } catch (err) {
+        console.error("Failed to queue photo", err);
+        toast.error("Unable to queue photo for upload.");
+      }
+      return;
+    }
+
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+
     setIsImageUploading(true);
     onAnalysisStart?.();
     
@@ -133,30 +254,7 @@ export function useScanner(options: UseScannerOptions = {}) {
       setIsImageUploading(false);
 
       // 2. Analyze Image
-      setIsAnalyzing(true);
-      console.log("🧠 [DEBUG] Sending to AI analysis...");
-      
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: publicUrl }),
-      });
-
-      if (!response.ok) throw new Error("Analysis failed");
-      
-      const data = await response.json();
-      console.log("✅ [DEBUG] Analysis Results:", data);
-
-      const draftItems = Array.isArray(data.draft) ? data.draft : [];
-      setDraft(draftItems);
-      if (data?.noFoodDetected || draftItems.length === 0) {
-        setNoFoodDetected(true);
-        setAnalysisMessage("We couldn’t detect any food in that photo.");
-      } else {
-        setNoFoodDetected(false);
-        setAnalysisMessage(null);
-      }
-      onAnalysisComplete?.({ draft: draftItems, imageUrl: publicUrl });
+      await analyzeImage(file, publicUrl);
     } catch (err: unknown) {
       console.error("💥 [DEBUG] Error:", err);
       const msg = err instanceof Error ? err.message : "Failed to process image";
@@ -167,7 +265,24 @@ export function useScanner(options: UseScannerOptions = {}) {
       setIsImageUploading(false);
       setIsAnalyzing(false);
     }
-  }, [onAnalysisComplete, onAnalysisError, onAnalysisStart, supabase]);
+  }, [analyzeImage, onAnalysisError, onAnalysisStart, refreshQueuedCount, supabase]);
+
+  useEffect(() => {
+    void refreshQueuedCount();
+    if (navigator.onLine) {
+      void processQueue();
+    }
+
+    const handleOnline = () => {
+      setQueueNotice(null);
+      void processQueue();
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [processQueue, refreshQueuedCount]);
 
   const stopScanning = useCallback(() => {
     setShowScanner(false);
@@ -178,8 +293,13 @@ export function useScanner(options: UseScannerOptions = {}) {
     setIsImageUploading(false);
     setAnalysisMessage(null);
     setNoFoodDetected(false);
+    setQueueNotice(null);
     setLastScannedCode(null);
     setIsScanningBarcode(false);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
     if (scannerRef.current) {
       scannerRef.current.stop().catch(() => {}).finally(() => {
         scannerRef.current?.clear?.();
@@ -304,6 +424,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     setImagePublicUrl(null);
     setAnalysisMessage(null);
     setNoFoodDetected(false);
+    setQueueNotice(null);
   };
 
   return {
@@ -322,6 +443,8 @@ export function useScanner(options: UseScannerOptions = {}) {
     handleImageUpload,
     analysisMessage,
     noFoodDetected,
+    queuedCount,
+    queueNotice,
     resetAnalysis,
     hasScannerInstance,
     isScanningBarcode,
