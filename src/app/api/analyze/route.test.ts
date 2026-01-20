@@ -22,22 +22,29 @@ const mockGeminiClient = (payload: string | Error) => ({
   }),
 });
 
-const stubFetchOk = () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
-      headers: new Headers({ "content-type": "image/jpeg" }),
-    }),
-  );
+const buildLimiter = () => ({
+  limit: vi.fn().mockResolvedValue({ success: true }),
+});
+
+const mockNextHeaders = () => {
+  vi.doMock("next/headers", () => ({
+    headers: vi.fn().mockReturnValue(new Headers({ "x-forwarded-for": "127.0.0.1" })),
+  }));
 };
+
+const buildImageRequest = (body: Uint8Array | ArrayBuffer, contentType = "image/jpeg") =>
+  new Request("http://localhost/api/analyze", {
+    method: "POST",
+    headers: { "content-type": contentType },
+    body,
+  });
 
 describe("analyze route", () => {
   beforeEach(() => {
     delete process.env.UPSTASH_REDIS_REST_URL;
     delete process.env.UPSTASH_REDIS_REST_TOKEN;
-    stubFetchOk();
+    delete process.env.CIRCUIT_BREAKER_THRESHOLD;
+    delete process.env.CIRCUIT_BREAKER_COOLDOWN_MS;
   });
 
   afterEach(() => {
@@ -47,7 +54,8 @@ describe("analyze route", () => {
 
   it("returns a draft for a valid upload", async () => {
     vi.resetModules();
-    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: null }));
+    mockNextHeaders();
+    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: buildLimiter() }));
     vi.doMock("@/lib/embedder", () => ({
       getEmbedder: vi.fn().mockResolvedValue(async () => ({ data: [0.1], dims: 384 })),
     }));
@@ -56,6 +64,7 @@ describe("analyze route", () => {
         buildSupabaseMock({
           data: [
             {
+              id: 42,
               description: "Apple",
               kcal_100g: 52,
               protein_100g: 0.3,
@@ -89,11 +98,7 @@ describe("analyze route", () => {
     }));
     const { POST } = await import("./route");
 
-    const request = new Request("http://localhost/api/analyze", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ imageUrl: "http://example.com/image.jpg" }),
-    });
+    const request = buildImageRequest(new Uint8Array([1, 2, 3]));
 
     const response = await POST(request);
     const payload = await response.json();
@@ -105,7 +110,8 @@ describe("analyze route", () => {
 
   it("returns 400 for invalid content type", async () => {
     vi.resetModules();
-    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: null }));
+    mockNextHeaders();
+    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: buildLimiter() }));
     vi.doMock("@/lib/supabase", () => ({
       createSupabaseServerClient: vi.fn().mockResolvedValue(buildSupabaseMock({ data: [], error: null })),
       createSupabaseServiceClient: vi.fn().mockReturnValue(null),
@@ -117,56 +123,70 @@ describe("analyze route", () => {
     }));
     const { POST } = await import("./route");
 
-    const request = new Request("http://localhost/api/analyze", {
-      method: "POST",
-      headers: { "content-type": "text/plain" },
-      body: "nope",
-    });
+    const request = buildImageRequest(new Uint8Array([1, 2, 3]), "text/plain");
 
     const response = await POST(request);
     const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(payload.error).toBe("Unsupported Content-Type");
+    expect(payload.code).toBe("INVALID_CONTENT_TYPE");
+    expect(payload.requestId).toBeTruthy();
   });
 
-  it("falls back when Gemini fails", async () => {
+  it("returns 400 for empty body", async () => {
     vi.resetModules();
-    const supabase = buildSupabaseMock({ data: [], error: null });
-    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: null }));
-    vi.doMock("@/lib/embedder", () => ({
-      getEmbedder: vi.fn().mockResolvedValue(async () => ({ data: [0.1], dims: 384 })),
-    }));
+    mockNextHeaders();
+    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: buildLimiter() }));
     vi.doMock("@/lib/supabase", () => ({
-      createSupabaseServerClient: vi.fn().mockResolvedValue(supabase),
+      createSupabaseServerClient: vi.fn().mockResolvedValue(buildSupabaseMock({ data: [], error: null })),
       createSupabaseServiceClient: vi.fn().mockReturnValue(null),
     }));
     vi.doMock("@/lib/gemini", () => ({
       FOOD_PROMPT: "prompt",
       MODEL_NAME: "model",
-      geminiClient: mockGeminiClient(new Error("Boom")),
+      geminiClient: null,
     }));
     const { POST } = await import("./route");
 
-    const request = new Request("http://localhost/api/analyze", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ imageUrl: "http://example.com/image.jpg" }),
-    });
+    const request = buildImageRequest(new Uint8Array());
 
     const response = await POST(request);
     const payload = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(payload.usedFallback).toBe(true);
-    expect(payload.noFoodDetected).toBe(true);
-    expect(payload.draft).toHaveLength(0);
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(response.status).toBe(400);
+    expect(payload.code).toBe("EMPTY_BODY");
+    expect(payload.requestId).toBeTruthy();
+  });
+
+  it("returns 413 for payloads larger than 5MB", async () => {
+    vi.resetModules();
+    mockNextHeaders();
+    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: buildLimiter() }));
+    vi.doMock("@/lib/supabase", () => ({
+      createSupabaseServerClient: vi.fn().mockResolvedValue(buildSupabaseMock({ data: [], error: null })),
+      createSupabaseServiceClient: vi.fn().mockReturnValue(null),
+    }));
+    vi.doMock("@/lib/gemini", () => ({
+      FOOD_PROMPT: "prompt",
+      MODEL_NAME: "model",
+      geminiClient: null,
+    }));
+    const { POST } = await import("./route");
+
+    const request = buildImageRequest(new Uint8Array(5 * 1024 * 1024 + 1));
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(413);
+    expect(payload.code).toBe("PAYLOAD_TOO_LARGE");
+    expect(payload.requestId).toBeTruthy();
   });
 
   it("returns 500 when match_foods RPC fails", async () => {
     vi.resetModules();
-    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: null }));
+    mockNextHeaders();
+    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: buildLimiter() }));
     vi.doMock("@/lib/embedder", () => ({
       getEmbedder: vi.fn().mockResolvedValue(async () => ({ data: [0.1], dims: 384 })),
     }));
@@ -189,17 +209,61 @@ describe("analyze route", () => {
     }));
     const { POST } = await import("./route");
 
-    const request = new Request("http://localhost/api/analyze", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ imageUrl: "http://example.com/image.jpg" }),
-    });
+    const request = buildImageRequest(new Uint8Array([1, 2, 3]));
 
     const response = await POST(request);
     const payload = await response.json();
 
     expect(response.status).toBe(500);
     expect(payload.code).toBe("DB_RPC_ERROR");
+    expect(payload.requestId).toBeTruthy();
+  });
+
+  it("returns fallback when circuit breaker is open", async () => {
+    vi.resetModules();
+    mockNextHeaders();
+    process.env.UPSTASH_REDIS_REST_URL = "https://example.com";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "token";
+    process.env.CIRCUIT_BREAKER_THRESHOLD = "1";
+
+    const redisState = { failures: 1, openedAt: Date.now() };
+
+    vi.doMock("@upstash/redis", () => ({
+      Redis: class {
+        get = vi.fn().mockResolvedValue(redisState);
+        set = vi.fn().mockResolvedValue(null);
+        del = vi.fn().mockResolvedValue(null);
+      },
+    }));
+    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: buildLimiter() }));
+    vi.doMock("@/lib/embedder", () => ({
+      getEmbedder: vi.fn().mockResolvedValue(async () => ({ data: [0.1], dims: 384 })),
+    }));
+    vi.doMock("@/lib/supabase", () => ({
+      createSupabaseServerClient: vi.fn().mockResolvedValue(buildSupabaseMock({ data: [], error: null })),
+      createSupabaseServiceClient: vi.fn().mockReturnValue(null),
+    }));
+    vi.doMock("@/lib/gemini", () => ({
+      FOOD_PROMPT: "prompt",
+      MODEL_NAME: "model",
+      geminiClient: mockGeminiClient(
+        JSON.stringify({
+          items: [
+            { food_name: "Apple", search_term: "apple", quantity_estimate: "1" },
+          ],
+        }),
+      ),
+    }));
+    const { POST } = await import("./route");
+
+    const request = buildImageRequest(new Uint8Array([1, 2, 3]));
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.usedFallback).toBe(true);
+    expect(payload.noFoodDetectedReason).toBe("circuit_breaker_open");
   });
 
   it("derives an adaptive threshold from correction data", async () => {
@@ -208,7 +272,7 @@ describe("analyze route", () => {
       createSupabaseServerClient: vi.fn(),
       createSupabaseServiceClient: vi.fn().mockReturnValue(null),
     }));
-    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: null }));
+    vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: buildLimiter() }));
     vi.doMock("@/lib/gemini", () => ({
       FOOD_PROMPT: "prompt",
       MODEL_NAME: "model",

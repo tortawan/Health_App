@@ -10,6 +10,8 @@ import { Redis } from "@upstash/redis";
 
 export const maxDuration = 60;
 
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
 type GeminiItem = {
   food_name: string;
   search_term: string;
@@ -220,50 +222,52 @@ async function recordGeminiSuccess(config: AnalyzeConfig) {
 
 async function validateAnalyzeRequest(request: Request) {
   const contentType = request.headers.get("content-type") || "";
-  let imageBuffer: Buffer;
-  let mimeType: string;
-
-  if (contentType.includes("application/json")) {
-    const body = await request.json();
-    const imageUrl = typeof body?.imageUrl === "string" ? body.imageUrl : "";
-
-    if (!imageUrl) {
-      throw new AnalyzeRequestError("No imageUrl provided", 400);
-    }
-
-    console.log(`[Analyze] Fetching image from: ${imageUrl}`);
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) {
-      console.error(`[Analyze] Failed to fetch image: ${imgRes.status}`);
-      throw new AnalyzeRequestError("Failed to download image from URL", 400);
-    }
-
-    const arrayBuffer = await imgRes.arrayBuffer();
-    imageBuffer = Buffer.from(arrayBuffer);
-    mimeType = imgRes.headers.get("content-type") || "image/jpeg";
-  } else if (contentType.includes("multipart/form-data")) {
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-
-    if (!file) {
-      throw new AnalyzeRequestError("Image file is required", 400);
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      throw new AnalyzeRequestError("Image too large (>5MB)", 413);
-    }
-
-    imageBuffer = Buffer.from(await file.arrayBuffer());
-    mimeType = file.type || "image/jpeg";
-  } else {
-    throw new AnalyzeRequestError("Unsupported Content-Type", 400);
+  const normalizedType = contentType.split(";")[0].trim().toLowerCase();
+  if (!normalizedType.startsWith("image/")) {
+    throw new AnalyzeRequestError(
+      "Content-Type must be an image",
+      400,
+      "INVALID_CONTENT_TYPE",
+    );
   }
+
+  const arrayBuffer = await request.arrayBuffer();
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+    throw new AnalyzeRequestError("Request body is empty", 400, "EMPTY_BODY");
+  }
+
+  if (arrayBuffer.byteLength > MAX_IMAGE_SIZE_BYTES) {
+    throw new AnalyzeRequestError("Image too large (>5MB)", 413, "PAYLOAD_TOO_LARGE");
+  }
+
+  const imageBuffer = Buffer.from(arrayBuffer);
+  const mimeType = normalizedType || "image/jpeg";
 
   return {
     imageBuffer,
     mimeType,
   };
 }
+
+const createRequestId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const jsonError = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+) =>
+  NextResponse.json(
+    {
+      code,
+      message,
+      requestId,
+    },
+    { status },
+  );
 
 type SupabaseClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -377,6 +381,7 @@ async function logRequestMetrics({
 }
 
 export async function POST(request: Request) {
+  const requestId = createRequestId();
   const requestStart = Date.now();
   let geminiStatus: "success" | "fail" | "cb_open" = "fail";
   let rpcErrorCode: string | null = null;
@@ -387,16 +392,16 @@ export async function POST(request: Request) {
 
   try {
     // 1. Rate Limit Check
-    if (analyzeLimiter) {
-      const ip = (await headers()).get("x-forwarded-for") ?? "127.0.0.1";
-      const { success } = await analyzeLimiter.limit(ip);
+    const ip = (await headers()).get("x-forwarded-for") ?? "127.0.0.1";
+    const { success } = await analyzeLimiter.limit(ip);
 
-      if (!success) {
-        return NextResponse.json(
-          { error: "Too many requests. Please try again in a minute." },
-          { status: 429 },
-        );
-      }
+    if (!success) {
+      return jsonError(
+        429,
+        "RATE_LIMITED",
+        "Too many requests. Please try again in a minute.",
+        requestId,
+      );
     }
     const supabase = await createSupabaseServerClient();
     const {
@@ -537,14 +542,15 @@ export async function POST(request: Request) {
           matchesCount: totalMatches,
           rpcErrorCode,
         });
-        return NextResponse.json(
-          { code: "DB_RPC_ERROR", error: "match_foods failed", detail: rpcError.message },
-          { status: 500 },
-        );
+        return jsonError(500, "DB_RPC_ERROR", "match_foods failed", requestId);
       }
 
       const mappedMatches = Array.isArray(matches)
         ? matches.map((top) => ({
+            usda_id:
+              (top as { usda_id?: number | null }).usda_id ??
+              (top as { id?: number | null }).id ??
+              null,
             description: top.description,
             kcal_100g: top.kcal_100g,
             protein_100g: top.protein_100g,
@@ -593,10 +599,7 @@ export async function POST(request: Request) {
         matchesCount,
         rpcErrorCode,
       });
-      return NextResponse.json(
-        { error: error.message, code: error.code },
-        { status: error.status },
-      );
+      return jsonError(error.status, error.code, error.message, requestId);
     }
     console.error("[Analyze] Unhandled error:", error);
     void logRequestMetrics({
@@ -607,7 +610,12 @@ export async function POST(request: Request) {
       matchesCount,
       rpcErrorCode,
     });
-    return NextResponse.json({ error: "Failed to analyze image." }, { status: 500 });
+    return jsonError(
+      500,
+      "INTERNAL_SERVER_ERROR",
+      "Failed to analyze image.",
+      requestId,
+    );
   }
 }
 

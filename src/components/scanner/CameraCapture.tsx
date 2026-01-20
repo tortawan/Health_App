@@ -19,6 +19,8 @@ type Props = {
   isApplyingTemplate: boolean;
   onFileChange: (file?: File) => void;
   analysisMessage?: string | null;
+  queuedCount?: number;
+  queueNotice?: string | null;
   fileInputRef?: React.RefObject<HTMLInputElement>;
   uploadInputId?: string;
 };
@@ -38,6 +40,8 @@ export function CameraCapture({
   isApplyingTemplate,
   onFileChange,
   analysisMessage,
+  queuedCount = 0,
+  queueNotice,
   fileInputRef,
   uploadInputId = "photo-upload",
 }: Props) {
@@ -97,6 +101,16 @@ export function CameraCapture({
       <label className="btn cursor-pointer" htmlFor={uploadInputId}>
         {isUploading ? "Scanning..." : "Take Photo"}
       </label>
+      {queueNotice && !isUploading && (
+        <div className="rounded-xl border border-blue-400/30 bg-blue-500/10 p-3 text-sm text-blue-100">
+          {queueNotice}
+        </div>
+      )}
+      {queuedCount > 0 && !isUploading && (
+        <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/70">
+          {queuedCount} photo{queuedCount === 1 ? "" : "s"} queued for upload.
+        </div>
+      )}
 
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40">
         {filePreview ? (

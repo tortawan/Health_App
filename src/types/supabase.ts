@@ -81,22 +81,39 @@ export interface Database {
           id: string
           user_id: string
           name: string
-          items: Json
           created_at: string
         }
         Insert: {
           id?: string
           user_id: string
           name: string
-          items: Json
           created_at?: string
         }
         Update: {
           id?: string
           user_id?: string
           name?: string
-          items?: Json
           created_at?: string
+        }
+      }
+      meal_template_items: {
+        Row: {
+          id: string
+          template_id: string
+          usda_id: number
+          grams: number
+        }
+        Insert: {
+          id?: string
+          template_id: string
+          usda_id: number
+          grams: number
+        }
+        Update: {
+          id?: string
+          template_id?: string
+          usda_id?: number
+          grams?: number
         }
       }
       training_dataset: {

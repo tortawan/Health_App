@@ -4,15 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase";
+import { getEmbedder } from "@/lib/embedder";
 
 // --- Types ---
 
-function isMealTemplateItem(item: unknown): item is MealTemplateItem {
+function isMealTemplateItemInput(item: unknown): item is MealTemplateItemInput {
   return (
     typeof item === "object" &&
     item !== null &&
-    "food_name" in item &&
-    "weight_g" in item
+    "usda_id" in item &&
+    "grams" in item
   );
 }
 
@@ -26,6 +27,7 @@ function isErrorWithMessage(error: unknown): error is { message: string } {
 }
 
 type MacroMatch = {
+  usda_id?: number | null;
   description: string;
   kcal_100g: number | null;
   protein_100g: number | null;
@@ -481,16 +483,17 @@ export async function deleteWeightLog(id: string) {
   revalidatePath("/stats");
 }
 
-export type MealTemplateItem = {
-  food_name: string;
-  weight_g: number;
-  calories: number | null;
-  protein: number | null;
-  carbs: number | null;
-  fat: number | null;
+export type MealTemplateItemInput = {
+  usda_id: number;
+  grams: number;
 };
 
-export async function saveMealTemplate(name: string, items: MealTemplateItem[]) {
+type MealTemplateLogInput = {
+  food_name: string;
+  weight_g: number;
+};
+
+export async function saveMealTemplate(name: string, items: MealTemplateItemInput[]) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { session },
@@ -500,21 +503,99 @@ export async function saveMealTemplate(name: string, items: MealTemplateItem[]) 
     throw new Error("You must be signed in to save templates.");
   }
 
-  const { data, error } = await supabase
+  if (!Array.isArray(items) || !items.every(isMealTemplateItemInput)) {
+    throw new Error("Template items are invalid.");
+  }
+
+  const { data: template, error: templateError } = await supabase
     .from("meal_templates")
     .insert({
       user_id: session.user.id,
       name,
-      items,
     })
-    .select()
+    .select("id, user_id, name, created_at")
     .single();
 
-  if (error) {
-    throw error;
+  if (templateError) {
+    throw templateError;
   }
 
-  return data;
+  const payload = items.map((item) => ({
+    template_id: template.id,
+    usda_id: item.usda_id,
+    grams: item.grams,
+  }));
+
+  const { data: savedItems, error: itemsError } = await supabase
+    .from("meal_template_items")
+    .insert(payload)
+    .select("id, usda_id, grams");
+
+  if (itemsError) {
+    throw itemsError;
+  }
+
+  revalidatePath("/");
+  revalidatePath("/stats");
+
+  return {
+    ...template,
+    items: savedItems ?? [],
+  };
+}
+
+export async function saveMealTemplateFromLogs(
+  name: string,
+  logs: MealTemplateLogInput[],
+) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error("You must be signed in to save templates.");
+  }
+
+  if (!Array.isArray(logs) || logs.length === 0) {
+    throw new Error("No logs provided to save.");
+  }
+
+  const embed = await getEmbedder();
+  const items: MealTemplateItemInput[] = [];
+
+  for (const log of logs) {
+    const queryText = log.food_name;
+    const { data: queryEmbedding } = await embed(queryText);
+    const { data: matches, error: matchError } = await supabase.rpc("match_foods", {
+      query_embedding: queryEmbedding ?? null,
+      query_text: queryText,
+      match_threshold: 0.55,
+      match_count: 1,
+      p_user_id: session.user.id,
+    });
+
+    if (matchError) {
+      throw matchError;
+    }
+
+    const match = Array.isArray(matches) ? matches[0] : null;
+    const usdaId =
+      (match as { usda_id?: number | null })?.usda_id ??
+      (match as { id?: number | null })?.id ??
+      null;
+
+    if (!usdaId) {
+      throw new Error(`Unable to match "${queryText}" to USDA library.`);
+    }
+
+    items.push({
+      usda_id: Number(usdaId),
+      grams: Number(log.weight_g),
+    });
+  }
+
+  return saveMealTemplate(name, items);
 }
 
 export async function applyMealTemplate(
@@ -532,7 +613,9 @@ export async function applyMealTemplate(
 
   const { data: template, error: templateError } = await supabase
     .from("meal_templates")
-    .select("items, name, user_id")
+    .select(
+      "id, name, user_id, meal_template_items (id, usda_id, grams, usda_library (description, kcal_100g, protein_100g, carbs_100g, fat_100g, fiber_100g, sugar_100g, sodium_100g))",
+    )
     .eq("id", templateId)
     .maybeSingle();
 
@@ -546,21 +629,36 @@ export async function applyMealTemplate(
 
   const now = new Date();
   const factor = Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
-  const items = template.items;
-  if (!Array.isArray(items) || !items.every(isMealTemplateItem)) {
+  const items = template.meal_template_items ?? [];
+
+  if (!Array.isArray(items) || items.length === 0) {
     throw new Error("Template data is corrupted or invalid.");
   }
 
-  const payload = items.map((item, index) => ({
+  const payload = items.map((item, index) => {
+    const library = item.usda_library;
+    if (!library) {
+      throw new Error("Template item missing USDA metadata.");
+    }
+    const weight = Number(item.grams) * factor;
+    const factorForWeight = weight / 100;
+    const calc = (value: number | null | undefined) =>
+      value === null || value === undefined ? null : Number(value) * factorForWeight;
+
+    return {
       user_id: session.user.id,
-      food_name: item.food_name,
-      weight_g: Math.round(item.weight_g * factor * 1000) / 1000,
-      calories: item.calories === null ? null : Number(item.calories) * factor,
-      protein: item.protein === null ? null : Number(item.protein) * factor,
-      carbs: item.carbs === null ? null : Number(item.carbs) * factor,
-      fat: item.fat === null ? null : Number(item.fat) * factor,
+      food_name: library.description,
+      weight_g: Math.round(weight * 1000) / 1000,
+      calories: calc(library.kcal_100g),
+      protein: calc(library.protein_100g),
+      carbs: calc(library.carbs_100g),
+      fat: calc(library.fat_100g),
+      fiber: calc(library.fiber_100g),
+      sugar: calc(library.sugar_100g),
+      sodium: calc(library.sodium_100g),
       consumed_at: new Date(now.getTime() - index * 1000).toISOString(),
-    })) ?? [];
+    };
+  });
 
   if (!payload.length) {
     throw new Error("Template has no items to insert.");
