@@ -458,6 +458,7 @@ export default function HomeClient({
         body: JSON.stringify({
           original_search: originalSearch,
           final_match_desc: finalMatchDesc,
+          correction_type: "manual_match",
         }),
       });
       if (!response.ok) {
@@ -486,11 +487,12 @@ export default function HomeClient({
       const originalItem = newDraft[manualOpenIndex];
       newDraft[manualOpenIndex] = { ...originalItem, food_name: match.description, match };
       setDraft(newDraft);
-      if (
-        originalItem?.match?.description &&
-        originalItem.match.description !== match.description
-      ) {
-        const originalSearch = originalItem.search_term || originalItem.food_name || "";
+      if (originalItem?.match?.description && originalItem.match.description !== match.description) {
+        const searchParts = [originalItem.food_name, manualQuery, originalItem.search_term]
+          .map((value) => value?.trim())
+          .filter((value): value is string => Boolean(value));
+        const uniqueParts = Array.from(new Set(searchParts));
+        const originalSearch = uniqueParts.join(" | ");
         void logManualCorrection(originalSearch, match.description);
       }
     }

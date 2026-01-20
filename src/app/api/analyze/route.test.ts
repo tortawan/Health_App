@@ -206,25 +206,7 @@ describe("analyze route", () => {
     vi.resetModules();
     vi.doMock("@/lib/supabase", () => ({
       createSupabaseServerClient: vi.fn(),
-      createSupabaseServiceClient: vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            not: vi.fn().mockReturnValue({
-              not: vi.fn().mockReturnValue({
-                order: vi.fn().mockReturnValue({
-                  limit: vi.fn().mockResolvedValue({
-                    data: [
-                      { original_search: "apple", final_match_desc: "apple" },
-                      { original_search: "banana", final_match_desc: "banana" },
-                    ],
-                    error: null,
-                  }),
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
+      createSupabaseServiceClient: vi.fn().mockReturnValue(null),
     }));
     vi.doMock("@/lib/ratelimit", () => ({ analyzeLimiter: null }));
     vi.doMock("@/lib/gemini", () => ({
@@ -234,13 +216,20 @@ describe("analyze route", () => {
     }));
     const { __test__ } = await import("./route");
 
-    const embed = vi.fn().mockImplementation(async (value: string) => {
-      if (value === "apple") return { data: [1, 0], dims: 384 };
-      return { data: [0, 1], dims: 384 };
-    });
+    const gte = vi.fn().mockResolvedValue({ count: 6, error: null });
+    const eqSecond = vi.fn().mockReturnValue({ gte });
+    const eqFirst = vi.fn().mockReturnValue({ eq: eqSecond });
+    const select = vi.fn().mockReturnValue({ eq: eqFirst });
+    const supabase = {
+      from: vi.fn().mockReturnValue({ select }),
+    };
 
-    const threshold = await __test__.deriveMatchThreshold(embed);
-    expect(threshold).toBeGreaterThan(0.55);
-    expect(threshold).toBeLessThanOrEqual(0.8);
+    const threshold = await __test__.deriveMatchThreshold({
+      supabase: supabase as unknown as any,
+      userId: "user-123",
+      baseThreshold: 0.6,
+    });
+    expect(threshold).toBeGreaterThan(0.6);
+    expect(threshold).toBeLessThanOrEqual(0.85);
   });
 });
