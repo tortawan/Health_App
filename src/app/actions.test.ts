@@ -97,33 +97,38 @@ describe("adjustedMacros", () => {
 });
 
 describe("logFood", () => {
-  it("stores double the 100g macros when logging 200g", async () => {
+  it("rounds macro values to two decimals when logging food", async () => {
     const result = await logFood({
-      foodName: "Test Food",
-      weight: 200,
-      match: {
-        kcal_100g: 120,
-        protein_100g: 8,
-        carbs_100g: 14,
-        fat_100g: 5,
-      },
+      food_name: "Test Food",
+      weight_g: 200,
+      calories: 240.129,
+      protein: 16.239,
+      carbs: 28.2,
+      fat: 10.999,
+      quantity: 2,
+      serving_size: 1,
     });
 
     const lastInsert = insertPayloads.at(-1);
 
     expect(lastInsert).toMatchObject({
+      user_id: "user-123",
+      food_name: "Test Food",
       weight_g: 200,
-      calories: 240,
-      protein: 16,
-      carbs: 28,
-      fat: 10,
+      calories: 240.13,
+      protein: 16.24,
+      carbs: 28.2,
+      fat: 11,
+      logged_at: expect.any(String),
     });
     expect(result).toMatchObject({
+      food_name: "Test Food",
       weight_g: 200,
-      calories: 240,
-      protein: 16,
-      carbs: 28,
-      fat: 10,
+      calories: 240.13,
+      protein: 16.24,
+      carbs: 28.2,
+      fat: 11,
+      logged_at: expect.any(String),
     });
   });
 });
