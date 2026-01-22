@@ -1,14 +1,17 @@
-export function validateEmbeddingModel() {
-  const envModel = process.env.EMBEDDING_MODEL;
-  const REQUIRED = 'Xenova/all-MiniLM-L6-v2';
+import { EMBEDDING_MODEL } from "@/lib/embedding-constants";
 
+export function validateEmbeddingModel(envModel = process.env.EMBEDDING_MODEL) {
   if (!envModel) {
-    throw new Error('EMBEDDING_MODEL env var missing. Required: Xenova/all-MiniLM-L6-v2');
+    throw new Error(
+      `EMBEDDING_MODEL env var missing. Required: ${EMBEDDING_MODEL}`,
+    );
   }
 
-  if (envModel !== REQUIRED) {
-    throw new Error(`EMBEDDING_MODEL mismatch: "${envModel}" ≠ "${REQUIRED}". Vectors incompatible!`);
+  if (envModel !== EMBEDDING_MODEL) {
+    throw new Error(
+      `EMBEDDING_MODEL mismatch: "${envModel}" ≠ "${EMBEDDING_MODEL}". Vectors incompatible!`,
+    );
   }
 
-  return true;
+  return envModel;
 }
