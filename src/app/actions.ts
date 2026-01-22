@@ -40,6 +40,48 @@ type MacroMatch = {
   text_rank?: number | null;
 };
 
+// Precision Helper: Rounds to 2 decimal places to fix floating point errors
+const calc = (value: number | null | undefined, factor: number = 1) => {
+  if (value === null || value === undefined) return null;
+  return Math.round(value * factor * 100) / 100;
+};
+
+// Validation Helper: Prevents negative or infinite macro values
+function validateMacros(
+  changes: Partial<{
+    calories?: number | null;
+    protein?: number | null;
+    carbs?: number | null;
+    fat?: number | null;
+  }>,
+) {
+  const fields = {
+    calories: changes.calories,
+    protein: changes.protein,
+    carbs: changes.carbs,
+    fat: changes.fat,
+  };
+  for (const [field, value] of Object.entries(fields)) {
+    if (value !== null && value !== undefined && (value < 0 || !Number.isFinite(value))) {
+      throw new Error(`${field} must be a non-negative finite number (got ${value})`);
+    }
+  }
+}
+
+type LogFoodInput = {
+  calories?: number | null;
+  protein?: number | null;
+  carbs?: number | null;
+  fat?: number | null;
+  quantity?: number | null;
+  serving_size?: number | null;
+  [key: string]: unknown;
+};
+
+const logFoodSchema = {
+  parseAsync: async (data: LogFoodInput) => data,
+};
+
 const isAdminEmail = (email: string | null | undefined) => {
   const adminEmail = process.env.ADMIN_EMAIL;
   return Boolean(adminEmail && email && adminEmail.toLowerCase() === email.toLowerCase());
@@ -60,69 +102,57 @@ async function requireAdminSession() {
 
 // --- Core Logging Action ---
 
-export async function logFood(entry: {
-  foodName: string;
-  weight: number;
-  match?: MacroMatch;
-  imageUrl?: string | null;
-  consumedAt?: string;
-  manualMacros?: {
-    calories: number | null;
-    protein?: number | null;
-    carbs?: number | null;
-    fat?: number | null;
-  };
-}) {
+export async function logFood(data: any) {
+  // Use your existing client creator (adjust import if needed)
   const supabase = await createSupabaseServerClient();
+
+  const food = await logFoodSchema.parseAsync(data);
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
   if (!session) {
-    throw new Error("You must be signed in to log food.");
+    throw new Error("Not authenticated");
   }
 
-  const factor = entry.weight / 100;
-  const calc = (value: number | null | undefined) =>
-    value === null || value === undefined ? null : Number(value) * factor;
+  // Calculate Precision Macros
+  // If inputs are per-serving, we multiply by factor.
+  // If inputs are TOTAL, factor is 1.
+  // (Assuming standard flow: inputs are per 1 serving, user ate X servings)
+  const quantity = food.quantity || 1;
+  const servingSize = food.serving_size || 1;
+  const factor = quantity / servingSize;
 
-  const calories =
-    entry.manualMacros?.calories ?? calc(entry.match?.kcal_100g ?? null);
-  const protein =
-    entry.manualMacros?.protein ?? calc(entry.match?.protein_100g ?? null);
-  const carbs =
-    entry.manualMacros?.carbs ?? calc(entry.match?.carbs_100g ?? null);
-  const fat = entry.manualMacros?.fat ?? calc(entry.match?.fat_100g ?? null);
-  const fiber = calc(entry.match?.fiber_100g ?? null);
-  const sugar = calc(entry.match?.sugar_100g ?? null);
-  const sodium = calc(entry.match?.sodium_100g ?? null);
+  const finalFood = {
+    ...food,
+    user_id: session.user.id,
+    logged_at: new Date().toISOString(),
+    // Apply precision rounding
+    calories: calc(food.calories, 1),
+    protein: calc(food.protein, 1),
+    carbs: calc(food.carbs, 1),
+    fat: calc(food.fat, 1),
+  };
 
-  const { data, error } = await supabase
+  // Validate before inserting
+  validateMacros(finalFood);
+
+  const { data: insertedFood, error } = await supabase
     .from("food_logs")
-    .insert({
-      user_id: session.user.id,
-      food_name: entry.foodName,
-      weight_g: entry.weight,
-      image_path: entry.imageUrl ?? null,
-      calories,
-      protein,
-      carbs,
-      fat,
-      fiber,
-      sugar,
-      sodium,
-      consumed_at: entry.consumedAt ?? new Date().toISOString(),
-    })
+    .insert(finalFood)
     .select()
     .single();
 
   if (error) {
-    throw error;
+    console.error("Error logging food:", error);
+    throw new Error("Failed to log food");
   }
 
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   revalidatePath("/stats");
-  return data;
+
+  return insertedFood;
 }
 
 // --- Wrappers & New Actions for Client ---
@@ -307,46 +337,15 @@ export async function upsertUserProfile(input: {
   return data;
 }
 
-export async function updateFoodLog(
-  id: string,
-  changes: Partial<{
-    food_name: string;
-    weight_g: number;
-    calories: number | null;
-    protein: number | null;
-    carbs: number | null;
-    fat: number | null;
-  }>,
-) {
-  const roundToTwo = (value: number) => Math.round(value * 100) / 100;
-  const validateMacros = (values: {
-    calories?: number | null;
-    protein?: number | null;
-    carbs?: number | null;
-    fat?: number | null;
-  }) => {
-    const entries = Object.entries(values) as Array<[string, number | null | undefined]>;
-    for (const [label, value] of entries) {
-      if (value === null || value === undefined) continue;
-      if (!Number.isFinite(value) || value < 0) {
-        throw new Error(`Invalid ${label} value: ${value}`);
-      }
-    }
-  };
-
+export async function updateFoodLog(id: string, updates: any) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  if (!session) {
-    throw new Error("You must be signed in to update entries.");
-  }
+  if (!session) throw new Error("Unauthorized");
 
-  if (changes.weight_g !== undefined && changes.weight_g <= 0) {
-    throw new Error("Weight must be greater than 0");
-  }
-
+  // A. Fetch existing log to establish base values
   const { data: currentLog, error: fetchError } = await supabase
     .from("food_logs")
     .select("*")
@@ -355,51 +354,56 @@ export async function updateFoodLog(
     .single();
 
   if (fetchError || !currentLog) {
-    throw new Error("Log not found");
+    throw new Error("Failed to fetch existing log");
   }
 
-  const finalChanges = { ...changes };
+  // B. Calculate Scaling Factors
+  // New quantity/serving size vs Old quantity/serving size
+  const newQuantity = updates.quantity ?? currentLog.quantity ?? 1;
+  const newServingSize = updates.serving_size ?? currentLog.serving_size ?? 1;
 
-  if (
-    typeof changes.weight_g === "number" &&
-    changes.weight_g !== currentLog.weight_g &&
-    currentLog.weight_g > 0
-  ) {
-    const ratio = changes.weight_g / currentLog.weight_g;
+  const safeServingSize = newServingSize === 0 ? 1 : newServingSize;
+  const factor = newQuantity / safeServingSize;
 
-    if (changes.calories === undefined) {
-      finalChanges.calories = roundToTwo((currentLog.calories || 0) * ratio);
-    }
-    if (changes.protein === undefined) {
-      finalChanges.protein = roundToTwo((currentLog.protein || 0) * ratio);
-    }
-    if (changes.carbs === undefined) {
-      finalChanges.carbs = roundToTwo((currentLog.carbs || 0) * ratio);
-    }
-    if (changes.fat === undefined) {
-      finalChanges.fat = roundToTwo((currentLog.fat || 0) * ratio);
-    }
-  }
+  const oldFactor = (currentLog.quantity || 1) / (currentLog.serving_size || 1);
+  const safeOldFactor = oldFactor === 0 ? 1 : oldFactor;
 
-  validateMacros({
-    calories: finalChanges.calories,
-    protein: finalChanges.protein,
-    carbs: finalChanges.carbs,
-    fat: finalChanges.fat,
-  });
+  // C. Calculate final values with Precision
+  // If the user didn't manually update the macro, we scale the OLD macro to the NEW quantity
+  const finalChanges = {
+    ...updates,
+    calories:
+      updates.calories ??
+      (updates.quantity ? calc(currentLog.calories! / safeOldFactor, factor) : undefined),
+    protein:
+      updates.protein ??
+      (updates.quantity ? calc(currentLog.protein! / safeOldFactor, factor) : undefined),
+    carbs:
+      updates.carbs ??
+      (updates.quantity ? calc(currentLog.carbs! / safeOldFactor, factor) : undefined),
+    fat:
+      updates.fat ?? (updates.quantity ? calc(currentLog.fat! / safeOldFactor, factor) : undefined),
+  };
 
-  const { error } = await supabase
+  // D. Validate Updates
+  validateMacros(finalChanges);
+
+  const { data: updatedLog, error } = await supabase
     .from("food_logs")
     .update(finalChanges)
     .eq("id", id)
-    .eq("user_id", session.user.id);
+    .eq("user_id", session.user.id)
+    .select()
+    .single();
 
   if (error) {
-    throw error;
+    throw new Error(`Update failed: ${error.message}`);
   }
 
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   revalidatePath("/stats");
+
+  return updatedLog;
 }
 
 export async function deleteFoodLog(id: string) {
