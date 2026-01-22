@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { adjustedMacros, calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
+import {
+  adjustedMacros,
+  calculateTargets,
+  type ActivityLevel,
+  type GoalType,
+  type MacroNutrients,
+} from "@/lib/nutrition";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase";
 import { getEmbedder } from "@/lib/embedder";
 
@@ -26,18 +32,8 @@ function isErrorWithMessage(error: unknown): error is { message: string } {
   );
 }
 
-type MacroMatch = {
-  usda_id?: number | null;
+type MatchedFood = MacroNutrients & {
   description: string;
-  kcal_100g: number | null;
-  protein_100g: number | null;
-  carbs_100g: number | null;
-  fat_100g: number | null;
-  fiber_100g?: number | null;
-  sugar_100g?: number | null;
-  sodium_100g?: number | null;
-  similarity?: number | null;
-  text_rank?: number | null;
 };
 
 // Precision Helper: Rounds to 2 decimal places to fix floating point errors
@@ -78,6 +74,13 @@ type LogFoodInput = {
   [key: string]: unknown;
 };
 
+type LogFoodPayload = LogFoodInput & {
+  match?: MatchedFood | null;
+  weight?: number | null;
+  foodName?: string | null;
+  consumedAt?: string | null;
+};
+
 const logFoodSchema = {
   parseAsync: async (data: LogFoodInput) => data,
 };
@@ -102,7 +105,7 @@ async function requireAdminSession() {
 
 // --- Core Logging Action ---
 
-export async function logFood(data: any) {
+export async function logFood(data: LogFoodPayload) {
   // Use your existing client creator (adjust import if needed)
   const supabase = await createSupabaseServerClient();
 
@@ -348,7 +351,7 @@ export async function upsertUserProfile(input: {
   return data;
 }
 
-export async function updateFoodLog(id: string, updates: any) {
+export async function updateFoodLog(id: string, updates: Partial<LogFoodInput>) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { session },

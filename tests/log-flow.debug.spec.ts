@@ -16,7 +16,12 @@ const TEST_EMAIL = process.env.PLAYWRIGHT_EMAIL || "tortawan@gmail.com";
 const TEST_PASSWORD = process.env.PLAYWRIGHT_PASSWORD || "password123";
 
 // Shared in-memory storage for the test session to handle re-fetches
-let mockFoodLogs: any[] = [];
+type MockFoodLog = {
+  food_name?: string;
+  [key: string]: unknown;
+};
+
+let mockFoodLogs: MockFoodLog[] = [];
 
 async function ensureLoggedIn(page: Page) {
   await page.goto("/");
