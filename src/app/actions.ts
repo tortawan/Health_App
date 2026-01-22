@@ -134,14 +134,7 @@ export async function logFood(data: any) {
 
   const food = await logFoodSchema.parseAsync(processedData);
 
-  // Calculate Precision Macros
-  // If inputs are per-serving, we multiply by factor.
-  // If inputs are TOTAL, factor is 1.
-  // (Assuming standard flow: inputs are per 1 serving, user ate X servings)
-  const quantity = food.quantity || 1;
-  const servingSize = food.serving_size || 1;
-  const factor = quantity / servingSize;
-
+  
   const finalFood = {
     ...food,
     user_id: session.user.id,
