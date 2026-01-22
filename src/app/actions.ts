@@ -666,21 +666,21 @@ export async function applyMealTemplate(
       throw new Error("Template item missing USDA metadata.");
     }
     const weight = Number(item.grams) * factor;
+    // Calculate 100g normalization factor
     const factorForWeight = weight / 100;
-    const calc = (value: number | null | undefined) =>
-      value === null || value === undefined ? null : Number(value) * factorForWeight;
 
     return {
       user_id: session.user.id,
       food_name: library.description,
       weight_g: Math.round(weight * 1000) / 1000,
-      calories: calc(library.kcal_100g),
-      protein: calc(library.protein_100g),
-      carbs: calc(library.carbs_100g),
-      fat: calc(library.fat_100g),
-      fiber: calc(library.fiber_100g),
-      sugar: calc(library.sugar_100g),
-      sodium: calc(library.sodium_100g),
+      // Use GLOBAL precision calc helper
+      calories: calc(library.kcal_100g, factorForWeight),
+      protein: calc(library.protein_100g, factorForWeight),
+      carbs: calc(library.carbs_100g, factorForWeight),
+      fat: calc(library.fat_100g, factorForWeight),
+      fiber: calc(library.fiber_100g, factorForWeight),
+      sugar: calc(library.sugar_100g, factorForWeight),
+      sodium: calc(library.sodium_100g, factorForWeight),
       consumed_at: new Date(now.getTime() - index * 1000).toISOString(),
     };
   });
@@ -1136,7 +1136,7 @@ export async function reportLogIssue(logId: string, input: {
     corrected_protein: input.corrected_protein ?? log.protein,
     corrected_carbs: input.corrected_carbs ?? log.carbs,
     corrected_fat: input.corrected_fat ?? log.fat,
-    notes: input.notes ?? null,
+    user_notes: input.notes ?? null,
   });
 
   if (error) {
