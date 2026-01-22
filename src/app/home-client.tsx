@@ -24,6 +24,7 @@ import { DailyLogList } from "../components/dashboard/DailyLogList";
 import { DraftReview } from "../components/logging/DraftReview";
 import { ManualSearchModal } from "../components/logging/ManualSearchModal";
 import { CameraErrorBoundary } from "../components/CameraErrorBoundary";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { generateDraftId } from "@/lib/uuid";
 import { adjustedMacros } from "@/lib/nutrition";
 import {
@@ -235,6 +236,40 @@ export default function HomeClient({
     onAnalysisComplete: handleOptimisticScanComplete,
     onAnalysisError: handleOptimisticScanError,
   });
+
+  const scanErrorFallback = useCallback(
+    (error: Error, retry: () => void) => (
+      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-white">
+        <h3 className="text-lg font-semibold">Scan failed</h3>
+        <p className="mt-2 text-sm text-white/70">
+          {error.message || "Something went wrong while scanning your food."}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            className="btn"
+            onClick={() => {
+              retry();
+              setShowScanner(true);
+            }}
+            type="button"
+          >
+            Retry scan
+          </button>
+          <button
+            className="btn bg-white/10 text-white hover:bg-white/20"
+            onClick={() => {
+              retry();
+              setShowScanner(false);
+            }}
+            type="button"
+          >
+            Go back
+          </button>
+        </div>
+      </div>
+    ),
+    [setShowScanner],
+  );
   const pathname = usePathname();
   const isHomeRoute = pathname === "/";
   const shouldShowScanner = isHomeRoute && showScanner;
@@ -780,99 +815,100 @@ export default function HomeClient({
             </div>
           </div>
         )}
-        {(shouldShowScanner || draft.length > 0) ? (
-          <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
-            {draft.length === 0 ? (
-              <CameraErrorBoundary
-                onManualUpload={handleImageUpload}
-                onRetry={() => setShowScanner(true)}
-              >
-                <CameraCapture
-                  captureMode="photo"
-                  isUploading={isAnalyzing || isImageUploading}
-                  isImageUploading={isImageUploading}
-                  filePreview={imagePublicUrl}
-                  templateList={templateList}
-                  selectedTemplateId={selectedTemplateId}
-                  templateScale={templateScale}
-                  onTemplateChange={setSelectedTemplateId}
-                  onTemplateScaleChange={setTemplateScale}
-                  onApplyTemplate={handleApplyTemplate}
-                  onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
-                  isApplyingTemplate={isApplyingTemplate}
-                  onFileChange={(file) => file && handleImageUpload(file)}
-                  analysisMessage={noFoodDetected ? null : analysisMessage}
-                  queuedCount={queuedCount}
-                  queueNotice={queueNotice}
-                  fileInputRef={photoInputRef}
-                />
-                {noFoodDetected && !isAnalyzing && !isImageUploading && (
-                  <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
-                    <p className="text-base font-semibold">
-                      We couldn&apos;t detect any food in that photo.
-                    </p>
-                    <p className="mt-1 text-white/70">
-                      Try another angle, upload a new photo, or log manually.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        className="btn"
-                        onClick={() => {
-                          resetAnalysis();
-                          setShowScanner(true);
-                        }}
-                        type="button"
-                      >
-                        Try again
-                      </button>
-                      <button
-                        className="btn bg-white/10 text-white hover:bg-white/20"
-                        onClick={() => photoInputRef.current?.click()}
-                        type="button"
-                      >
-                        Upload another photo
-                      </button>
-                      <button
-                        className="btn bg-white/10 text-white hover:bg-white/20"
-                        onClick={() => {
-                          setManualOpenIndex(-1);
-                          setManualQuery("");
-                        }}
-                        type="button"
-                      >
-                        Search manually
-                      </button>
+        <ErrorBoundary fallback={scanErrorFallback}>
+          {(shouldShowScanner || draft.length > 0) ? (
+            <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
+              {draft.length === 0 ? (
+                <CameraErrorBoundary
+                  onManualUpload={handleImageUpload}
+                  onRetry={() => setShowScanner(true)}
+                >
+                  <CameraCapture
+                    captureMode="photo"
+                    isUploading={isAnalyzing || isImageUploading}
+                    isImageUploading={isImageUploading}
+                    filePreview={imagePublicUrl}
+                    templateList={templateList}
+                    selectedTemplateId={selectedTemplateId}
+                    templateScale={templateScale}
+                    onTemplateChange={setSelectedTemplateId}
+                    onTemplateScaleChange={setTemplateScale}
+                    onApplyTemplate={handleApplyTemplate}
+                    onOpenTemplateManager={() => setIsTemplateManagerOpen(true)}
+                    isApplyingTemplate={isApplyingTemplate}
+                    onFileChange={(file) => file && handleImageUpload(file)}
+                    analysisMessage={noFoodDetected ? null : analysisMessage}
+                    queuedCount={queuedCount}
+                    queueNotice={queueNotice}
+                    fileInputRef={photoInputRef}
+                  />
+                  {noFoodDetected && !isAnalyzing && !isImageUploading && (
+                    <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+                      <p className="text-base font-semibold">
+                        We couldn&apos;t detect any food in that photo.
+                      </p>
+                      <p className="mt-1 text-white/70">
+                        Try another angle, upload a new photo, or log manually.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          className="btn"
+                          onClick={() => {
+                            resetAnalysis();
+                            setShowScanner(true);
+                          }}
+                          type="button"
+                        >
+                          Try again
+                        </button>
+                        <button
+                          className="btn bg-white/10 text-white hover:bg-white/20"
+                          onClick={() => photoInputRef.current?.click()}
+                          type="button"
+                        >
+                          Upload another photo
+                        </button>
+                        <button
+                          className="btn bg-white/10 text-white hover:bg-white/20"
+                          onClick={() => {
+                            setManualOpenIndex(-1);
+                            setManualQuery("");
+                          }}
+                          type="button"
+                        >
+                          Search manually
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CameraErrorBoundary>
-            ) : (
-              <DraftReview
-                confidenceLabel="High confidence" 
-                draft={draft}
-                editingWeightIndex={editingWeightIndex}
-                isConfirmingAll={isConfirmingAll}
-                isImageUploading={isImageUploading}
-                isSavingTemplate={isSavingTemplate}
-                loggingIndex={loggingIndex}
-                onApplyMatch={(idx, m) => {
-                  const d = [...draft]; d[idx].match = m; setDraft(d);
-                }}
-                onConfirm={handleConfirm}
-                onConfirmAll={handleConfirmAll}
-                onManualSearch={(idx) => {
-                  setManualOpenIndex(idx); setManualQuery(draft[idx].search_term || draft[idx].food_name);
-                }}
-                onSaveTemplate={handleSaveTemplate}
-                onTemplateNameChange={setTemplateName}
-                onToggleWeightEdit={(idx) => setEditingWeightIndex(editingWeightIndex === idx ? null : idx)}
-                onUpdateWeight={(idx, w) => { const d = [...draft]; d[idx].weight = w; setDraft(d); }}
-                templateName={templateName}
-              />
-            )}
-          </div>
-        ) : (
-          <>
+                  )}
+                </CameraErrorBoundary>
+              ) : (
+                <DraftReview
+                  confidenceLabel="High confidence"
+                  draft={draft}
+                  editingWeightIndex={editingWeightIndex}
+                  isConfirmingAll={isConfirmingAll}
+                  isImageUploading={isImageUploading}
+                  isSavingTemplate={isSavingTemplate}
+                  loggingIndex={loggingIndex}
+                  onApplyMatch={(idx, m) => {
+                    const d = [...draft]; d[idx].match = m; setDraft(d);
+                  }}
+                  onConfirm={handleConfirm}
+                  onConfirmAll={handleConfirmAll}
+                  onManualSearch={(idx) => {
+                    setManualOpenIndex(idx); setManualQuery(draft[idx].search_term || draft[idx].food_name);
+                  }}
+                  onSaveTemplate={handleSaveTemplate}
+                  onTemplateNameChange={setTemplateName}
+                  onToggleWeightEdit={(idx) => setEditingWeightIndex(editingWeightIndex === idx ? null : idx)}
+                  onUpdateWeight={(idx, w) => { const d = [...draft]; d[idx].weight = w; setDraft(d); }}
+                  templateName={templateName}
+                />
+              )}
+            </div>
+          ) : (
+            <>
              <section className="card space-y-4">
                <div className="flex items-center justify-between">
                  <div>
@@ -1028,7 +1064,8 @@ export default function HomeClient({
                 </button>
              </div>
           </>
-        )}
+          )}
+        </ErrorBoundary>
       </main>
       {flaggingLog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">

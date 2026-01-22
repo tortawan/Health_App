@@ -1,14 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pipeline } from "@xenova/transformers";
-import {
-  EMBEDDING_MODEL,
-  validateEmbeddingDimensions,
-  validateEmbeddingModel,
-} from "@/lib/embedding-constants";
+import { validateEmbeddingDimensions } from "@/lib/embedding-constants";
+import { validateEmbeddingModel } from "@/lib/config-validator";
 import { LruCache } from "@/lib/lru-cache";
 
-const modelId = validateEmbeddingModel(process.env.EMBEDDING_MODEL ?? EMBEDDING_MODEL);
+const modelId = validateEmbeddingModel();
 const localModelDir =
   process.env.LOCAL_EMBEDDING_MODEL_PATH ??
   path.join(process.cwd(), "public", "models", modelId.split("/").pop() ?? modelId);

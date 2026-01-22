@@ -318,6 +318,22 @@ export async function updateFoodLog(
     fat: number | null;
   }>,
 ) {
+  const roundToTwo = (value: number) => Math.round(value * 100) / 100;
+  const validateMacros = (values: {
+    calories?: number | null;
+    protein?: number | null;
+    carbs?: number | null;
+    fat?: number | null;
+  }) => {
+    const entries = Object.entries(values) as Array<[string, number | null | undefined]>;
+    for (const [label, value] of entries) {
+      if (value === null || value === undefined) continue;
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error(`Invalid ${label} value: ${value}`);
+      }
+    }
+  };
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { session },
@@ -352,20 +368,25 @@ export async function updateFoodLog(
     const ratio = changes.weight_g / currentLog.weight_g;
 
     if (changes.calories === undefined) {
-      finalChanges.calories = Math.round((currentLog.calories || 0) * ratio);
+      finalChanges.calories = roundToTwo((currentLog.calories || 0) * ratio);
     }
     if (changes.protein === undefined) {
-      finalChanges.protein =
-        Math.round((currentLog.protein || 0) * ratio * 10) / 10;
+      finalChanges.protein = roundToTwo((currentLog.protein || 0) * ratio);
     }
     if (changes.carbs === undefined) {
-      finalChanges.carbs =
-        Math.round((currentLog.carbs || 0) * ratio * 10) / 10;
+      finalChanges.carbs = roundToTwo((currentLog.carbs || 0) * ratio);
     }
     if (changes.fat === undefined) {
-      finalChanges.fat = Math.round((currentLog.fat || 0) * ratio * 10) / 10;
+      finalChanges.fat = roundToTwo((currentLog.fat || 0) * ratio);
     }
   }
+
+  validateMacros({
+    calories: finalChanges.calories,
+    protein: finalChanges.protein,
+    carbs: finalChanges.carbs,
+    fat: finalChanges.fat,
+  });
 
   const { error } = await supabase
     .from("food_logs")
