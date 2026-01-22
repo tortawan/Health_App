@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
+import { adjustedMacros, calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 import { createSupabaseServerClient, createSupabaseServiceClient } from "@/lib/supabase";
 import { getEmbedder } from "@/lib/embedder";
 
@@ -106,8 +106,6 @@ export async function logFood(data: any) {
   // Use your existing client creator (adjust import if needed)
   const supabase = await createSupabaseServerClient();
 
-  const food = await logFoodSchema.parseAsync(data);
-
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -115,6 +113,26 @@ export async function logFood(data: any) {
   if (!session) {
     throw new Error("Not authenticated");
   }
+
+  let processedData = { ...data };
+
+  if (data?.match && data?.weight) {
+    const macros = adjustedMacros(data.match, data.weight);
+    processedData = {
+      ...processedData,
+      food_name: data.foodName || data.match.description,
+      weight_g: data.weight,
+      calories: macros?.calories ?? null,
+      protein: macros?.protein ?? null,
+      carbs: macros?.carbs ?? null,
+      fat: macros?.fat ?? null,
+    };
+    delete processedData.match;
+    delete processedData.foodName;
+    delete processedData.weight;
+  }
+
+  const food = await logFoodSchema.parseAsync(processedData);
 
   // Calculate Precision Macros
   // If inputs are per-serving, we multiply by factor.
@@ -127,7 +145,7 @@ export async function logFood(data: any) {
   const finalFood = {
     ...food,
     user_id: session.user.id,
-    logged_at: new Date().toISOString(),
+    logged_at: data.consumedAt || new Date().toISOString(),
     // Apply precision rounding
     calories: calc(food.calories, 1),
     protein: calc(food.protein, 1),
