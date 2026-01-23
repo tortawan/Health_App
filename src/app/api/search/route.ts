@@ -13,8 +13,14 @@ export async function GET(request: Request) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const embed = await getEmbedder();
-  const { data: embedding } = await embed(query);
+  let embedding: number[] | null = null;
+  try {
+    const embed = await getEmbedder();
+    const { data } = await embed(query);
+    embedding = data;
+  } catch (error) {
+    console.warn("Embedding failed, falling back to text-only search", error);
+  }
 
   const { data } = await supabase.rpc("match_foods", {
     query_embedding: embedding ?? null,

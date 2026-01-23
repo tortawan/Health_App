@@ -252,7 +252,7 @@ test("manual search fallback flow", async ({ page }) => {
   await stubLogFood(page);
   await stubNextImage(page);
 
-  await page.route("**/rest/v1/rpc/match_foods", (route) =>
+  await page.route("**/api/search**", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",

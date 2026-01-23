@@ -316,14 +316,8 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
     `${DEBUG_CONFIG.LOG_PREFIX} === STEP 5c-fix: Waiting for Mock Chicken Bowl with timeout ===`
   );
   try {
-    // Trigger refetch by reload
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} Page reloaded - waiting for logs...`);
-
-  // Direct wait
-  await page.reload({ waitUntil: 'networkidle' });  // Fetch logs
-  await page.getByText("Mock Chicken Bowl").waitFor({ timeout: 20000 });
-console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ Mock Chicken Bowl found in DOM`);
-
+    await page.getByText("Mock Chicken Bowl").waitFor({ state: "visible", timeout: 20000 });
+    console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ Mock Chicken Bowl found in DOM`);
   } catch (error) {
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} ❌ Mock Chicken Bowl NOT found in DOM after 10s`);
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} Page has ${mockFoodLogs.length} mock entries`);
