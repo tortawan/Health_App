@@ -11,7 +11,6 @@ import {
   updateFoodLog,
   updateWaterLog,
   reportLogIssue,
-  logCorrection,
   applyMealTemplate,
   deleteMealTemplate,
   saveMealTemplate,
@@ -27,6 +26,7 @@ import { CameraErrorBoundary } from "../components/CameraErrorBoundary";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { generateDraftId } from "@/lib/uuid";
 import { adjustedMacros } from "@/lib/nutrition";
+import { createClient } from "@/lib/supabase-browser";
 import {
   DraftLog,
   FoodLogRecord,
@@ -533,7 +533,13 @@ export default function HomeClient({
       }
 
       if (item.ai_suggested_weight && Math.abs(item.weight - item.ai_suggested_weight) > 10) {
-         await logCorrection({ original: item.ai_suggested_weight, corrected: item.weight, foodName: item.food_name });
+        void logWeightCorrection(
+          {
+            ...item,
+            weight: item.ai_suggested_weight,
+          },
+          item,
+        );
       }
       refreshRecentFoods();
     } catch (err: unknown) {
@@ -591,12 +597,59 @@ export default function HomeClient({
     if (!manualQuery.trim()) return;
     setIsSearching(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(manualQuery)}`);
-      const results = await res.json();
+      let results: MacroMatch[] = [];
+      let usedFallback = false;
+
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const { data, error } = await supabase.rpc("match_foods", {
+          query_embedding: null,
+          query_text: manualQuery,
+          match_threshold: 0.0,
+          match_count: 10,
+          p_user_id: session?.user?.id ?? null,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        results = (data ?? []) as MacroMatch[];
+        usedFallback = true;
+      } catch {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(manualQuery)}`);
+        if (!res.ok) {
+          throw new Error("Search failed");
+        }
+        results = await res.json();
+      }
+
       setSearchResults(results);
+      if (!results.length && usedFallback) {
+        toast.error("No results found. Try a broader search.");
+      }
     } catch { toast.error("Search failed"); } 
     finally { setIsSearching(false); }
   };
+
+  const logWeightCorrection = useCallback(async (original: DraftLog, final: DraftLog) => {
+    try {
+      await fetch("/api/log-correction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          original,
+          final,
+          correctedField: "weight",
+        }),
+      });
+    } catch (error) {
+      console.warn("[Corrections] Non-blocking log failed", error);
+    }
+  }, []);
 
   const logManualCorrection = useCallback(async (originalSearch: string, finalMatchDesc: string) => {
     try {
