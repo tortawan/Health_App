@@ -80,9 +80,10 @@ export async function getEmbedder() {
       localFilesOnly: usingLocalModelCache,
     });
     const data = Array.from(result.data as Float32Array);
-    const dims = Array.isArray(result.dims)
-      ? result.dims[result.dims.length - 1]
-      : result.dims ?? data.length;
+    const resultDims = result.dims ? Array.from(result.dims) : undefined;
+    const dims = resultDims && resultDims.length > 0
+      ? Number(resultDims[resultDims.length - 1])
+      : data.length;
     validateEmbeddingDimensions(dims, "runtime embedder");
     embeddingCache.set(normalizedKey, data);
     return { data, dims };
