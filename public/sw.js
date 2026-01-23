@@ -117,7 +117,7 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         try {
           return await fetch(request.clone());
-        } catch (error) {
+        } catch {
           const body = await request.clone().text();
           const headers = {};
           request.headers.forEach((value, key) => {

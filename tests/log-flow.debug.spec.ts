@@ -1,5 +1,5 @@
 import path from "node:path";
-import { test, expect, type Page } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 import {
   enableApiLogging,
   logPageState,
@@ -22,7 +22,7 @@ async function ensureLoggedIn(page: Page) {
   await page.goto("/");
   try {
     await page.waitForURL(/.*\/login/, { timeout: 3000 });
-  } catch (_e) {
+  } catch {
     // Already logged in or on home
   }
 
@@ -271,7 +271,7 @@ test("[DEBUG] image draft to confirmed log flow", async ({ page }) => {
   try {
     await page.getByText("Draft entries").waitFor({ state: "hidden", timeout: 10000 });
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} ✅ Draft section disappeared`);
-  } catch (e) {
+  } catch {
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} ⚠️ Draft section still visible or not found`);
   }
 
