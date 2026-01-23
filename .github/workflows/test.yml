@@ -47,4 +47,4 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }} # <-- Add this line
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: "mock-key-for-test"
-		  EMBEDDING_MODEL: "Xenova/all-MiniLM-L6-v2"
+          EMBEDDING_MODEL: "Xenova/all-MiniLM-L6-v2"
