@@ -33,18 +33,11 @@ async function stubLogFood(page: Page) {
   await page.route("**/api/log-food", async (route) => {
     const method = route.request().method();
 
-    // FIX: Enhanced logging for all methods
+    // Enhanced logging for all methods
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] ${method} /api/log-food called`);
 
     if (method === "GET") {
-      // NEW: Handle GET - return stored logs
-      console.log(
-        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] GET - Returning ${mockFoodLogs.length} logs`
-      );
-      console.log(
-        `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs keys:`,
-        Object.keys(mockFoodLogs[0] || {})
-      );
+      // Handle GET - return stored logs
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -57,94 +50,54 @@ async function stubLogFood(page: Page) {
     }
 
     if (method !== "POST") {
-      // Continue for other methods (PUT, DELETE, etc.)
       await route.continue();
       return;
     }
 
-    // EXISTING POST HANDLER (unchanged)
+    // EXISTING POST HANDLER
     const postData = route.request().postDataJSON();
 
-    // FIX 1: Enhanced logging
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData keys:`, Object.keys(postData || {}));
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] postData:`, JSON.stringify(postData, null, 2));
-
-    // FIX 2: Fallback values to prevent undefined errors
+    // Fallback values to prevent undefined errors
     const foodName = postData?.foodName || postData?.food_name || "Unknown Food";
     const weight = postData?.weight || postData?.weight_g || 100;
     const consumedAt = postData?.consumed_at || postData?.date || new Date().toISOString();
 
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`
-    );
-    console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`);
-
-    // Create mock entry (your existing logic with fallbacks)
+    // Create mock entry
     const mockEntry = {
       ...postData,
       id: crypto.randomUUID?.() || `mock-${Date.now()}`,
       user_id: "test-user-id",
       food_name: foodName,
       weight_g: weight,
-      calories:
-        postData?.match?.calories ||
-        postData?.manualMacros?.calories ||
-        postData?.calories ||
-        165,
-      protein:
-        postData?.match?.protein ||
-        postData?.manualMacros?.protein ||
-        postData?.protein ||
-        31,
-      carbs:
-        postData?.match?.carbs ||
-        postData?.manualMacros?.carbs ||
-        postData?.carbs ||
-        0,
-      fat: postData?.match?.fat || postData?.manualMacros?.fat || postData?.fat || 3.6,
+      calories: postData?.match?.calories || 165,
+      protein: postData?.match?.protein || 31,
+      carbs: postData?.match?.carbs || 0,
+      fat: postData?.match?.fat || 3.6,
       consumed_at: consumedAt,
       created_at: new Date().toISOString(),
-      image_url: postData?.imageUrl || postData?.image_url || "https://placehold.co/100x100.png",
-      image_path: postData?.imagePath || postData?.image_path || "food-images/mock-path",
+      image_url: postData?.imageUrl || "https://placehold.co/100x100.png",
+      image_path: postData?.imagePath || "food-images/mock-path",
       meal_type: postData?.meal_type || "snack",
       serving_size: postData?.serving_size || 1,
       serving_unit: postData?.serving_unit || "serving",
     };
 
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Created mock entry with food_name: "${mockEntry.food_name}"`
-    );
     mockFoodLogs.push(mockEntry);
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] mockFoodLogs now contains ${mockFoodLogs.length} items: ${mockFoodLogs.map((l) => l.food_name).join(", ")}`
-    );
-
-    const responseBody = {
-      data: [mockEntry],
-      success: true,
-    };
-
-    console.log(
-      `${DEBUG_CONFIG.LOG_PREFIX} [STUB] Responding with:`,
-      JSON.stringify(responseBody, null, 2)
-    );
 
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(responseBody),
+      body: JSON.stringify({
+        data: [mockEntry],
+        success: true,
+      }),
     });
   });
 
   // Handle GET requests (Refetching logs)
   await page.route(/.*(food_logs|get-logs).*/, async (route) => {
       if (route.request().method() === 'GET') {
-          const isSupabaseDirect = route.request().url().includes('rest/v1');
-          if (isSupabaseDirect) {
-             await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(mockFoodLogs) });
-          } else {
-             await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: mockFoodLogs }) });
-          }
+          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: mockFoodLogs }) });
       } else {
           await route.continue();
       }
@@ -253,7 +206,6 @@ test("manual search fallback flow", async ({ page }) => {
   await stubNextImage(page);
 
   // CRITICAL FIX: Force the Supabase RPC to fail so the code falls back to the API.
-  // Without this, the RPC might succeed (return empty) and the API fallback is never used.
   await page.route("**/rest/v1/rpc/match_foods", route => route.abort());
 
   await page.route("**/api/search**", (route) =>
@@ -279,9 +231,11 @@ test("manual search fallback flow", async ({ page }) => {
   await page.getByPlaceholder("Search for a food (e.g., grilled chicken)").fill("Greek Yogurt");
   await page.getByRole("button", { name: "Search" }).click();
   await page.getByText("Greek Yogurt Plain").first().click();
-  await page.getByRole("button", { name: "Add to log" }).click();
+  
+  // FIXED: Changed "Add to log" to "Confirm" to match UI
+  await page.getByRole("button", { name: "Confirm" }).click();
 
-  await expect(page.getByRole("button", { name: "Add to log" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Confirm" })).toBeHidden();
   await expect(page.getByText("Greek Yogurt")).toBeVisible();
   
   await expect(
@@ -320,7 +274,7 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   await stubStorage(page);
   await stubNextImage(page);
 
-  // FIX: Provide a route handler to prevent 404s, but don't rely on side effects variables
+  // FIX: Provide a route handler but removed the boolean flag 'correctionTriggered'
   await page.route("**/api/log-correction", (route) => {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true }) });
   });
@@ -335,7 +289,7 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   await weightInput.fill("250");
   await page.getByRole("button", { name: "Done" }).click();
 
-  // FIX: Assert on the request object directly using Promise.all to catch it while the click happens.
+  // FIX: Assert on the request object directly using Promise.all
   const [logCorrectionRequest] = await Promise.all([
     page.waitForRequest("**/api/log-correction"),
     page.getByRole("button", { name: "Confirm", exact: true }).click(),
@@ -343,7 +297,7 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
 
   expect(logCorrectionRequest).toBeTruthy();
   
-  // Verify the payload to ensure correct data is sent
+  // Verify the payload
   const postData = logCorrectionRequest.postDataJSON();
   expect(postData.correctedField).toBe("weight");
   expect(postData.original.weight).toBe(200);
