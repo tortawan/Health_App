@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { createSupabaseServerClient } from "@/lib/supabase";
+
+type SupabaseClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
 const buildSupabaseMock = (rpcResult: { data: unknown; error: unknown }) => ({
   rpc: vi.fn().mockResolvedValue(rpcResult),
@@ -289,7 +292,7 @@ describe("analyze route", () => {
     };
 
     const threshold = await __test__.deriveMatchThreshold({
-      supabase: supabase as unknown as any,
+      supabase: supabase as unknown as SupabaseClient,
       userId: "user-123",
       baseThreshold: 0.6,
     });

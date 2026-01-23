@@ -1,4 +1,4 @@
-import { Page, expect } from "@playwright/test";
+import { Locator, Page, expect } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -215,7 +215,7 @@ export async function monitorApiCall(page: Page, urlPattern: string) {
 
 export async function assertWithDebug(
   page: Page, 
-  locator: any, 
+  locator: Locator, 
   state: "visible" | "hidden" | "attached" | "detached", 
   timeout = 5000
 ) {
@@ -241,7 +241,7 @@ export async function assertWithDebug(
 
 export async function waitForWithDebug(
   page: Page, 
-  locator: any, 
+  locator: Locator, 
   label: string, 
   timeout = 5000
 ) {
