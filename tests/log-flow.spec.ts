@@ -252,6 +252,10 @@ test("manual search fallback flow", async ({ page }) => {
   await stubLogFood(page);
   await stubNextImage(page);
 
+  // CRITICAL FIX: Force the Supabase RPC to fail so the code falls back to the API.
+  // Without this, the RPC might succeed (return empty) and the API fallback is never used.
+  await page.route("**/rest/v1/rpc/match_foods", route => route.abort());
+
   await page.route("**/api/search**", (route) =>
     route.fulfill({
       status: 200,
@@ -316,9 +320,8 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   await stubStorage(page);
   await stubNextImage(page);
 
-  let correctionTriggered = false;
+  // FIX: Provide a route handler to prevent 404s, but don't rely on side effects variables
   await page.route("**/api/log-correction", (route) => {
-    correctionTriggered = true;
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true }) });
   });
 
@@ -332,11 +335,16 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   await weightInput.fill("250");
   await page.getByRole("button", { name: "Done" }).click();
 
+  // FIX: Assert on the request object directly using Promise.all to catch it while the click happens.
   const [logCorrectionRequest] = await Promise.all([
     page.waitForRequest("**/api/log-correction"),
     page.getByRole("button", { name: "Confirm", exact: true }).click(),
   ]);
 
   expect(logCorrectionRequest).toBeTruthy();
-  expect(correctionTriggered).toBeTruthy();
+  
+  // Verify the payload to ensure correct data is sent
+  const postData = logCorrectionRequest.postDataJSON();
+  expect(postData.correctedField).toBe("weight");
+  expect(postData.original.weight).toBe(200);
 });
