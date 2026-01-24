@@ -33,15 +33,16 @@ export default async function HomePage({
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const supabase = await createSupabaseServerClient();
+  
+  // FIX: Use getUser() instead of getSession() for security
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
-  // FIX 1: Await searchParams before accessing properties
   const params = await searchParams;
   const requestedDate = parseDateParam(params?.date);
 
@@ -53,7 +54,7 @@ export default async function HomePage({
   const { data: logs, error } = await supabase
     .from("food_logs")
     .select("*")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id) // Use user.id
     .gte("consumed_at", dayStart.toISOString())
     .lt("consumed_at", nextDay.toISOString())
     .order("consumed_at", { ascending: false });
@@ -65,7 +66,7 @@ export default async function HomePage({
   const { data: profile } = await supabase
     .from("user_profiles")
     .select("*")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id) // Use user.id
     .maybeSingle();
 
   if (!profile || profile.daily_calorie_target === null || profile.daily_calorie_target === 0) {
@@ -77,7 +78,7 @@ export default async function HomePage({
     .select(
       "id, name, created_at, meal_template_items (id, usda_id, grams, usda_library (description))",
     )
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id) // Use user.id
     .order("created_at", { ascending: false })
     .limit(20);
 
@@ -98,7 +99,7 @@ export default async function HomePage({
   const { data: portionMemoryRaw } = await supabase
     .from("food_logs")
     .select("food_name, weight_g")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id) // Use user.id
     .order("consumed_at", { ascending: false })
     .limit(500);
 
@@ -126,14 +127,14 @@ export default async function HomePage({
     .select(
       "food_name, calories, protein, carbs, fat, fiber, sugar, sodium, weight_g, consumed_at",
     )
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id) // Use user.id
     .order("consumed_at", { ascending: false })
     .limit(40);
 
   const { data: waterLogs } = await supabase
     .from("water_logs")
     .select("id, amount_ml, logged_at")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id) // Use user.id
     .gte("logged_at", dayStart.toISOString())
     .lt("logged_at", nextDay.toISOString())
     .order("logged_at", { ascending: false });
@@ -144,7 +145,6 @@ export default async function HomePage({
       initialSelectedDate={formatDateParam(dayStart)}
       initialProfile={profile as UserProfile | null}
       initialTemplates={resolvedTemplates}
-      // ✅ FIX: Passed the correct prop name to match HomeClient props
       initialPortionMemories={portionMemory}
       initialRecentFoods={recentFoods ?? []}
       initialWaterLogs={waterLogs ?? []}
