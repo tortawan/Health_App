@@ -103,13 +103,12 @@ async function requireAdminSession() {
   return session;
 }
 
-// ... existing imports ...
+// ... imports
 
 export async function logFood(data: LogFoodPayload) {
-  // Use your existing client creator (adjust import if needed)
   const supabase = await createSupabaseServerClient();
 
-  // FIX 1: Use getUser() instead of getSession() for better security
+  // FIX 1: Use getUser() for security (fixes "insecure" warning)
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -118,18 +117,15 @@ export async function logFood(data: LogFoodPayload) {
     throw new Error("Not authenticated");
   }
 
+  // FIX 2: Extract the image URL before cleaning the data object
+  // The client sends 'imageUrl', but the DB wants 'image_path'
+  const imagePath = (data as any).imageUrl || (data as any).image_path || null;
+
   let processedData = { ...data };
 
-  // FIX 2: Explicitly remove fields that are not in the database table
-  // This prevents the "Could not find column" error
-  delete processedData.match;
-  delete processedData.foodName;
-  delete processedData.weight;
-  delete processedData.consumedAt; // <--- This was causing the schema error
-
+  // Calculate macros if a match is provided
   if (data?.match && data?.weight) {
     const macros = adjustedMacros(data.match, data.weight);
-    // Overwrite the processed data with calculated values
     processedData = {
       ...processedData,
       food_name: data.foodName || data.match.description,
@@ -141,13 +137,22 @@ export async function logFood(data: LogFoodPayload) {
     };
   }
 
+  // FIX 3: Explicitly delete fields that don't exist in the 'food_logs' table
+  delete processedData.match;
+  delete processedData.foodName;
+  delete processedData.weight;
+  delete processedData.consumedAt; // Fixes "consumedAt" column error
+  delete (processedData as any).imageUrl; // Fixes "imageUrl" column error
+
   const food = await logFoodSchema.parseAsync(processedData);
 
   const finalFood = {
     ...food,
-    user_id: user.id, // Use safe user ID
-    // FIX 3: Change 'logged_at' to 'consumed_at' to match the DB schema
+    user_id: user.id,
+    // FIX 4: Map consumedAt (client) to consumed_at (DB)
     consumed_at: data.consumedAt || new Date().toISOString(),
+    // FIX 5: Save the image path to the correct column
+    image_path: imagePath,
     // Apply precision rounding
     calories: calc(food.calories, 1),
     protein: calc(food.protein, 1),
@@ -155,7 +160,6 @@ export async function logFood(data: LogFoodPayload) {
     fat: calc(food.fat, 1),
   };
 
-  // Validate before inserting
   validateMacros(finalFood);
 
   const { data: insertedFood, error } = await supabase
