@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import React from "react";
 import { MealTemplate } from "@/types/food";
 
 type Props = {
@@ -92,6 +91,7 @@ export function CameraCapture({
 
       <input
         accept="image/*"
+        capture="environment"
         className="hidden"
         id={uploadInputId}
         ref={fileInputRef}

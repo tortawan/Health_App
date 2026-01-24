@@ -92,6 +92,7 @@ export function useScanner(options: UseScannerOptions = {}) {
   const [imagePublicUrl, setImagePublicUrl] = useState<string | null>(null);
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
   const [noFoodDetected, setNoFoodDetected] = useState(false);
+  const [usedFallback, setUsedFallback] = useState(false);
   const [queuedCount, setQueuedCount] = useState(0);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
 
@@ -143,6 +144,8 @@ export function useScanner(options: UseScannerOptions = {}) {
         if (resolvedImageUrl) {
           setImagePublicUrl(resolvedImageUrl);
         }
+
+        setUsedFallback(Boolean(data?.usedFallback));
 
         if (data?.noFoodDetected || draftItems.length === 0) {
           setNoFoodDetected(true);
@@ -425,6 +428,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     setAnalysisMessage(null);
     setNoFoodDetected(false);
     setQueueNotice(null);
+    setUsedFallback(false);
   };
 
   return {
@@ -443,6 +447,7 @@ export function useScanner(options: UseScannerOptions = {}) {
     handleImageUpload,
     analysisMessage,
     noFoodDetected,
+    usedFallback,
     queuedCount,
     queueNotice,
     resetAnalysis,
