@@ -103,24 +103,33 @@ async function requireAdminSession() {
   return session;
 }
 
-// --- Core Logging Action ---
+// ... existing imports ...
 
 export async function logFood(data: LogFoodPayload) {
   // Use your existing client creator (adjust import if needed)
   const supabase = await createSupabaseServerClient();
 
+  // FIX 1: Use getUser() instead of getSession() for better security
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     throw new Error("Not authenticated");
   }
 
   let processedData = { ...data };
 
+  // FIX 2: Explicitly remove fields that are not in the database table
+  // This prevents the "Could not find column" error
+  delete processedData.match;
+  delete processedData.foodName;
+  delete processedData.weight;
+  delete processedData.consumedAt; // <--- This was causing the schema error
+
   if (data?.match && data?.weight) {
     const macros = adjustedMacros(data.match, data.weight);
+    // Overwrite the processed data with calculated values
     processedData = {
       ...processedData,
       food_name: data.foodName || data.match.description,
@@ -130,18 +139,15 @@ export async function logFood(data: LogFoodPayload) {
       carbs: macros?.carbs ?? null,
       fat: macros?.fat ?? null,
     };
-    delete processedData.match;
-    delete processedData.foodName;
-    delete processedData.weight;
   }
 
   const food = await logFoodSchema.parseAsync(processedData);
 
-  
   const finalFood = {
     ...food,
-    user_id: session.user.id,
-    logged_at: data.consumedAt || new Date().toISOString(),
+    user_id: user.id, // Use safe user ID
+    // FIX 3: Change 'logged_at' to 'consumed_at' to match the DB schema
+    consumed_at: data.consumedAt || new Date().toISOString(),
     // Apply precision rounding
     calories: calc(food.calories, 1),
     protein: calc(food.protein, 1),
