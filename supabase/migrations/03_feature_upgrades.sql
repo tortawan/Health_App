@@ -1,17 +1,14 @@
--- User-personalized search, hydration tracking, privacy controls, and maintenance tasks
-
--- Add privacy toggle to profiles
+-- 1. Add privacy toggle
 alter table if exists public.user_profiles
   add column if not exists is_public boolean not null default false;
 
--- Capture extended nutrients on log rows
+-- 2. Add extended nutrients
 alter table if exists public.food_logs
   add column if not exists fiber numeric,
   add column if not exists sugar numeric,
   add column if not exists sodium numeric;
 
--- Personalized hybrid match: boost foods a user has logged before
--- FIX: Drop the old 4-argument version to avoid function overloading conflicts
+-- 3. Update match_foods function
 drop function if exists match_foods(vector(384), text, float, int);
 
 create or replace function match_foods (
@@ -53,7 +50,6 @@ begin
     select
       u.*,
       (1 - (u.embedding <=> query_embedding)) as base_similarity,
-      -- FIX: Explicitly cast ts_rank_cd to float (double precision) to match return type
       coalesce(ts_rank_cd(u.search_text, ts_query), 0)::float as text_rank,
       case when pf.food_name is not null then 0.1 else 0 end as familiarity_boost
     from public.usda_library u
@@ -82,7 +78,7 @@ begin
 end;
 $$;
 
--- Hydration tracking
+-- 4. Create Water Logs Table
 create table if not exists public.water_logs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
@@ -90,6 +86,7 @@ create table if not exists public.water_logs (
   logged_at timestamptz not null default now()
 );
 
+-- 5. Enable RLS for Water Logs
 alter table if exists public.water_logs enable row level security;
 drop policy if exists "Users can select their water logs" on public.water_logs;
 drop policy if exists "Users can insert their water logs" on public.water_logs;
@@ -104,33 +101,3 @@ create policy "Users can insert their water logs"
 
 create index if not exists water_logs_user_date_idx
   on public.water_logs (user_id, logged_at desc);
-
--- Index maintenance helper
-create or replace function maintenance_vector_index()
-returns void
-language plpgsql
-as $$
-declare
-  exists_idx boolean := false;
-begin
-  select true into exists_idx
-  from pg_class c
-  where c.relname = 'usda_library_embedding_idx'
-    and c.relkind = 'i';
-
-  if exists_idx then
-    execute 'reindex index usda_library_embedding_idx';
-  end if;
-end;
-$$;
-
--- Schedule monthly reindex via pg_cron
-create extension if not exists pg_cron;
-
-do $$
-begin
-  if not exists (select 1 from cron.job where jobname = 'monthly_vector_reindex') then
-    perform cron.schedule('monthly_vector_reindex', '0 3 1 * *', $$select maintenance_vector_index();$$);
-  end if;
-end;
-$$;
