@@ -119,7 +119,8 @@ export async function logFood(data: LogFoodPayload) {
 
   // FIX 2: Extract the image URL before cleaning the data object
   // The client sends 'imageUrl', but the DB wants 'image_path'
-  const imagePath = (data as any).imageUrl || (data as any).image_path || null;
+  // Using bracket notation because LogFoodPayload has [key: string]: unknown
+  const imagePath = (data["imageUrl"] as string) || (data["image_path"] as string) || null;
 
   let processedData = { ...data };
 
@@ -142,7 +143,7 @@ export async function logFood(data: LogFoodPayload) {
   delete processedData.foodName;
   delete processedData.weight;
   delete processedData.consumedAt; // Fixes "consumedAt" column error
-  delete (processedData as any).imageUrl; // Fixes "imageUrl" column error
+  delete processedData["imageUrl"]; // Fixes "imageUrl" column error without using 'as any'
 
   const food = await logFoodSchema.parseAsync(processedData);
 
