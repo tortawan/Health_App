@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef } from "react";
 import Image from "next/image";
-import { AlertTriangle } from "lucide-react";
 import { adjustedMacros } from "@/lib/nutrition";
 import { formatNumber } from "@/lib/format";
 import { DraftLog, MacroMatch } from "@/types/food";
@@ -109,9 +108,8 @@ export function DraftReview({
           <p className="text-sm text-emerald-400">{confidenceLabel}</p>
         </div>
         {usedFallback ? (
-          <div className="flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            AI limits reached. Using basic search.
+          <div className="rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
+            ⚠️ AI Limit Reached
           </div>
         ) : null}
         {draft.length > 1 && (

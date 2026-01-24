@@ -12,27 +12,45 @@ export interface Database {
       ai_corrections: {
         Row: {
           id: string
+          source_log_id: string | null
           user_id: string
-          original_search: string
-          final_match_desc: string
-          correction_type: string
-          logged_at: string
+          image_path: string | null
+          corrected_food_name: string | null
+          corrected_weight_g: number | null
+          corrected_calories: number | null
+          corrected_protein: number | null
+          corrected_carbs: number | null
+          corrected_fat: number | null
+          notes: string | null
+          created_at: string
         }
         Insert: {
           id?: string
+          source_log_id?: string | null
           user_id: string
-          original_search: string
-          final_match_desc: string
-          correction_type: string
-          logged_at?: string
+          image_path?: string | null
+          corrected_food_name?: string | null
+          corrected_weight_g?: number | null
+          corrected_calories?: number | null
+          corrected_protein?: number | null
+          corrected_carbs?: number | null
+          corrected_fat?: number | null
+          notes?: string | null
+          created_at?: string
         }
         Update: {
           id?: string
+          source_log_id?: string | null
           user_id?: string
-          original_search?: string
-          final_match_desc?: string
-          correction_type?: string
-          logged_at?: string
+          image_path?: string | null
+          corrected_food_name?: string | null
+          corrected_weight_g?: number | null
+          corrected_calories?: number | null
+          corrected_protein?: number | null
+          corrected_carbs?: number | null
+          corrected_fat?: number | null
+          notes?: string | null
+          created_at?: string
         }
       }
       food_logs: {

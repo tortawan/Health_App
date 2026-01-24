@@ -15,7 +15,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_public, daily_calorie_target")
+    .select("is_public, daily_calorie_target, daily_protein_target")
     .eq("user_id", session.user.id)
     .maybeSingle();
 
@@ -25,12 +25,18 @@ export default async function SettingsPage() {
     await updatePrivacy(desired);
   };
 
-  const updateDailyTarget = async (formData: FormData) => {
+  const updateGoals = async (formData: FormData) => {
     "use server";
-    const rawTarget = formData.get("daily_calorie_target");
-    const parsedTarget = typeof rawTarget === "string" ? Number(rawTarget) : NaN;
+    const rawCalories = formData.get("daily_calorie_target");
+    const rawProtein = formData.get("daily_protein_target");
+    const parsedCalories = typeof rawCalories === "string" ? Number(rawCalories) : NaN;
+    const parsedProtein = typeof rawProtein === "string" ? Number(rawProtein) : NaN;
 
-    if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+    if (!Number.isFinite(parsedCalories) || parsedCalories <= 0) {
+      return;
+    }
+
+    if (!Number.isFinite(parsedProtein) || parsedProtein <= 0) {
       return;
     }
 
@@ -47,7 +53,8 @@ export default async function SettingsPage() {
       .from("user_profiles")
       .upsert({
         user_id: updateSession.user.id,
-        daily_calorie_target: parsedTarget,
+        daily_calorie_target: parsedCalories,
+        daily_protein_target: parsedProtein,
       });
   };
 
@@ -75,17 +82,31 @@ export default async function SettingsPage() {
             Set a daily goal to track your progress ring on the dashboard.
           </p>
         </div>
-        <form action={updateDailyTarget} className="flex flex-wrap items-center gap-3">
-          <input
-            className="w-40 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
-            defaultValue={profile?.daily_calorie_target ?? 2000}
-            min={500}
-            name="daily_calorie_target"
-            step={10}
-            type="number"
-          />
+        <form action={updateGoals} className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-xs text-white/60">
+            Daily calories
+            <input
+              className="w-40 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-emerald-400 focus:outline-none"
+              defaultValue={profile?.daily_calorie_target ?? 2000}
+              min={500}
+              name="daily_calorie_target"
+              step={10}
+              type="number"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-white/60">
+            Daily protein (g)
+            <input
+              className="w-40 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-emerald-400 focus:outline-none"
+              defaultValue={profile?.daily_protein_target ?? 150}
+              min={10}
+              name="daily_protein_target"
+              step={5}
+              type="number"
+            />
+          </label>
           <button className="btn" type="submit">
-            Save target
+            Save goals
           </button>
         </form>
       </div>
