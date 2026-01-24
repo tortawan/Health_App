@@ -12,27 +12,27 @@ export type DraftLog = {
   weight: number;  // in grams
   search_term: string;  // Original search term
   match: MacroMatch | null;  // Nutrition data matched to this item
+  matches?: MacroMatch[];  // Optional extra matches
+  quantity_estimate?: string;  // AI estimate (e.g., "medium portion, ~150g")
   image_base64?: string;  // Base64 encoded image
   created_at?: Date;  // When item was created
 };
 
 /**
  * MacroMatch: Nutrition data for a food item
- * 
- * ✅ CHANGES:
- * - Added `id` field to track matches uniquely
- * - Ensures correct match is applied to correct item
  */
 export type MacroMatch = {
-  id: string;  // ✅ NEW: Unique ID for this match
   usda_id?: number | null;
-  food_name: string;  // e.g., "Boneless Chicken Breast"
-  calories: number;  // Total calories
-  protein: number;  // grams
-  carbs: number;  // grams
-  fat: number;  // grams
-  serving_size: number;  // e.g., 100
-  serving_unit: string;  // e.g., "g" or "oz"
+  description: string;
+  kcal_100g: number | null;
+  protein_100g: number | null;
+  carbs_100g: number | null;
+  fat_100g: number | null;
+  fiber_100g?: number | null;
+  sugar_100g?: number | null;
+  sodium_100g?: number | null;
+  similarity?: number | null;
+  text_rank?: number | null;
 };
 
 /**

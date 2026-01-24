@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { MacroMatch } from "@/types/food";
 import { formatNumber } from "@/lib/format";
 

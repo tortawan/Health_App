@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import Image from "next/image";
+import { AlertTriangle } from "lucide-react";
 import { adjustedMacros } from "@/lib/nutrition";
 import { formatNumber } from "@/lib/format";
 import { DraftLog, MacroMatch } from "@/types/food";
 
 type Props = {
   draft: DraftLog[];
+  imageSrc?: string | null;
+  usedFallback?: boolean;
   confidenceLabel: string;
   editingWeightIndex: number | null;
   loggingIndex: number | null;
@@ -38,6 +42,8 @@ const QUICK_PRESETS = [
 
 export function DraftReview({
   draft,
+  imageSrc,
+  usedFallback = false,
   confidenceLabel,
   editingWeightIndex,
   loggingIndex,
@@ -102,6 +108,12 @@ export function DraftReview({
           <h2 className="text-xl font-bold text-white">Draft entries</h2>
           <p className="text-sm text-emerald-400">{confidenceLabel}</p>
         </div>
+        {usedFallback ? (
+          <div className="flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            AI limits reached. Using basic search.
+          </div>
+        ) : null}
         {draft.length > 1 && (
           <button
             className="text-sm font-medium text-emerald-400 hover:text-emerald-300"
@@ -113,6 +125,18 @@ export function DraftReview({
           </button>
         )}
       </div>
+
+      {imageSrc ? (
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/40">
+          <Image
+            alt="Scanned meal"
+            className="h-64 w-full object-cover"
+            height={256}
+            src={imageSrc}
+            width={640}
+          />
+        </div>
+      ) : null}
 
       {/* Save as Template UI (optional) */}
       {draft.length > 1 && (
@@ -147,7 +171,6 @@ export function DraftReview({
               : { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
             const weightChange = getWeightChange(index, item.weight);
-            const manualSearchLabel = item.match ? "Reject match" : "Manual search";
 
             return (
               <div
@@ -276,6 +299,22 @@ export function DraftReview({
                     </div>
                   </div>
                 ) : null}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  {QUICK_PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      className={`rounded-full border px-3 py-1 transition ${
+                        item.weight === preset.value
+                          ? "border-emerald-400 bg-emerald-500/20 text-emerald-100"
+                          : "border-white/10 bg-white/5 text-white/70 hover:border-emerald-400/60"
+                      }`}
+                      onClick={() => onUpdateWeight(index, preset.value)}
+                      type="button"
+                    >
+                      {preset.label.split(" ")[0]}
+                    </button>
+                  ))}
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-sm">
                   <button
                     className="btn disabled:cursor-not-allowed disabled:opacity-50"
@@ -308,7 +347,7 @@ export function DraftReview({
                     onClick={() => onManualSearch(index)}
                     type="button"
                   >
-                    {manualSearchLabel}
+                    Wrong Food?
                   </button>
                 </div>
               </div>

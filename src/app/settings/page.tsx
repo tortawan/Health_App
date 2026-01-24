@@ -15,7 +15,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("is_public")
+    .select("is_public, daily_calorie_target")
     .eq("user_id", session.user.id)
     .maybeSingle();
 
@@ -23,6 +23,32 @@ export default async function SettingsPage() {
     "use server";
     const desired = formData.get("is_public") === "on";
     await updatePrivacy(desired);
+  };
+
+  const updateDailyTarget = async (formData: FormData) => {
+    "use server";
+    const rawTarget = formData.get("daily_calorie_target");
+    const parsedTarget = typeof rawTarget === "string" ? Number(rawTarget) : NaN;
+
+    if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+      return;
+    }
+
+    const supabaseServer = await createSupabaseServerClient();
+    const {
+      data: { session: updateSession },
+    } = await supabaseServer.auth.getSession();
+
+    if (!updateSession) {
+      redirect("/login");
+    }
+
+    await supabaseServer
+      .from("user_profiles")
+      .upsert({
+        user_id: updateSession.user.id,
+        daily_calorie_target: parsedTarget,
+      });
   };
 
   return (
@@ -40,6 +66,28 @@ export default async function SettingsPage() {
         <Link className="btn bg-white/10 text-white hover:bg-white/20" href="/">
           Back to tracker
         </Link>
+      </div>
+
+      <div className="card space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-white">Daily calorie target</p>
+          <p className="text-xs text-white/60">
+            Set a daily goal to track your progress ring on the dashboard.
+          </p>
+        </div>
+        <form action={updateDailyTarget} className="flex flex-wrap items-center gap-3">
+          <input
+            className="w-40 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+            defaultValue={profile?.daily_calorie_target ?? 2000}
+            min={500}
+            name="daily_calorie_target"
+            step={10}
+            type="number"
+          />
+          <button className="btn" type="submit">
+            Save target
+          </button>
+        </form>
       </div>
 
       <div className="card space-y-3">

@@ -224,6 +224,7 @@ export default function HomeClient({
     isAnalyzing,
     isImageUploading,
     imagePublicUrl,
+    usedFallback,
     analysisMessage,
     noFoodDetected,
     queuedCount,
@@ -236,6 +237,7 @@ export default function HomeClient({
     onAnalysisComplete: handleOptimisticScanComplete,
     onAnalysisError: handleOptimisticScanError,
   });
+  const isScanning = isAnalyzing || isImageUploading;
 
   const scanErrorFallback = useCallback(
     (error: Error, retry: () => void) => (
@@ -871,6 +873,15 @@ export default function HomeClient({
         <ErrorBoundary fallback={scanErrorFallback}>
           {(shouldShowScanner || draft.length > 0) ? (
             <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
+              {draft.length === 0 && isScanning ? (
+                <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-white">
+                  <p className="text-base font-semibold">Analyzing your food...</p>
+                  <p className="text-xs text-white/60">Gemini + USDA matches in progress.</p>
+                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                    <div className="h-full w-1/2 animate-pulse rounded-full bg-emerald-400" />
+                  </div>
+                </div>
+              ) : null}
               {draft.length === 0 ? (
                 <CameraErrorBoundary
                   onManualUpload={handleImageUpload}
@@ -878,7 +889,7 @@ export default function HomeClient({
                 >
                   <CameraCapture
                     captureMode="photo"
-                    isUploading={isAnalyzing || isImageUploading}
+                    isUploading={isScanning}
                     isImageUploading={isImageUploading}
                     filePreview={imagePublicUrl}
                     templateList={templateList}
@@ -939,6 +950,8 @@ export default function HomeClient({
                 <DraftReview
                   confidenceLabel="High confidence"
                   draft={draft}
+                  imageSrc={imagePublicUrl}
+                  usedFallback={usedFallback}
                   editingWeightIndex={editingWeightIndex}
                   isConfirmingAll={isConfirmingAll}
                   isImageUploading={isImageUploading}

@@ -9,6 +9,32 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      ai_corrections: {
+        Row: {
+          id: string
+          user_id: string
+          original_search: string
+          final_match_desc: string
+          correction_type: string
+          logged_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          original_search: string
+          final_match_desc: string
+          correction_type: string
+          logged_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          original_search?: string
+          final_match_desc?: string
+          correction_type?: string
+          logged_at?: string
+        }
+      }
       food_logs: {
         Row: {
           id: string
