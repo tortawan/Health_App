@@ -864,21 +864,27 @@ export async function copyDay(sourceDate: string) {
   return inserted;
 }
 
+// ... existing imports
+
 export async function logWater(amount: number) {
   const supabase = await createSupabaseServerClient();
+  
+  // FIX: Use getUser() instead of getSession() for security & reliability
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     throw new Error("You must be signed in to log water.");
   }
 
   const { data, error } = await supabase
     .from("water_logs")
     .insert({
-      user_id: session.user.id,
+      user_id: user.id,
       amount_ml: amount,
+      // FIX: Explicitly set the timestamp in case the DB default is missing
+      logged_at: new Date().toISOString(), 
     })
     .select("id, amount_ml, logged_at")
     .single();
@@ -894,11 +900,13 @@ export async function logWater(amount: number) {
 
 export async function updateWaterLog(id: string, amount: number) {
   const supabase = await createSupabaseServerClient();
+  
+  // FIX: Use getUser()
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     throw new Error("You must be signed in to update water logs.");
   }
 
@@ -910,7 +918,7 @@ export async function updateWaterLog(id: string, amount: number) {
     .from("water_logs")
     .update({ amount_ml: amount })
     .eq("id", id)
-    .eq("user_id", session.user.id);
+    .eq("user_id", user.id); // Ensure we use the authenticated user's ID
 
   if (error) {
     throw error;
@@ -922,11 +930,13 @@ export async function updateWaterLog(id: string, amount: number) {
 
 export async function deleteWaterLog(id: string) {
   const supabase = await createSupabaseServerClient();
+  
+  // FIX: Use getUser()
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     throw new Error("You must be signed in to delete water logs.");
   }
 
@@ -934,7 +944,7 @@ export async function deleteWaterLog(id: string) {
     .from("water_logs")
     .delete()
     .eq("id", id)
-    .eq("user_id", session.user.id);
+    .eq("user_id", user.id);
 
   if (error) {
     throw error;
@@ -943,7 +953,6 @@ export async function deleteWaterLog(id: string) {
   revalidatePath("/");
   revalidatePath("/stats");
 }
-
 export async function updatePrivacy(isPublic: boolean) {
   const supabase = await createSupabaseServerClient();
   const {
