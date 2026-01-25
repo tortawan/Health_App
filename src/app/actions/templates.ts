@@ -83,7 +83,10 @@ export async function saveMealTemplateFromLogs(name: string, logs: MealTemplateL
     if (matchError) throw matchError;
 
     const match = Array.isArray(matches) ? matches[0] : null;
-    const usdaId = (match as any)?.usda_id ?? (match as any)?.id ?? null;
+    
+    // FIX: Replaced 'any' with a structural type
+    const typedMatch = match as { usda_id?: number; id?: number } | null;
+    const usdaId = typedMatch?.usda_id ?? typedMatch?.id ?? null;
 
     if (!usdaId) throw new Error(`Unable to match "${queryText}" to USDA library.`);
 

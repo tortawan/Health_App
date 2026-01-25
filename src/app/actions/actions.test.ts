@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import * as FoodActions from "./food";
 import * as TrackingActions from "./tracking";
 import * as UserActions from "./user";

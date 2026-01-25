@@ -117,7 +117,8 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         try {
           return await fetch(request.clone());
-        } catch (error) {
+        } catch {
+          // Fix: Removed unused 'error' variable
           const body = await request.clone().text();
           const headers = {};
           request.headers.forEach((value, key) => {
