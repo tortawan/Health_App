@@ -3,19 +3,27 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+
+// --- UPDATED IMPORTS ---
 import {
   getRecentFoods,
   deleteFoodLog,
+  updateFoodLog,
+} from "./actions/food";
+import {
   deleteWaterLog,
   logWater,
-  updateFoodLog,
   updateWaterLog,
-  reportLogIssue,
+} from "./actions/tracking";
+import { reportLogIssue } from "./actions/community";
+import {
   applyMealTemplate,
   deleteMealTemplate,
   saveMealTemplate,
   saveMealTemplateFromLogs,
-} from "./actions";
+} from "./actions/templates";
+// -----------------------
+
 import { useProfileForm } from "./hooks/useProfileForm";
 import { useScanner } from "./hooks/useScanner";
 import { CameraCapture } from "../components/scanner/CameraCapture";
