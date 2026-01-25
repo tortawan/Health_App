@@ -27,7 +27,8 @@ async function runTest() {
 
   // Notice we use 'p_user_id' in the definition, but Supabase maps arguments by position or name.
   // We can just call it normally.
-  const { data: rpcData, error: rpcError } = await supabase.rpc('match_foods', {
+  // Fix: Removed unused 'rpcData' variable
+  const { error: rpcError } = await supabase.rpc('match_foods', {
     query_embedding: dummyEmbedding,
     query_text: "apple",
     match_threshold: 0.1,

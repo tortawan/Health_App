@@ -1,5 +1,4 @@
 import { Locator, Page, expect } from "@playwright/test";
-import fs from "node:fs";
 import path from "node:path";
 
 export const DEBUG_CONFIG = {
@@ -36,7 +35,7 @@ export function enableApiLogging(page: Page) {
           JSON.stringify(postData, null, 2)
         );
       }
-    } catch (e) {
+    } catch {
       // It's likely multipart form data or binary, which isn't valid JSON.
       // We can just ignore the body log or log a note.
       // console.log(`${DEBUG_CONFIG.LOG_PREFIX} [REQUEST BODY] (Non-JSON data)`);
@@ -69,7 +68,7 @@ export function enableApiLogging(page: Page) {
           JSON.stringify(body, null, 2)
         );
       }
-    } catch (e) {
+    } catch {
       // Ignore errors parsing response body
     }
   });
@@ -94,7 +93,7 @@ export async function logPageState(page: Page, label: string) {
         try {
           const el = document.querySelector(selector);
           return el ? (el.textContent?.trim().substring(0, 100) || "") : "NOT FOUND";
-        } catch (e) {
+        } catch {
           return "INVALID SELECTOR";
         }
       };
@@ -104,7 +103,7 @@ export async function logPageState(page: Page, label: string) {
         try {
           const el = document.querySelector(selector);
           return el ? (el.getBoundingClientRect().height > 0) : false;
-        } catch (e) {
+        } catch {
           return false;
         }
       };
@@ -206,7 +205,7 @@ export async function monitorApiCall(page: Page, urlPattern: string) {
       try {
         const body = await response.json();
         console.log(`${DEBUG_CONFIG.LOG_PREFIX} Body snippet:`, JSON.stringify(body).substring(0, 200) + '...');
-      } catch (e) {
+      } catch {
         // ignore
       }
     }
