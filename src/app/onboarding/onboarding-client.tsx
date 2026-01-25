@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import toast from "react-hot-toast";
 import { type ActivityLevel, type GoalType } from "@/lib/nutrition";
-import { upsertUserProfile } from "../actions";
+// FIX: Import from specific 'user' action file
+import { upsertUserProfile } from "../actions/user";
 
 export function OnboardingClient({
   defaults,

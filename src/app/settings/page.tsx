@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase";
-import { updatePrivacy } from "../actions";
+// FIX: Import from specific 'user' action file
+import { updatePrivacy } from "../actions/user";
 
 export default async function SettingsPage() {
   const supabase = await createSupabaseServerClient();

@@ -3,7 +3,8 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { calculateTargets, type ActivityLevel, type GoalType } from "@/lib/nutrition";
 import type { UserProfile } from "@/types/food";
-import { upsertUserProfile } from "../actions";
+// FIX: Import from specific 'user' action file
+import { upsertUserProfile } from "../actions/user";
 
 export type ProfileFormState = {
   height: number;
