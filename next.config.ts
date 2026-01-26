@@ -51,9 +51,18 @@ const nextConfig: NextConfig = withPWA({
 
   experimental: {
     serverActions: {
+      // ✅ FIX: Allows Server Actions to work from local network IPs (e.g., 192.168.x.x)
       allowedOrigins: ["*"],
     },
   },
+
+  // ✅ FIX: improved logging for fetch requests to help debug API issues
+  logging: {
+    fetches: {
+      fullUrl: true,
+    },
+  },
+
   async headers() {
     return [
       {
