@@ -34,6 +34,9 @@ const withPWA = createNextPWA({
 
 const nextConfig: NextConfig = withPWA({
   reactStrictMode: true,
+  // ✅ FIX: Allow development requests from your local network IP
+  allowedDevOrigins: ["localhost", "192.168.4.77"],
+  
   // Fix: Prevent bundling of transformers.js binaries to avoid cold-start re-downloads and size limits
   serverExternalPackages: ["@xenova/transformers"],
   
