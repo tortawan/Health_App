@@ -67,7 +67,7 @@ export async function deleteWeightLog(id: string) {
 
 // --- Water Actions ---
 
-export async function logWater(amount: number) {
+export async function logWater(amount: number, loggedAt?: string) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -78,7 +78,7 @@ export async function logWater(amount: number) {
     .insert({
       user_id: user.id,
       amount_ml: amount,
-      logged_at: new Date().toISOString(), 
+      logged_at: loggedAt ?? new Date().toISOString(), 
     })
     .select("id, amount_ml, logged_at")
     .single();

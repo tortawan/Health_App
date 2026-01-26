@@ -728,21 +728,29 @@ export default function HomeClient({
     }
 
     setWaterSaving(true);
+    // Create timestamp based on selected date and current time
+    const now = new Date();
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const targetDate = new Date(year, month - 1, day);
+    targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+    const loggedAt = targetDate.toISOString();
+
     const optimisticId = `water_${Date.now()}`;
     const optimisticLog: WaterLog = {
       id: optimisticId,
       amount_ml: amount,
-      logged_at: new Date().toISOString(),
+      logged_at: loggedAt,
       isOptimistic: true,
     };
     setWaterLogs((prev) => [optimisticLog, ...prev]);
     try {
-      const saved = await logWater(amount);
+      const saved = await logWater(amount, loggedAt);
       setWaterLogs((prev) =>
         prev.map((log) => (log.id === optimisticId ? { ...saved } : log)),
       );
       toast.success("Water logged");
       setWaterAmount(amount);
+      router.refresh();
     } catch (err) {
       console.error(err);
       setWaterLogs((prev) => prev.filter((log) => log.id !== optimisticId));
@@ -774,6 +782,7 @@ export default function HomeClient({
     try {
       await updateWaterLog(editingWaterId, updatedAmount);
       toast.success("Water updated");
+      router.refresh();
     } catch (err) {
       console.error(err);
       setWaterLogs(previousLogs);
@@ -788,6 +797,7 @@ export default function HomeClient({
     try {
       await deleteWaterLog(id);
       toast.success("Water deleted");
+      router.refresh();
     } catch (err) {
       console.error(err);
       setWaterLogs(previousLogs);

@@ -86,11 +86,18 @@ create table if not exists public.water_logs (
   logged_at timestamptz not null default now()
 );
 
+-- ... (keep existing code for sections 1-4) ...
+
 -- 5. Enable RLS for Water Logs
 alter table if exists public.water_logs enable row level security;
+
+-- Drop existing policies to ensure clean slate if re-running
 drop policy if exists "Users can select their water logs" on public.water_logs;
 drop policy if exists "Users can insert their water logs" on public.water_logs;
+drop policy if exists "Users can update their water logs" on public.water_logs;
+drop policy if exists "Users can delete their water logs" on public.water_logs;
 
+-- Re-create all necessary policies
 create policy "Users can select their water logs"
   on public.water_logs for select
   using (auth.uid() = user_id);
@@ -98,6 +105,15 @@ create policy "Users can select their water logs"
 create policy "Users can insert their water logs"
   on public.water_logs for insert
   with check (auth.uid() = user_id);
+
+create policy "Users can update their water logs"
+  on public.water_logs for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users can delete their water logs"
+  on public.water_logs for delete
+  using (auth.uid() = user_id);
 
 create index if not exists water_logs_user_date_idx
   on public.water_logs (user_id, logged_at desc);
