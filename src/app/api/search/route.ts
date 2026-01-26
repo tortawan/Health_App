@@ -22,13 +22,18 @@ export async function GET(request: Request) {
     console.warn("Embedding failed, falling back to text-only search", error);
   }
 
-  const { data } = await supabase.rpc("match_foods", {
+  // FIX: Changed p_user_id to user_id
+  const { data, error } = await supabase.rpc("match_foods", {
     query_embedding: embedding ?? null,
     query_text: query ?? null,
     match_threshold: Number(0.6),
     match_count: Number(5),
-    p_user_id: session?.user?.id ?? null,
+    user_id: session?.user?.id ?? null, 
   });
+
+  if (error) {
+    console.error("Search RPC Error:", error);
+  }
 
   return NextResponse.json(data || []);
 }

@@ -218,19 +218,22 @@ export async function manualSearch(searchTerm: string) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("You must be signed in to search.");
 
+  // FIX: Changed p_user_id to user_id
   const { data, error } = await supabase.rpc("match_foods", {
     query_embedding: null,
     query_text: query ?? null,
     match_threshold: 0.0,
     match_count: 10,
-    p_user_id: session.user.id ?? null,
+    user_id: session.user.id ?? null,
   });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Manual Search RPC Error:", error);
+    throw error;
+  }
 
   return data ?? [];
 }
-
 export async function getRecentFoods() {
   const supabase = await createSupabaseServerClient();
   const { data: { session } } = await supabase.auth.getSession();
