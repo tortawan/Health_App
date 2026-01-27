@@ -1,0 +1,848 @@
+[
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 2,
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 3,
+    "column_name": "original_weight",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 4,
+    "column_name": "corrected_weight",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 5,
+    "column_name": "food_name",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 6,
+    "column_name": "correction_type",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 7,
+    "column_name": "logged_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 8,
+    "column_name": "original_search",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 9,
+    "column_name": "final_match_desc",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 10,
+    "column_name": "image_path",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 11,
+    "column_name": "corrected_calories",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 12,
+    "column_name": "corrected_protein",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 13,
+    "column_name": "corrected_carbs",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 14,
+    "column_name": "corrected_fat",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 15,
+    "column_name": "notes",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ai_corrections",
+    "ordinal_position": 16,
+    "column_name": "source_log_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "app_config",
+    "ordinal_position": 1,
+    "column_name": "key",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "app_config",
+    "ordinal_position": 2,
+    "column_name": "value",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "app_config",
+    "ordinal_position": 3,
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 2,
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 3,
+    "column_name": "food_name",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 4,
+    "column_name": "weight_g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 5,
+    "column_name": "calories",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 6,
+    "column_name": "protein",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 7,
+    "column_name": "carbs",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 8,
+    "column_name": "fat",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 9,
+    "column_name": "consumed_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 10,
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 11,
+    "column_name": "image_path",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 12,
+    "column_name": "fiber",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 13,
+    "column_name": "sugar",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "food_logs",
+    "ordinal_position": 14,
+    "column_name": "sodium",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 2,
+    "column_name": "description",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 3,
+    "column_name": "brand_owner",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 4,
+    "column_name": "ingredients",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 5,
+    "column_name": "serving_size",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 6,
+    "column_name": "serving_size_unit",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 7,
+    "column_name": "household_serving_fulltext",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 8,
+    "column_name": "kcal_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 9,
+    "column_name": "protein_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 10,
+    "column_name": "carbs_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 11,
+    "column_name": "fat_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 12,
+    "column_name": "fiber_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 13,
+    "column_name": "sugar_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 14,
+    "column_name": "sodium_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "foods",
+    "ordinal_position": 15,
+    "column_name": "embedding",
+    "data_type": "USER-DEFINED",
+    "udt_name": "vector",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "meal_templates",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "meal_templates",
+    "ordinal_position": 2,
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "meal_templates",
+    "ordinal_position": 3,
+    "column_name": "name",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "meal_templates",
+    "ordinal_position": 4,
+    "column_name": "items",
+    "data_type": "jsonb",
+    "udt_name": "jsonb",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "meal_templates",
+    "ordinal_position": 5,
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "request_metrics",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "request_metrics",
+    "ordinal_position": 2,
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "request_metrics",
+    "ordinal_position": 3,
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "request_metrics",
+    "ordinal_position": 4,
+    "column_name": "duration_ms",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "request_metrics",
+    "ordinal_position": 5,
+    "column_name": "gemini_status",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "request_metrics",
+    "ordinal_position": 6,
+    "column_name": "match_threshold_used",
+    "data_type": "double precision",
+    "udt_name": "float8",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "request_metrics",
+    "ordinal_position": 7,
+    "column_name": "matches_count",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "request_metrics",
+    "ordinal_position": 8,
+    "column_name": "rpc_error_code",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "bigint",
+    "udt_name": "int8",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 2,
+    "column_name": "description",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 3,
+    "column_name": "embedding",
+    "data_type": "USER-DEFINED",
+    "udt_name": "vector",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 4,
+    "column_name": "kcal_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 5,
+    "column_name": "protein_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 6,
+    "column_name": "carbs_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 7,
+    "column_name": "fat_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 8,
+    "column_name": "fiber_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 9,
+    "column_name": "sugar_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 10,
+    "column_name": "sodium_100g",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "usda_library",
+    "ordinal_position": 11,
+    "column_name": "search_text",
+    "data_type": "tsvector",
+    "udt_name": "tsvector",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 1,
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 2,
+    "column_name": "height",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 3,
+    "column_name": "weight",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 4,
+    "column_name": "age",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 5,
+    "column_name": "activity_level",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 6,
+    "column_name": "goal_type",
+    "data_type": "text",
+    "udt_name": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 7,
+    "column_name": "macro_split",
+    "data_type": "jsonb",
+    "udt_name": "jsonb",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 8,
+    "column_name": "daily_calorie_target",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 9,
+    "column_name": "daily_protein_target",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 10,
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 11,
+    "column_name": "protein_target",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 12,
+    "column_name": "carbs_target",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 13,
+    "column_name": "fat_target",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "user_profiles",
+    "ordinal_position": 14,
+    "column_name": "is_public",
+    "data_type": "boolean",
+    "udt_name": "bool",
+    "is_nullable": "NO",
+    "column_default": "false"
+  },
+  {
+    "table_name": "water_logs",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "water_logs",
+    "ordinal_position": 2,
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "water_logs",
+    "ordinal_position": 3,
+    "column_name": "amount_ml",
+    "data_type": "integer",
+    "udt_name": "int4",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "water_logs",
+    "ordinal_position": 4,
+    "column_name": "logged_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "weight_logs",
+    "ordinal_position": 1,
+    "column_name": "id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "weight_logs",
+    "ordinal_position": 2,
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "udt_name": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "weight_logs",
+    "ordinal_position": 3,
+    "column_name": "weight_kg",
+    "data_type": "numeric",
+    "udt_name": "numeric",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "weight_logs",
+    "ordinal_position": 4,
+    "column_name": "logged_at",
+    "data_type": "timestamp with time zone",
+    "udt_name": "timestamptz",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  }
+]
