@@ -404,10 +404,12 @@ export async function POST(request: Request) {
       );
     }
     const supabase = await createSupabaseServerClient();
+    // FIX: Issue #1 - Use getUser() for secure authentication
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    userId = session?.user?.id ?? null;
+      data: { user },
+      } = await supabase.auth.getUser();
+     userId = user?.id ?? null; // Securely obtained ID
+    
     const { imageBuffer, mimeType } = await validateAnalyzeRequest(request);
 
     // 2. Process with Gemini

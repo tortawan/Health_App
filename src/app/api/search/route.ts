@@ -9,9 +9,10 @@ export async function GET(request: Request) {
   if (!query) return NextResponse.json([]);
 
   const supabase = await createSupabaseServerClient();
+ // FIX: Issue #1 - Use getUser()
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
   let embedding: number[] | null = null;
   try {

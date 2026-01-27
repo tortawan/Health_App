@@ -218,13 +218,16 @@ export async function manualSearch(searchTerm: string) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("You must be signed in to search.");
 
-  // FIX: Changed p_user_id to user_id
+  // FIX: Issue #1 - Use getUser()
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("You must be signed in to search.");
+
   const { data, error } = await supabase.rpc("match_foods", {
     query_embedding: null,
     query_text: query ?? null,
     match_threshold: 0.0,
     match_count: 10,
-    user_id: session.user.id ?? null,
+    user_id: user.id ?? null, // KEEP 'user_id'
   });
 
   if (error) {
