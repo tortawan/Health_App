@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     query_text: query ?? null,
     match_threshold: Number(0.6),
     match_count: Number(5),
-    user_id: session?.user?.id ?? null, 
+    user_id: user?.id ?? null, 
   });
 
   if (error) {
