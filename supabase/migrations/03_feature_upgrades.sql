@@ -9,14 +9,16 @@ alter table if exists public.food_logs
   add column if not exists sodium numeric;
 
 -- 3. Update match_foods function
+-- Drop previous signature if it exists to allow parameter changes
 drop function if exists match_foods(vector(384), text, float, int);
+drop function if exists match_foods(vector(384), text, float, int, uuid);
 
 create or replace function match_foods (
   query_embedding vector(384),
   query_text text,
   match_threshold float,
   match_count int,
-  user_id uuid default null
+  user_id uuid default null -- Parameter stays 'user_id' to match API calls
 )
 returns table (
   id bigint,
@@ -42,9 +44,10 @@ begin
 
   return query
   with prior_foods as (
-    select distinct lower(food_name) as food_name
-    from public.food_logs
-    where user_id = match_foods.user_id
+    select distinct lower(fl.food_name) as food_name
+    from public.food_logs fl
+    -- Explicitly compare column (fl.user_id) vs Function Parameter (match_foods.user_id)
+    where fl.user_id = match_foods.user_id
   ),
   base as (
     select

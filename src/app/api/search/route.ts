@@ -9,8 +9,7 @@ export async function GET(request: Request) {
   if (!query) return NextResponse.json([]);
 
   const supabase = await createSupabaseServerClient();
- // FIX: Issue #1 - Use getUser()
-  const {
+   const {
     data: { user },
   } = await supabase.auth.getUser();
 
@@ -23,8 +22,7 @@ export async function GET(request: Request) {
     console.warn("Embedding failed, falling back to text-only search", error);
   }
 
-  // FIX: Changed p_user_id to user_id
-  const { data, error } = await supabase.rpc("match_foods", {
+    const { data, error } = await supabase.rpc("match_foods", {
     query_embedding: embedding ?? null,
     query_text: query ?? null,
     match_threshold: Number(0.6),
