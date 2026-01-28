@@ -9,7 +9,7 @@ alter table if exists public.food_logs
   add column if not exists sodium numeric;
 
 -- 3. Update match_foods function
--- Drop previous signature if it exists to allow parameter changes
+-- Drop previous signatures to prevent conflicts
 drop function if exists match_foods(vector(384), text, float, int);
 drop function if exists match_foods(vector(384), text, float, int, uuid);
 
@@ -18,7 +18,7 @@ create or replace function match_foods (
   query_text text,
   match_threshold float,
   match_count int,
-  user_id uuid default null -- Parameter stays 'user_id' to match API calls
+  user_id uuid default null
 )
 returns table (
   id bigint,
@@ -80,7 +80,6 @@ begin
   limit match_count;
 end;
 $$;
-
 -- 4. Create Water Logs Table
 create table if not exists public.water_logs (
   id uuid primary key default gen_random_uuid(),

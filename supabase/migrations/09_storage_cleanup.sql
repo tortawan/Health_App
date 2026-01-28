@@ -7,7 +7,7 @@ begin
     perform cron.schedule(
       'cleanup_storage_objects',
       '0 2 * * *',
-      $$delete from storage.objects where created_at < now() - interval '30 days';$$
+      $cmd$delete from storage.objects where created_at < now() - interval '30 days';$cmd$
     );
   end if;
 end $$;
