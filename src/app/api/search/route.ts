@@ -22,12 +22,12 @@ export async function GET(request: Request) {
     console.warn("Embedding failed, falling back to text-only search", error);
   }
 
-    const { data, error } = await supabase.rpc("match_foods", {
+  const { data, error } = await supabase.rpc("match_foods", {
     query_embedding: embedding ?? null,
     query_text: query ?? null,
     match_threshold: Number(0.6),
     match_count: Number(5),
-    user_id: user?.id ?? null, 
+    p_user_id: user?.id ?? null,
   });
 
   if (error) {

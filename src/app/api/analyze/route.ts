@@ -30,6 +30,14 @@ const parseNumberValue = (value: string | null | undefined, fallback: number) =>
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const parseWeightEstimate = (value: string | null | undefined) => {
+  if (!value) return null;
+  const match = value.match(/(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 type AnalyzeConfig = {
   circuitBreakerThreshold: number;
   circuitBreakerCooldownMs: number;
@@ -522,7 +530,7 @@ export async function POST(request: Request) {
         query_text: queryText,
         match_threshold: matchThresholdValue,
         match_count: matchCount,
-        user_id: userId,
+        p_user_id: userId,
       });
 
       const { data: matches, error: rpcError } = await supabase.rpc("match_foods", {
@@ -530,7 +538,7 @@ export async function POST(request: Request) {
         query_text: queryText,
         match_threshold: matchThresholdValue,
         match_count: matchCount,
-        user_id: userId,
+        p_user_id: userId,
       });
 
       if (rpcError) {
@@ -567,9 +575,14 @@ export async function POST(request: Request) {
         : [];
       totalMatches += mappedMatches.length;
 
+      const parsedWeight = parseWeightEstimate(item.quantity_estimate);
+      const resolvedWeight = parsedWeight ?? 100;
+
       drafts.push({
         id: generateDraftId(),
         ...item,
+        weight: resolvedWeight,
+        ai_suggested_weight: parsedWeight,
         match: mappedMatches[0] ?? undefined,
         matches: mappedMatches.slice(0, 3),
       });

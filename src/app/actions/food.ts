@@ -57,6 +57,13 @@ function validateMacros(
   }
 }
 
+function resolveMacroOverride(
+  override: number | null | undefined,
+  fallback: number | null | undefined,
+) {
+  return Number.isFinite(override ?? NaN) ? Number(override) : fallback ?? null;
+}
+
 // --- Actions ---
 
 export async function logFood(data: LogFoodPayload) {
@@ -77,10 +84,10 @@ export async function logFood(data: LogFoodPayload) {
       ...processedData,
       food_name: data.foodName || data.match.description,
       weight_g: data.weight,
-      calories: macros?.calories ?? null,
-      protein: macros?.protein ?? null,
-      carbs: macros?.carbs ?? null,
-      fat: macros?.fat ?? null,
+      calories: resolveMacroOverride(data.calories, macros?.calories),
+      protein: resolveMacroOverride(data.protein, macros?.protein),
+      carbs: resolveMacroOverride(data.carbs, macros?.carbs),
+      fat: resolveMacroOverride(data.fat, macros?.fat),
     };
   }
 
