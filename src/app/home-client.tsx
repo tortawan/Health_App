@@ -62,6 +62,8 @@ type Props = {
   initialSelectedDate: string;
 };
 
+type MacroField = "protein" | "carbs" | "fat";
+
 export default function HomeClient({
   initialLogs,
   initialRecentFoods,
@@ -159,14 +161,27 @@ export default function HomeClient({
   const buildOptimisticLog = useCallback(
     (item: DraftLog, consumedAt: string, imageUrl: string | null): FoodLogRecord => {
       const macros = adjustedMacros(item.match ?? undefined, item.weight);
+      const macroOverrides = item.macro_overrides ?? {};
+      const resolvedMacros = {
+        calories: macros?.calories ?? 0,
+        protein: Number.isFinite(macroOverrides.protein ?? NaN)
+          ? macroOverrides.protein ?? 0
+          : macros?.protein ?? 0,
+        carbs: Number.isFinite(macroOverrides.carbs ?? NaN)
+          ? macroOverrides.carbs ?? 0
+          : macros?.carbs ?? 0,
+        fat: Number.isFinite(macroOverrides.fat ?? NaN)
+          ? macroOverrides.fat ?? 0
+          : macros?.fat ?? 0,
+      };
       return {
         id: item.id,
         food_name: item.food_name,
         weight_g: item.weight,
-        calories: macros?.calories ?? 0,
-        protein: macros?.protein ?? 0,
-        carbs: macros?.carbs ?? 0,
-        fat: macros?.fat ?? 0,
+        calories: resolvedMacros.calories,
+        protein: resolvedMacros.protein,
+        carbs: resolvedMacros.carbs,
+        fat: resolvedMacros.fat,
         consumed_at: consumedAt,
         image_path: imageUrl,
       } as FoodLogRecord;
@@ -246,6 +261,14 @@ export default function HomeClient({
     onAnalysisError: handleOptimisticScanError,
   });
   const isScanning = isAnalyzing || isImageUploading;
+  const draftWithDefaults = useMemo(
+    () =>
+      draft.map((item) => ({
+        ...item,
+        weight: Number.isFinite(item.weight) ? item.weight : 0,
+      })),
+    [draft],
+  );
 
   const scanErrorFallback = useCallback(
     (error: Error, retry: () => void) => (
@@ -312,7 +335,7 @@ export default function HomeClient({
       toast.error("Enter a template name.");
       return;
     }
-    const items = draft
+    const items = draftWithDefaults
       .map((item) => ({
         usda_id: item.match?.usda_id,
         grams: item.weight,
@@ -321,7 +344,7 @@ export default function HomeClient({
         Number.isFinite(item.usda_id),
       );
 
-    if (items.length !== draft.length) {
+    if (items.length !== draftWithDefaults.length) {
       toast.error("All items must have a USDA match to save a template.");
       return;
     }
@@ -338,7 +361,19 @@ export default function HomeClient({
     } finally {
       setIsSavingTemplate(false);
     }
-  }, [draft, templateName]);
+  }, [draftWithDefaults, templateName]);
+
+  const handleUpdateMacro = useCallback((index: number, field: MacroField, value: number) => {
+    setDraft((prev) => {
+      const next = [...prev];
+      const item = next[index];
+      if (!item) return prev;
+      const macroOverrides = { ...(item.macro_overrides ?? {}) };
+      macroOverrides[field] = value;
+      next[index] = { ...item, macro_overrides: macroOverrides };
+      return next;
+    });
+  }, []);
 
   const handleSaveTemplateFromLogs = useCallback(async () => {
     const name = templateFromLogsName.trim();
@@ -496,7 +531,7 @@ export default function HomeClient({
   };
 
   const handleConfirm = async (index: number) => {
-    const item = draft[index];
+    const item = draftWithDefaults[index];
     if (!item || !item.match) return;
     setError(null);
     setLoggingIndex(index);
@@ -508,16 +543,22 @@ export default function HomeClient({
       targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
 
       // Use fetch API route
+      const macroOverrides = item.macro_overrides ?? {};
+      const payload = {
+        foodName: item.food_name,
+        weight: item.weight,
+        match: item.match,
+        imageUrl: imagePublicUrl,
+        consumedAt: targetDate.toISOString(),
+      } as Record<string, unknown>;
+      if (Number.isFinite(macroOverrides.protein ?? NaN)) payload.protein = macroOverrides.protein;
+      if (Number.isFinite(macroOverrides.carbs ?? NaN)) payload.carbs = macroOverrides.carbs;
+      if (Number.isFinite(macroOverrides.fat ?? NaN)) payload.fat = macroOverrides.fat;
+
       const response = await fetch("/api/log-food", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          foodName: item.food_name,
-          weight: item.weight,
-          match: item.match,
-          imageUrl: imagePublicUrl,
-          consumedAt: targetDate.toISOString(),
-        }),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -565,16 +606,27 @@ export default function HomeClient({
     setError(null);
     let successCount = 0;
     const successfulIndices = new Set<number>();
-    const currentDraft = draft;
+    const currentDraft = draftWithDefaults;
 
     for (let i = 0; i < currentDraft.length; i++) {
       const item = currentDraft[i];
       if (!item.match) continue; 
       try {
+        const macroOverrides = item.macro_overrides ?? {};
+        const payload = {
+          foodName: item.food_name,
+          weight: item.weight,
+          match: item.match,
+          imageUrl: imagePublicUrl,
+        } as Record<string, unknown>;
+        if (Number.isFinite(macroOverrides.protein ?? NaN)) payload.protein = macroOverrides.protein;
+        if (Number.isFinite(macroOverrides.carbs ?? NaN)) payload.carbs = macroOverrides.carbs;
+        if (Number.isFinite(macroOverrides.fat ?? NaN)) payload.fat = macroOverrides.fat;
+
         const response = await fetch("/api/log-food", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ foodName: item.food_name, weight: item.weight, match: item.match, imageUrl: imagePublicUrl }),
+            body: JSON.stringify(payload),
         });
         if (response.ok) {
             const result = await response.json();
@@ -967,7 +1019,7 @@ export default function HomeClient({
               ) : (
                 <DraftReview
                   confidenceLabel="High confidence"
-                  draft={draft}
+                  draft={draftWithDefaults}
                   imageSrc={imagePublicUrl}
                   usedFallback={usedFallback}
                   editingWeightIndex={editingWeightIndex}
@@ -976,17 +1028,18 @@ export default function HomeClient({
                   isSavingTemplate={isSavingTemplate}
                   loggingIndex={loggingIndex}
                   onApplyMatch={(idx, m) => {
-                    const d = [...draft]; d[idx].match = m; setDraft(d);
+                    const d = [...draftWithDefaults]; d[idx].match = m; setDraft(d);
                   }}
                   onConfirm={handleConfirm}
                   onConfirmAll={handleConfirmAll}
                   onManualSearch={(idx) => {
-                    setManualOpenIndex(idx); setManualQuery(draft[idx].search_term || draft[idx].food_name);
+                    setManualOpenIndex(idx); setManualQuery(draftWithDefaults[idx].search_term || draftWithDefaults[idx].food_name);
                   }}
                   onSaveTemplate={handleSaveTemplate}
                   onTemplateNameChange={setTemplateName}
                   onToggleWeightEdit={(idx) => setEditingWeightIndex(editingWeightIndex === idx ? null : idx)}
-                  onUpdateWeight={(idx, w) => { const d = [...draft]; d[idx].weight = w; setDraft(d); }}
+                  onUpdateWeight={(idx, w) => { const d = [...draftWithDefaults]; d[idx].weight = w; setDraft(d); }}
+                  onUpdateMacro={handleUpdateMacro}
                   templateName={templateName}
                 />
               )}

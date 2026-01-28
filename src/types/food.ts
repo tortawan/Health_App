@@ -14,6 +14,12 @@ export type DraftLog = {
   match: MacroMatch | null;  // Nutrition data matched to this item
   matches?: MacroMatch[];  // Optional extra matches
   quantity_estimate?: string;  // AI estimate (e.g., "medium portion, ~150g")
+  ai_suggested_weight?: number | null;  // Parsed AI weight estimate
+  macro_overrides?: {
+    protein?: number | null;
+    carbs?: number | null;
+    fat?: number | null;
+  };
   image_base64?: string;  // Base64 encoded image
   created_at?: Date;  // When item was created
 };
