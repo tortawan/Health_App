@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import HomeClient from "./home-client";
 import { createSupabaseServerClient } from "@/lib/supabase";
 import { MealTemplate, PortionMemoryRow, UserProfile } from "@/types/food";
+import { getWeightHistory } from "./actions/weight";
+import WeightLogger from "./WeightLogger";
 
 function parseDateParam(dateValue?: string | string[]) {
   if (!dateValue || Array.isArray(dateValue)) return new Date();
@@ -33,7 +35,7 @@ export default async function HomePage({
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const supabase = await createSupabaseServerClient();
-  
+   
   // FIX: Use getUser() instead of getSession() for security
   const {
     data: { user },
@@ -139,15 +141,27 @@ export default async function HomePage({
     .lt("logged_at", nextDay.toISOString())
     .order("logged_at", { ascending: false });
 
+  // --- ADDED: Weight Data Fetching ---
+  const weightLogs = await getWeightHistory(5);
+  // Default to 70kg (or null) if no history exists
+  const latestWeight = weightLogs[0]?.weight_kg ?? 70;
+
   return (
-    <HomeClient
-      initialLogs={logs ?? []}
-      initialSelectedDate={formatDateParam(dayStart)}
-      initialProfile={profile as UserProfile | null}
-      initialTemplates={resolvedTemplates}
-      initialPortionMemories={portionMemory}
-      initialRecentFoods={recentFoods ?? []}
-      initialWaterLogs={waterLogs ?? []}
-    />
+    <main className="min-h-screen bg-black text-white">
+      <HomeClient
+        initialLogs={logs ?? []}
+        initialSelectedDate={formatDateParam(dayStart)}
+        initialProfile={profile as UserProfile | null}
+        initialTemplates={resolvedTemplates}
+        initialPortionMemories={portionMemory}
+        initialRecentFoods={recentFoods ?? []}
+        initialWaterLogs={waterLogs ?? []}
+      />
+      
+      {/* --- ADDED: Weight Logger Component --- */}
+      <div className="mx-auto max-w-md px-4 pb-24 -mt-20 relative z-10">
+         <WeightLogger initialLogs={weightLogs} defaultWeight={latestWeight} />
+      </div>
+    </main>
   );
 }
