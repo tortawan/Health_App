@@ -29,22 +29,21 @@ import { useScanner } from "./hooks/useScanner";
 import { CameraCapture } from "../components/scanner/CameraCapture";
 import { DailyLogList } from "../components/dashboard/DailyLogList";
 import { DraftReview } from "../components/logging/DraftReview";
-import ErrorBoundary from "../components/ErrorBoundary";
-import CameraErrorBoundary from "../components/CameraErrorBoundary";
 import { ManualSearchModal } from "../components/logging/ManualSearchModal";
+import { CameraErrorBoundary } from "../components/CameraErrorBoundary";
+import { ErrorBoundary } from "../components/ErrorBoundary";
+import { generateDraftId } from "@/lib/uuid";
+import { adjustedMacros } from "@/lib/nutrition";
 import { createClient } from "@/lib/supabase-browser";
 import {
+  DraftLog,
   FoodLogRecord,
   MacroMatch,
-  DraftLog,
-  RecentFood,
-  PortionMemoryRow,
-  UserProfile,
   MealTemplate,
-  LogCorrection,
-} from "@/types/food";
-import { logManualCorrection, logWeightCorrection } from "./actions/utils";
-import { generateDraftId } from "@/lib/uuid";
+  PortionMemoryRow,
+  RecentFood,
+  UserProfile,
+} from "../types/food";
 
 type WaterLog = {
   id: string;
@@ -82,7 +81,6 @@ export default function HomeClient({
   }, [initialLogs]);
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
   const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories ?? []);
-  const [templateList, setTemplateList] = useState<MealTemplate[]>(initialTemplates);
   useEffect(() => {
     setTemplateList(initialTemplates);
   }, [initialTemplates]);
@@ -102,34 +100,15 @@ export default function HomeClient({
   const [deletingId, setDeletingLogId] = useState<string | null>(null);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>(initialWaterLogs ?? []);
   const [waterAmount, setWaterAmount] = useState(250);
-  const [isLoggingWater, setIsLoggingWater] = useState(false);
-  const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
-  const [flagNotes, setFlagNotes] = useState("");
-  const [isFlagging, setIsFlagging] = useState(false);
+  const [waterSaving, setWaterSaving] = useState(false);
+  const [editingWaterId, setEditingWaterId] = useState<string | null>(null);
+  const [editingWaterAmount, setEditingWaterAmount] = useState<number>(0);
+  const [deletingWaterId, setDeletingWaterId] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [loggingIndex, setLoggingIndex] = useState<number | null>(null);
-  const [showScanner, setShowScanner] = useState(false);
-  const [manualQuery, setManualQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<MacroMatch[]>([]);
-  const [manualOpenIndex, setManualOpenIndex] = useState<number | null>(null);
-  const [templateName, setTemplateName] = useState("");
-  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
-  const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false);
-  const [templateScale, setTemplateScale] = useState(1.0);
-  const [isConfirmingAll, setIsConfirmingAll] = useState(false);
-
-  const photoInputRef = useRef<HTMLInputElement>(null);
-
-  const {
-    profile,
-    calorieTarget,
-    macroTargets,
-    isLoading: isProfileLoading,
-    updateProfile,
-  } = useProfileForm(initialProfile);
+  useEffect(() => {
+    setWaterLogs(initialWaterLogs ?? []);
+  }, [initialWaterLogs]);
 
   const dailyTotals = useMemo(() => {
     return dailyLogs.reduce(
@@ -139,47 +118,131 @@ export default function HomeClient({
         carbs: acc.carbs + (log.carbs || 0),
         fat: acc.fat + (log.fat || 0),
       }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
     );
   }, [dailyLogs]);
 
-  const bumpPortionMemory = useCallback(
-    (foodName: string, weightG: number) => {
-      setPortionMemories((prev) => {
-        const next = [...prev];
-        const idx = next.findIndex(
-          (m) => m.food_name.toLowerCase() === foodName.toLowerCase(),
-        );
-        if (idx >= 0) {
-          next[idx] = {
-            ...next[idx],
-            weight_g:
-              (next[idx].weight_g * next[idx].count + weightG) /
-              (next[idx].count + 1),
-            count: next[idx].count + 1,
-            last_weight_g: weightG,
-          };
-        } else {
-          next.push({
-            food_name: foodName,
-            weight_g: weightG,
-            count: 1,
-            last_weight_g: weightG,
-          });
-        }
-        return next.sort((a, b) => b.count - a.count);
-      });
+  const macroTargets = useMemo(() => ({
+    protein: initialProfile?.protein_target || 150,
+    carbs: initialProfile?.carbs_target || 200,
+    fat: initialProfile?.fat_target || 70,
+  }), [initialProfile]);
+  
+  const calorieTarget = initialProfile?.calorie_target || 2500;
+
+  useProfileForm(initialProfile);
+
+  const [loggingIndex, setLoggingIndex] = useState<number | null>(null);
+  const [editingWeightIndex, setEditingWeightIndex] = useState<number | null>(null);
+  const [isConfirmingAll, setIsConfirmingAll] = useState(false);
+  const [manualOpenIndex, setManualOpenIndex] = useState<number | null>(null);
+  const [manualQuery, setManualQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<MacroMatch[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [templateList, setTemplateList] = useState<MealTemplate[]>(initialTemplates);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateScale, setTemplateScale] = useState(1);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false);
+  const [templateFromLogsName, setTemplateFromLogsName] = useState("");
+  const [isSavingFromLogs, setIsSavingFromLogs] = useState(false);
+  const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
+  const [flagNotes, setFlagNotes] = useState("");
+  const [isFlagging, setIsFlagging] = useState(false);
+  const optimisticScanIdRef = useRef<string | null>(null);
+  const waterGoal = 2000;
+  const waterTotal = useMemo(
+    () => waterLogs.reduce((total, log) => total + Number(log.amount_ml ?? 0), 0),
+    [waterLogs],
+  );
+  const waterProgress = Math.min(waterTotal / waterGoal, 1);
+
+  const buildOptimisticLog = useCallback(
+    (item: DraftLog, consumedAt: string, imageUrl: string | null): FoodLogRecord => {
+      const macros = adjustedMacros(item.match ?? undefined, item.weight);
+      const macroOverrides = item.macro_overrides ?? {};
+      const resolvedMacros = {
+        calories: macros?.calories ?? 0,
+        protein: Number.isFinite(macroOverrides.protein ?? NaN)
+          ? macroOverrides.protein ?? 0
+          : macros?.protein ?? 0,
+        carbs: Number.isFinite(macroOverrides.carbs ?? NaN)
+          ? macroOverrides.carbs ?? 0
+          : macros?.carbs ?? 0,
+        fat: Number.isFinite(macroOverrides.fat ?? NaN)
+          ? macroOverrides.fat ?? 0
+          : macros?.fat ?? 0,
+      };
+      return {
+        id: item.id,
+        food_name: item.food_name,
+        weight_g: item.weight,
+        calories: resolvedMacros.calories,
+        protein: resolvedMacros.protein,
+        carbs: resolvedMacros.carbs,
+        fat: resolvedMacros.fat,
+        consumed_at: consumedAt,
+        image_path: imageUrl,
+      } as FoodLogRecord;
     },
     [],
   );
 
-  const handleOptimisticScanStart = useCallback(() => {}, []);
-  const handleOptimisticScanComplete = useCallback(() => {}, []);
-  const handleOptimisticScanError = useCallback(() => {
-    toast.error("Scan failed");
+  const handleOptimisticScanStart = useCallback(() => {
+    const scanId = generateDraftId();
+    optimisticScanIdRef.current = scanId;
+    setDailyLogs((prev) => [
+      {
+        id: scanId,
+        food_name: "Scanning...",
+        weight_g: 0,
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        consumed_at: new Date().toISOString(),
+        image_path: null,
+      } as FoodLogRecord,
+      ...prev,
+    ]);
   }, []);
 
+  const handleOptimisticScanComplete = useCallback(
+    ({ draft: draftItems, imageUrl }: { draft: DraftLog[]; imageUrl: string | null }) => {
+      const consumedAt = new Date().toISOString();
+      setDailyLogs((prev) => {
+        const currentScanId = optimisticScanIdRef.current;
+        const withoutScan = currentScanId
+          ? prev.filter((log) => log.id !== currentScanId)
+          : prev;
+        const optimisticEntries = draftItems.map((item) =>
+          buildOptimisticLog(item, consumedAt, imageUrl),
+        );
+        return [...optimisticEntries, ...withoutScan];
+      });
+      optimisticScanIdRef.current = null;
+    },
+    [buildOptimisticLog],
+  );
+
+  const handleOptimisticScanError = useCallback(
+    (message: string) => {
+      const currentScanId = optimisticScanIdRef.current;
+      if (currentScanId) {
+        setDailyLogs((prev) => prev.filter((log) => log.id !== currentScanId));
+        optimisticScanIdRef.current = null;
+      }
+      void message;
+    },
+    [],
+  );
+
   const {
+    showScanner,
+    setShowScanner,
+    stopScanning,
     draft,
     setDraft,
     isAnalyzing,
@@ -262,14 +325,9 @@ export default function HomeClient({
 
   useEffect(() => {
     if (showScanner !== isScannerView) {
-      setShowScanner(Boolean(isScannerView));
+      setShowScanner(isScannerView);
     }
   }, [isScannerView, setShowScanner, showScanner]);
-
-  const stopScanning = useCallback(() => {
-      // Logic to stop scanning if needed, mainly handled by unmount or view change
-      // Currently empty as scanner hook handles cleanup
-  }, []);
 
   useEffect(() => {
     if (!isHomeRoute) {
@@ -296,79 +354,223 @@ export default function HomeClient({
   const handleSaveTemplate = useCallback(async () => {
     const name = templateName.trim();
     if (!name) {
-      toast.error("Please enter a template name");
+      toast.error("Enter a template name.");
       return;
     }
+    const items = draftWithDefaults
+      .map((item) => ({
+        usda_id: item.match?.usda_id,
+        grams: item.weight,
+      }))
+      .filter((item): item is { usda_id: number; grams: number } =>
+        Number.isFinite(item.usda_id),
+      );
+
+    if (items.length !== draftWithDefaults.length) {
+      toast.error("All items must have a USDA match to save a template.");
+      return;
+    }
+
     setIsSavingTemplate(true);
     try {
-      const template = await saveMealTemplateFromLogs(name, dailyLogs);
-      if (template) {
-        setTemplateList((prev) => [template, ...prev]);
-        toast.success("Meal saved as template");
-        setTemplateName("");
-      }
+      const saved = await saveMealTemplate(name, items);
+      setTemplateList((prev) => [saved, ...prev]);
+      setTemplateName("");
+      toast.success("Template saved.");
     } catch (err) {
       console.error(err);
-      toast.error("Failed to save template");
+      toast.error(err instanceof Error ? err.message : "Unable to save template.");
     } finally {
       setIsSavingTemplate(false);
     }
-  }, [dailyLogs, templateName]);
+  }, [draftWithDefaults, templateName]);
 
-  const handleDeleteTemplate = async (id: string) => {
-      if (!confirm("Delete this template?")) return;
-      try {
-          await deleteMealTemplate(id);
-          setTemplateList(prev => prev.filter(t => t.id !== id));
-          toast.success("Template deleted");
-      } catch {
-          toast.error("Failed to delete template");
-      }
-  };
+  const handleUpdateMacro = useCallback((index: number, field: MacroField, value: number) => {
+    setDraft((prev) => {
+      const next = [...prev];
+      const item = next[index];
+      if (!item) return prev;
+      const macroOverrides = { ...(item.macro_overrides ?? {}) };
+      macroOverrides[field] = value;
+      next[index] = { ...item, macro_overrides: macroOverrides };
+      return next;
+    });
+  }, []);
 
-  const handleApplyTemplate = async (templateId: string) => {
-    const template = templateList.find((t) => t.id === templateId);
-    if (!template) return;
-    setIsApplyingTemplate(true);
-    try {
-        const result = await applyMealTemplate(templateId, new Date().toISOString(), templateScale);
-        if (result && result.length > 0) {
-            setDailyLogs((prev) => [...result, ...prev]);
-            toast.success(`Added ${result.length} items from template`);
-            setSelectedTemplateId(null);
-            updateScannerView(null);
-        }
-    } catch (err) {
-        console.error(err);
-        toast.error("Failed to apply template");
-    } finally {
-        setIsApplyingTemplate(false);
-    }
-  };
-
-  const logFoodItem = async (
-    item: DraftLog,
-    index: number,
-    macroOverrides: { protein?: number; carbs?: number; fat?: number } = {},
-  ) => {
-    if (!item.match) {
-      toast.error("Please select a food match first");
+  const handleSaveTemplateFromLogs = useCallback(async () => {
+    const name = templateFromLogsName.trim();
+    if (!name) {
+      toast.error("Enter a template name.");
       return;
     }
-    setLoggingIndex(index);
-    try {
-      const targetDate = new Date();
-      if (selectedDate !== new Date().toISOString().split("T")[0]) {
-        const [y, m, d] = selectedDate.split("-").map(Number);
-        targetDate.setFullYear(y, m - 1, d);
-      }
+    const logItems = dailyLogs
+      .filter((log) => Number.isFinite(log.weight_g) && log.weight_g > 0)
+      .map((log) => ({
+        food_name: log.food_name,
+        weight_g: log.weight_g,
+      }));
 
+    if (!logItems.length) {
+      toast.error("No logs available to save.");
+      return;
+    }
+
+    setIsSavingFromLogs(true);
+    try {
+      const saved = await saveMealTemplateFromLogs(name, logItems);
+      setTemplateList((prev) => [saved, ...prev]);
+      setTemplateFromLogsName("");
+      toast.success("Template created from today’s logs.");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to save template.");
+    } finally {
+      setIsSavingFromLogs(false);
+    }
+  }, [dailyLogs, templateFromLogsName]);
+
+  const handleApplyTemplate = useCallback(async () => {
+    if (!selectedTemplateId) return;
+    setIsApplyingTemplate(true);
+    try {
+      const inserted = await applyMealTemplate(selectedTemplateId, templateScale);
+      if (Array.isArray(inserted)) {
+        setDailyLogs((prev) => [...inserted, ...prev]);
+      }
+      toast.success("Template applied.");
+      setSelectedTemplateId(null);
+      setTemplateScale(1);
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to apply template.");
+    } finally {
+      setIsApplyingTemplate(false);
+    }
+  }, [selectedTemplateId, templateScale]);
+
+  const handleDeleteTemplate = useCallback(async (id: string) => {
+    try {
+      await deleteMealTemplate(id);
+      setTemplateList((prev) => prev.filter((template) => template.id !== id));
+      if (selectedTemplateId === id) {
+        setSelectedTemplateId(null);
+      }
+      toast.success("Template deleted.");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Unable to delete template.");
+    }
+  }, [selectedTemplateId]);
+
+  const bumpPortionMemory = (foodName: string, weight: number) => {
+    setPortionMemories((prev) => {
+      if (!Array.isArray(prev)) return [];
+      const existing = prev.findIndex(
+        (p) => p.food_name.toLowerCase() === foodName.toLowerCase(),
+      );
+      if (existing !== -1) {
+        const copy = [...prev];
+        copy[existing] = { ...copy[existing], last_weight_g: weight, usages: copy[existing].usages + 1 };
+        return copy;
+      }
+      return [
+        ...prev,
+        { id: -1, user_id: "", food_name: foodName, last_weight_g: weight, usages: 1, created_at: "" },
+      ];
+    });
+  };
+
+  const handleEditField = (field: keyof FoodLogRecord, value: string | number | null) => {
+    if (field !== "weight_g") {
+      setEditForm(prev => ({ ...prev, [field]: value }));
+      return;
+    }
+
+    const newWeight = Number(value);
+    const originalLog = dailyLogs.find(log => log.id === editingLogId);
+
+    if (!originalLog || originalLog.weight_g === 0) {
+      setEditForm(prev => ({ ...prev, weight_g: newWeight }));
+      return;
+    }
+
+    const ratio = newWeight / originalLog.weight_g;
+
+    setEditForm(prev => ({
+      ...prev,
+      weight_g: newWeight,
+      calories: Math.round((originalLog.calories || 0) * ratio),
+      protein: Math.round((originalLog.protein || 0) * ratio * 10) / 10,
+      carbs: Math.round((originalLog.carbs || 0) * ratio * 10) / 10,
+      fat: Math.round((originalLog.fat || 0) * ratio * 10) / 10,
+    }));
+  };
+  const handleBeginEdit = (log: FoodLogRecord) => { setEditingLogId(log.id); setEditForm(log); };
+  const handleCancelEdit = () => { setEditingLogId(null); setEditForm({}); };
+  const handleSaveEdits = async () => {
+     if (!editingLogId) return;
+     const previousLogs = dailyLogs;
+     setDailyLogs(prev => prev.map(log =>
+        log.id === editingLogId ? { ...log, ...editForm } as FoodLogRecord : log
+     ));
+     setEditingLogId(null);
+     try {
+       await updateFoodLog(editingLogId, {
+         weight_g: editForm.weight_g,
+         calories: editForm.calories ?? null,
+         protein: editForm.protein ?? null,
+         carbs: editForm.carbs ?? null,
+         fat: editForm.fat ?? null,
+       });
+       toast.success("Log updated");
+     } catch (err) {
+       console.error(err);
+       setDailyLogs(previousLogs);
+       toast.error(err instanceof Error ? err.message : "Unable to update log");
+     }
+  };
+  const handleDeleteLog = async (id: string) => {
+      const previousLogs = dailyLogs;
+      setDeletingLogId(id);
+      setDailyLogs(prev => prev.filter(l => l.id !== id));
+      try {
+        await deleteFoodLog(id);
+        toast.success("Entry deleted");
+      } catch (err) {
+        console.error(err);
+        setDailyLogs(previousLogs);
+        toast.error(err instanceof Error ? err.message : "Unable to delete entry");
+      } finally {
+        setDeletingLogId(null);
+      }
+  }
+  const handleShiftDate = (delta: number) => {
+      const date = new Date(selectedDate);
+      date.setDate(date.getDate() + delta);
+      const newDateStr = date.toISOString().split("T")[0];
+      setSelectedDate(newDateStr);
+      router.push(`/?date=${newDateStr}`);
+  };
+
+  const handleConfirm = async (index: number) => {
+    const item = draftWithDefaults[index];
+    if (!item || !item.match) return;
+    setError(null);
+    setLoggingIndex(index);
+
+    try {
+      const now = new Date();
+      const [year, month, day] = selectedDate.split("-").map(Number);
+      const targetDate = new Date(year, month - 1, day);
+      targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
+      // Use fetch API route
+      const macroOverrides = item.macro_overrides ?? {};
       const payload = {
-        food_name: item.match.description, 
-        weight_g: item.weight,
-        match_id: item.match.id,
-        image_url: item.image_url,
-        image_path: item.image_path,
+        foodName: item.food_name,
+        weight: item.weight,
+        match: item.match,
+        imageUrl: imagePublicUrl,
         consumedAt: targetDate.toISOString(),
       } as Record<string, unknown>;
       if (Number.isFinite(macroOverrides.protein ?? NaN)) payload.protein = macroOverrides.protein;
@@ -421,31 +623,27 @@ export default function HomeClient({
     }
   };
 
-  const confirmAllDrafts = async () => {
+  const handleConfirmAll = async () => {
     setIsConfirmingAll(true);
+    setError(null);
     let successCount = 0;
-    const currentDraft = [...draft];
     const successfulIndices = new Set<number>();
-    const targetDate = new Date();
-
-    if (selectedDate !== new Date().toISOString().split("T")[0]) {
-        const [y, m, d] = selectedDate.split("-").map(Number);
-        targetDate.setFullYear(y, m - 1, d);
-    }
+    const currentDraft = draftWithDefaults;
 
     for (let i = 0; i < currentDraft.length; i++) {
       const item = currentDraft[i];
       if (!item.match) continue; 
-
       try {
+        const macroOverrides = item.macro_overrides ?? {};
         const payload = {
-            food_name: item.match.description,
-            weight_g: item.weight,
-            match_id: item.match.id,
-            image_url: item.image_url,
-            image_path: item.image_path,
-            consumedAt: targetDate.toISOString(),
-        };
+          foodName: item.food_name,
+          weight: item.weight,
+          match: item.match,
+          imageUrl: imagePublicUrl,
+        } as Record<string, unknown>;
+        if (Number.isFinite(macroOverrides.protein ?? NaN)) payload.protein = macroOverrides.protein;
+        if (Number.isFinite(macroOverrides.carbs ?? NaN)) payload.carbs = macroOverrides.carbs;
+        if (Number.isFinite(macroOverrides.fat ?? NaN)) payload.fat = macroOverrides.fat;
 
         const response = await fetch("/api/log-food", {
             method: "POST",
@@ -498,27 +696,63 @@ export default function HomeClient({
           match_count: 10,
           p_user_id: session?.user?.id ?? null,
         });
-        if (error) throw error;
-        results = (data as unknown as MacroMatch[]) || [];
-      } catch (rpcError) {
-        console.warn("RPC failed, falling back to API:", rpcError);
-        usedFallback = true;
-        const res = await fetch(
-          `/api/search?q=${encodeURIComponent(manualQuery)}`,
-        );
-        if (res.ok) {
-          results = (await res.json()) as MacroMatch[];
+
+        if (error) {
+          throw error;
         }
+
+        results = (data ?? []) as MacroMatch[];
+        usedFallback = true;
+      } catch {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(manualQuery)}`);
+        if (!res.ok) {
+          throw new Error("Search failed");
+        }
+        results = await res.json();
       }
 
       setSearchResults(results);
-    } catch (err) {
-      console.error(err);
-      toast.error("Search failed");
-    } finally {
-      setIsSearching(false);
-    }
+      if (!results.length && usedFallback) {
+        toast.error("No results found. Try a broader search.");
+      }
+    } catch { toast.error("Search failed"); } 
+    finally { setIsSearching(false); }
   };
+
+  const logWeightCorrection = useCallback(async (original: DraftLog, final: DraftLog) => {
+    try {
+      await fetch("/api/log-correction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          original,
+          final,
+          correctedField: "weight",
+        }),
+      });
+    } catch (error) {
+      console.warn("[Corrections] Non-blocking log failed", error);
+    }
+  }, []);
+
+  const logManualCorrection = useCallback(async (originalSearch: string, finalMatchDesc: string) => {
+    try {
+      const response = await fetch("/api/corrections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          original_search: originalSearch,
+          final_match_desc: finalMatchDesc,
+          correction_type: "manual_match",
+        }),
+      });
+      if (!response.ok) {
+        console.warn("[Corrections] Failed to log correction", await response.json());
+      }
+    } catch (error) {
+      console.warn("[Corrections] Non-blocking log failed", error);
+    }
+  }, []);
 
   const applyManualResult = (match: MacroMatch) => {
     if (manualOpenIndex === -1 || manualOpenIndex === null) {
@@ -561,158 +795,173 @@ export default function HomeClient({
     finally { setIsFlagging(false); }
   };
 
-  const handleDeleteLog = async (id: string) => {
-      setDeletingLogId(id);
-      const previousLogs = dailyLogs;
-      setDailyLogs(prev => prev.filter(log => log.id !== id));
-      try {
-          await deleteFoodLog(id);
-          toast.success("Log deleted");
-      } catch {
-          setDailyLogs(previousLogs);
-          toast.error("Failed to delete");
-      } finally {
-          setDeletingLogId(null);
-      }
-  };
+  const handleAddWater = async (amount: number) => {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
 
-  const handleEditField = (field: keyof FoodLogRecord, value: string | number) => {
-    setEditForm((prev) => ({ ...prev, [field]: value }));
-  };
+    setWaterSaving(true);
+    // Create timestamp based on selected date and current time
+    const now = new Date();
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const targetDate = new Date(year, month - 1, day);
+    targetDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+    const loggedAt = targetDate.toISOString();
 
-  const handleBeginEdit = (log: FoodLogRecord) => {
-    setEditingLogId(log.id);
-    setEditForm(log);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingLogId(null);
-    setEditForm({});
-  };
-
-  const handleSaveEdits = async (id: string) => {
-    const originalLog = dailyLogs.find((l) => l.id === id);
-    if (!originalLog) return;
-
-    const optimisticLog = { ...originalLog, ...editForm };
-    setDailyLogs((prev) => prev.map((l) => (l.id === id ? optimisticLog : l)));
-    setEditingLogId(null);
-
+    const optimisticId = `water_${Date.now()}`;
+    const optimisticLog: WaterLog = {
+      id: optimisticId,
+      amount_ml: amount,
+      logged_at: loggedAt,
+      isOptimistic: true,
+    };
+    setWaterLogs((prev) => [optimisticLog, ...prev]);
     try {
-      await updateFoodLog(id, editForm);
-      toast.success("Log updated");
+      const saved = await logWater(amount, loggedAt);
+      setWaterLogs((prev) =>
+        prev.map((log) => (log.id === optimisticId ? { ...saved } : log)),
+      );
+      toast.success("Water logged");
+      setWaterAmount(amount);
+      router.refresh();
     } catch (err) {
-      setDailyLogs((prev) => prev.map((l) => (l.id === id ? originalLog : l)));
-      toast.error("Update failed");
+      console.error(err);
+      setWaterLogs((prev) => prev.filter((log) => log.id !== optimisticId));
+      toast.error(err instanceof Error ? err.message : "Unable to log water");
+    } finally {
+      setWaterSaving(false);
     }
   };
 
-  const handleShiftDate = (days: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split("T")[0]);
+  const startEditWater = (log: WaterLog) => {
+    setEditingWaterId(log.id);
+    setEditingWaterAmount(log.amount_ml);
   };
 
-  const handleLogWater = async () => {
-    if (waterAmount <= 0) return;
-    setIsLoggingWater(true);
-    const optimisticId = `temp_${Date.now()}`;
-    const newLog: WaterLog = {
-      id: optimisticId,
-      amount_ml: waterAmount,
-      logged_at: new Date().toISOString(),
-      isOptimistic: true,
-    };
-    setWaterLogs((prev) => [newLog, ...prev]);
-
+  const handleUpdateWater = async () => {
+    if (!editingWaterId) return;
+    const updatedAmount = Number(editingWaterAmount);
+    if (!Number.isFinite(updatedAmount) || updatedAmount <= 0) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    const previousLogs = waterLogs;
+    setWaterLogs((prev) =>
+      prev.map((log) =>
+        log.id === editingWaterId ? { ...log, amount_ml: updatedAmount } : log,
+      ),
+    );
+    setEditingWaterId(null);
     try {
-      const savedLog = await logWater(waterAmount, new Date().toISOString());
-      if (savedLog) {
-        setWaterLogs((prev) =>
-          prev.map((l) =>
-            l.id === optimisticId ? { ...savedLog, isOptimistic: false } : l,
-          ),
-        );
-        toast.success("Water logged");
-      }
-    } catch {
-      setWaterLogs((prev) => prev.filter((l) => l.id !== optimisticId));
-      toast.error("Failed to log water");
-    } finally {
-      setIsLoggingWater(false);
+      await updateWaterLog(editingWaterId, updatedAmount);
+      toast.success("Water updated");
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+      setWaterLogs(previousLogs);
+      toast.error(err instanceof Error ? err.message : "Unable to update water");
     }
   };
 
   const handleDeleteWater = async (id: string) => {
-    const prevLogs = waterLogs;
-    setWaterLogs((prev) => prev.filter((l) => l.id !== id));
+    const previousLogs = waterLogs;
+    setDeletingWaterId(id);
+    setWaterLogs((prev) => prev.filter((log) => log.id !== id));
     try {
       await deleteWaterLog(id);
-    } catch {
-      setWaterLogs(prevLogs);
-      toast.error("Failed to delete water log");
+      toast.success("Water deleted");
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+      setWaterLogs(previousLogs);
+      toast.error(err instanceof Error ? err.message : "Unable to delete water");
+    } finally {
+      setDeletingWaterId(null);
     }
   };
 
   return (
-    <>
-      <main className="mx-auto max-w-md pb-24">
-        <header className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Hello, {profile?.first_name || "User"}</h1>
-            <p className="text-sm text-white/60">Let's hit your goals today.</p>
-          </div>
-          <div className="h-10 w-10 overflow-hidden rounded-full bg-emerald-500/20 ring-2 ring-emerald-500/40">
-             {/* Profile Image Placeholder */}
-             <div className="flex h-full w-full items-center justify-center text-emerald-400 font-bold">
-                 {profile?.first_name?.[0] || "U"}
-             </div>
-          </div>
-        </header>
+    <div className="min-h-screen bg-black text-white pb-24">
+      <main className="mx-auto max-w-md px-4 pt-6 space-y-8">
         {isTemplateManagerOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
-             <div className="w-full max-w-md rounded-2xl bg-[#1a1a1a] p-6 ring-1 ring-white/10">
-                <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-white">Saved Meals</h2>
-                    <button onClick={() => setIsTemplateManagerOpen(false)} className="text-white/50 hover:text-white">✕</button>
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm uppercase tracking-wide text-emerald-200">Meal templates</p>
+                  <h3 className="text-lg font-semibold text-white">Manage your favorites</h3>
                 </div>
-                <div className="max-h-[60vh] overflow-y-auto space-y-3">
-                    {templateList.length === 0 ? (
-                        <p className="text-center text-white/40 py-8">No saved meals yet.</p>
-                    ) : (
-                        templateList.map(t => (
-                            <div key={t.id} className="flex items-center justify-between rounded-xl bg-white/5 p-4">
-                                <div>
-                                    <p className="font-medium text-white">{t.name}</p>
-                                    <p className="text-xs text-white/50">{t.items.length} items</p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => handleApplyTemplate(t.id)} disabled={isApplyingTemplate} className="btn bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-sm py-1">Load</button>
-                                    <button onClick={() => handleDeleteTemplate(t.id)} className="btn bg-red-500/20 text-red-400 hover:bg-red-500/30 text-sm py-1">Delete</button>
-                                </div>
-                            </div>
-                        ))
-                    )}
+                <button className="text-white/70 hover:text-white" onClick={() => setIsTemplateManagerOpen(false)} type="button">
+                  ✕
+                </button>
+              </div>
+              <div className="mt-4 space-y-4">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm font-medium text-white">Create from today’s logs</p>
+                  <p className="text-xs text-white/60">Save everything you logged today as a reusable meal template.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <input
+                      className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder-white/40 focus:border-emerald-400 focus:outline-none"
+                      placeholder="Template name"
+                      value={templateFromLogsName}
+                      onChange={(event) => setTemplateFromLogsName(event.target.value)}
+                    />
+                    <button
+                      className="btn"
+                      disabled={isSavingFromLogs}
+                      onClick={handleSaveTemplateFromLogs}
+                      type="button"
+                    >
+                      {isSavingFromLogs ? "Saving..." : "Save"}
+                    </button>
+                  </div>
                 </div>
-             </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-white/50">Saved templates</p>
+                  {templateList.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-4 text-sm text-white/60">
+                      No templates yet. Save one from a draft or today’s logs.
+                    </div>
+                  ) : (
+                    templateList.map((template) => (
+                      <div
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3"
+                        key={template.id}
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-white">{template.name}</p>
+                          <p className="text-xs text-white/60">
+                            {template.items.length} item{template.items.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="btn"
+                            onClick={() => {
+                              setSelectedTemplateId(template.id);
+                              setIsTemplateManagerOpen(false);
+                            }}
+                            type="button"
+                          >
+                            Use
+                          </button>
+                          <button
+                            className="btn bg-white/10 text-white hover:bg-white/20"
+                            onClick={() => handleDeleteTemplate(template.id)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
-        <ManualSearchModal
-          isOpen={manualOpenIndex !== null || (isHomeRoute && viewParam === "manual")}
-          onClose={() => {
-              setManualOpenIndex(null);
-              setSearchResults([]);
-              updateScannerView(null);
-          }}
-          query={manualQuery}
-          onChangeQuery={setManualQuery}
-          onSearch={runManualSearch}
-          isSearching={isSearching}
-          results={searchResults}
-          onSelect={applyManualResult}
-          recentFoods={recentFoods}
-          isLoadingRecentFoods={isLoadingRecentFoods}
-        />
         <ErrorBoundary fallback={scanErrorFallback}>
           {(shouldShowScanner || draft.length > 0) ? (
             <div className="relative z-10 rounded-2xl bg-[#111] p-4 shadow-2xl ring-1 ring-white/10">
@@ -790,159 +1039,157 @@ export default function HomeClient({
                   )}
                 </CameraErrorBoundary>
               ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-white">Draft entries</h2>
-                    <div className="flex gap-2">
-                         <button className="text-xs text-white/50 hover:text-white" onClick={() => setDraft([])}>Clear All</button>
-                    </div>
-                  </div>
-                  {draftWithDefaults.map((item, index) => (
-                    <div key={item.id} className="relative">
-                      <DraftReview
-                        draftItem={item}
-                        onSave={(overrides) => logFoodItem(item, index, overrides)}
-                        onDiscard={() => {
-                          setDraft((prev) => {
-                            const next = prev.filter((_, i) => i !== index);
-                            if (next.length === 0) updateScannerView(null);
-                            return next;
-                          });
-                        }}
-                        isSaving={loggingIndex === index}
-                        onUpdateWeight={(w) => {
-                          setDraft((prev) => {
-                            const next = [...prev];
-                            next[index] = { ...next[index], weight: w };
-                            return next;
-                          });
-                        }}
-                        onUpdateMacro={(field, val) => {
-                            // Handled locally in DraftReview or passed up if we want draft state to hold it
-                            // For now, logging happens with overrides
-                        }}
-                        onChangeFood={() => {
-                          setManualOpenIndex(index);
-                          setManualQuery(item.food_name || "");
-                        }}
-                      />
-                    </div>
-                  ))}
-                   <div className="mt-4 border-t border-white/10 pt-4">
-                      <button 
-                        onClick={confirmAllDrafts} 
-                        disabled={isConfirmingAll}
-                        className="btn w-full bg-emerald-500 hover:bg-emerald-400 text-white font-semibold py-3"
-                      >
-                          {isConfirmingAll ? "Saving All..." : `Confirm All (${draft.length})`}
-                      </button>
-                      <button
-                        className="mt-2 w-full text-sm text-white/50 hover:text-white"
-                        onClick={() => {
-                            setManualOpenIndex(-1);
-                            setManualQuery("");
-                        }}
-                      >
-                        + Add another item manually
-                      </button>
-                   </div>
-                </div>
+                <DraftReview
+                  confidenceLabel="High confidence"
+                  draft={draftWithDefaults}
+                  imageSrc={imagePublicUrl}
+                  usedFallback={usedFallback}
+                  editingWeightIndex={editingWeightIndex}
+                  isConfirmingAll={isConfirmingAll}
+                  isImageUploading={isImageUploading}
+                  isSavingTemplate={isSavingTemplate}
+                  loggingIndex={loggingIndex}
+                  onApplyMatch={(idx, m) => {
+                    const d = [...draftWithDefaults]; d[idx].match = m; setDraft(d);
+                  }}
+                  onConfirm={handleConfirm}
+                  onConfirmAll={handleConfirmAll}
+                  onManualSearch={(idx) => {
+                    setManualOpenIndex(idx); setManualQuery(draftWithDefaults[idx].search_term || draftWithDefaults[idx].food_name);
+                  }}
+                  onSaveTemplate={handleSaveTemplate}
+                  onTemplateNameChange={setTemplateName}
+                  onToggleWeightEdit={(idx) => setEditingWeightIndex(editingWeightIndex === idx ? null : idx)}
+                  onUpdateWeight={(idx, w) => { const d = [...draftWithDefaults]; d[idx].weight = w; setDraft(d); }}
+                  onUpdateMacro={handleUpdateMacro}
+                  templateName={templateName}
+                />
               )}
             </div>
           ) : (
-            <div className="space-y-6">
-              <section className="grid grid-cols-2 gap-4">
-                 <div className="rounded-2xl border border-white/10 bg-[#111] p-4">
-                    <div className="mb-2 text-xs font-medium uppercase tracking-wider text-white/50">Calories</div>
-                    <div className="flex items-end gap-1">
-                        <span className={`text-3xl font-bold ${dailyTotals.calories > calorieTarget ? "text-red-400" : "text-white"}`}>
-                            {Math.round(dailyTotals.calories)}
-                        </span>
-                        <span className="mb-1 text-sm text-white/50">/ {calorieTarget}</span>
-                    </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                        <div className={`h-full rounded-full ${dailyTotals.calories > calorieTarget ? "bg-red-500" : "bg-emerald-500"}`} style={{ width: `${Math.min((dailyTotals.calories / calorieTarget) * 100, 100)}%` }} />
-                    </div>
-                 </div>
-                 <div className="rounded-2xl border border-white/10 bg-[#111] p-4">
-                    <div className="mb-2 text-xs font-medium uppercase tracking-wider text-white/50">Macros</div>
-                    <div className="space-y-2">
-                        {/* Protein */}
-                        <div>
-                            <div className="flex justify-between text-xs text-white/70">
-                                <span>Protein</span>
-                                <span>{Math.round(dailyTotals.protein)} / {macroTargets.protein}g</span>
-                            </div>
-                            <div className="mt-1 h-1 w-full rounded-full bg-white/10">
-                                <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.min((dailyTotals.protein / macroTargets.protein) * 100, 100)}%` }} />
-                            </div>
-                        </div>
-                         {/* Carbs */}
-                         <div>
-                            <div className="flex justify-between text-xs text-white/70">
-                                <span>Carbs</span>
-                                <span>{Math.round(dailyTotals.carbs)} / {macroTargets.carbs}g</span>
-                            </div>
-                            <div className="mt-1 h-1 w-full rounded-full bg-white/10">
-                                <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min((dailyTotals.carbs / macroTargets.carbs) * 100, 100)}%` }} />
-                            </div>
-                        </div>
-                         {/* Fat */}
-                         <div>
-                            <div className="flex justify-between text-xs text-white/70">
-                                <span>Fat</span>
-                                <span>{Math.round(dailyTotals.fat)} / {macroTargets.fat}g</span>
-                            </div>
-                            <div className="mt-1 h-1 w-full rounded-full bg-white/10">
-                                <div className="h-full rounded-full bg-purple-500" style={{ width: `${Math.min((dailyTotals.fat / macroTargets.fat) * 100, 100)}%` }} />
-                            </div>
-                        </div>
-                    </div>
-                 </div>
-              </section>
-
-             <section className="rounded-2xl border border-white/10 bg-[#111] p-4">
-               <div className="mb-4 flex items-center justify-between">
+            <>
+             <section className="card space-y-4">
+               <div className="flex items-center justify-between">
                  <div>
-                    <h3 className="text-lg font-semibold text-white">Water Tracker</h3>
-                    <p className="text-xs text-white/50">Stay hydrated.</p>
+                   <p className="text-sm uppercase tracking-wide text-emerald-200">Water</p>
+                   <h2 className="text-xl font-semibold text-white">Hydration tracker</h2>
+                   <p className="text-sm text-white/60">
+                     Today&apos;s total: {waterTotal} ml • Goal {waterGoal} ml
+                   </p>
                  </div>
-                 <div className="text-right">
-                    <span className="text-2xl font-bold text-blue-400">
-                        {(waterLogs.reduce((sum, log) => sum + log.amount_ml, 0) / 1000).toFixed(1)}L
-                    </span>
+                 <span className="pill bg-white/10 text-white/70">Daily goal</span>
+               </div>
+               <div className="space-y-2">
+                 <div className="h-3 w-full overflow-hidden rounded-full bg-white/10">
+                   <div
+                     className="h-full rounded-full bg-emerald-400 transition-all"
+                     style={{ width: `${waterProgress * 100}%` }}
+                   />
+                 </div>
+                 <div className="text-xs text-white/60">
+                   {Math.round(waterProgress * 100)}% of goal
                  </div>
                </div>
-               <div className="flex items-center gap-3">
-                    <button 
-                        onClick={() => {
-                            if(waterAmount > 50) setWaterAmount(prev => prev - 50);
-                        }}
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white hover:bg-white/10"
-                    >-</button>
-                    <div className="flex-1 text-center">
-                        <span className="text-xl font-medium text-white">{waterAmount}ml</span>
-                    </div>
-                    <button 
-                        onClick={() => setWaterAmount(prev => prev + 50)}
-                         className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white hover:bg-white/10"
-                    >+</button>
-                    <button 
-                        onClick={handleLogWater}
-                        disabled={isLoggingWater}
-                        className="ml-2 rounded-lg bg-blue-500/20 px-4 py-2 text-sm font-semibold text-blue-400 hover:bg-blue-500/30"
-                    >
-                        {isLoggingWater ? "..." : "Add"}
-                    </button>
+               <div className="flex flex-wrap items-end gap-3">
+                 <label className="space-y-1 text-sm text-white/70">
+                   <span className="block text-xs uppercase tracking-wide text-white/60">
+                     Amount (ml)
+                   </span>
+                   <input
+                     className="w-32 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:border-emerald-400 focus:outline-none"
+                     min={50}
+                     step={50}
+                     type="number"
+                     value={waterAmount}
+                     onChange={(event) => setWaterAmount(Number(event.target.value))}
+                   />
+                 </label>
+                 <button
+                   className="btn"
+                   disabled={waterSaving}
+                   onClick={() => handleAddWater(waterAmount)}
+                   type="button"
+                 >
+                   {waterSaving ? "Saving..." : "Add water"}
+                 </button>
+                 <div className="flex flex-wrap gap-2">
+                   {[250, 500, 750, 1000].map((amount) => (
+                     <button
+                       className="pill bg-white/10 text-white hover:bg-white/20"
+                       key={amount}
+                       onClick={() => handleAddWater(amount)}
+                       type="button"
+                     >
+                       +{amount} ml
+                     </button>
+                   ))}
+                 </div>
                </div>
-               {waterLogs.length > 0 && (
-                 <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
-                    {waterLogs.slice(0, 5).map(log => (
-                        <div key={log.id} className={`flex items-center gap-2 rounded-full border border-white/5 bg-white/5 px-3 py-1 text-xs text-white/70 ${log.isOptimistic ? "opacity-50" : ""}`}>
-                            <span>{log.amount_ml}ml</span>
-                            <button onClick={() => handleDeleteWater(log.id)} className="text-white/30 hover:text-white">×</button>
-                        </div>
-                    ))}
+               {waterLogs.length === 0 ? (
+                 <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/50 p-4 text-sm text-white/60">
+                   No water logs yet. Add your first entry to start tracking.
+                 </div>
+               ) : (
+                 <div className="space-y-2">
+                   <p className="text-xs uppercase tracking-wide text-white/50">Recent entries</p>
+                   {waterLogs.slice(0, 5).map((log) => (
+                     <div
+                       className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-900/60 p-3 text-sm text-white/80"
+                       key={log.id}
+                     >
+                       {editingWaterId === log.id ? (
+                         <div className="flex flex-wrap items-center gap-2">
+                           <input
+                             className="w-24 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white"
+                             min={50}
+                             step={50}
+                             type="number"
+                             value={editingWaterAmount}
+                             onChange={(event) => setEditingWaterAmount(Number(event.target.value))}
+                           />
+                           <button className="btn" onClick={handleUpdateWater} type="button">
+                             Save
+                           </button>
+                           <button
+                             className="btn bg-white/10 text-white hover:bg-white/20"
+                             onClick={() => setEditingWaterId(null)}
+                             type="button"
+                           >
+                             Cancel
+                           </button>
+                         </div>
+                       ) : (
+                         <>
+                           <div>
+                             <p className="text-base font-semibold text-white">{log.amount_ml} ml</p>
+                             <p className="text-xs text-white/60">
+                               {new Date(log.logged_at).toLocaleTimeString([], {
+                                 hour: "numeric",
+                                 minute: "2-digit",
+                               })}
+                             </p>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             <button
+                               className="pill bg-white/10 text-white hover:bg-white/20"
+                               onClick={() => startEditWater(log)}
+                               type="button"
+                             >
+                               ✏️ Edit
+                             </button>
+                             <button
+                               className="pill bg-red-500/20 text-red-100 hover:bg-red-500/30"
+                               disabled={deletingWaterId === log.id}
+                               onClick={() => handleDeleteWater(log.id)}
+                               type="button"
+                             >
+                               {deletingWaterId === log.id ? "Deleting..." : "🗑️ Delete"}
+                             </button>
+                           </div>
+                         </>
+                       )}
+                     </div>
+                   ))}
                  </div>
                )}
              </section>
@@ -971,11 +1218,11 @@ export default function HomeClient({
                 <button className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition hover:bg-emerald-400" onClick={() => updateScannerView("scan")} aria-label="Add Log">
                   <span className="text-2xl">+</span>
                 </button>
-                <button className="rounded-full bg-white/10 p-3 text-sm font-medium text-white backdrop-blur-md" onClick={() => { setManualOpenIndex(-1); setManualQuery(""); updateScannerView("manual"); }}>
+                <button className="rounded-full bg-white/10 p-3 text-sm font-medium text-white backdrop-blur-md" onClick={() => { setManualOpenIndex(-1); setManualQuery(""); }}>
                   Manual Add
                 </button>
              </div>
-          </div>
+          </>
           )}
         </ErrorBoundary>
       </main>
@@ -997,6 +1244,7 @@ export default function HomeClient({
           </div>
         </div>
       )}
-    </>
+      <ManualSearchModal isLoadingRecentFoods={isLoadingRecentFoods} isSearching={isSearching} onChangeQuery={setManualQuery} onClose={() => setManualOpenIndex(null)} onSearch={runManualSearch} onSelect={applyManualResult} openIndex={manualOpenIndex} query={manualQuery} recentFoods={recentFoods} results={searchResults} />
+    </div>
   );
 }
