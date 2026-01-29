@@ -284,8 +284,11 @@ test("logs a correction when weight changes before confirm", async ({ page }) =>
   await expect(page.getByText("Draft entries")).toBeVisible();
 
   await page.getByRole("button", { name: "Adjust weight" }).click();
-  const weightInput = page.getByRole("spinbutton");
+  
+  // FIX: Use .first() to target the Draft Editor input, avoiding ambiguity with Weight Logger
+  const weightInput = page.getByRole("spinbutton").first();
   await weightInput.fill("250");
+  
   await page.getByRole("button", { name: "Done" }).click();
 
   // FIX: Assert on the request object directly using Promise.all
