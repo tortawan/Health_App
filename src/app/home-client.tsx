@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 
 // --- UPDATED IMPORTS ---
@@ -74,6 +74,7 @@ export default function HomeClient({
   initialSelectedDate,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [dailyLogs, setDailyLogs] = useState<FoodLogRecord[]>(initialLogs);
   useEffect(() => {
     setDailyLogs(initialLogs);
@@ -269,6 +270,23 @@ export default function HomeClient({
       })),
     [draft],
   );
+  const pathname = usePathname();
+  const isHomeRoute = pathname === "/";
+  const viewParam = searchParams.get("view");
+  const isScannerView = isHomeRoute && (viewParam === "scan" || viewParam === "manual");
+  const updateScannerView = useCallback(
+    (view: "scan" | "manual" | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (view) {
+        params.set("view", view);
+      } else {
+        params.delete("view");
+      }
+      const query = params.toString();
+      router.push(query ? `/?${query}` : "/");
+    },
+    [router, searchParams],
+  );
 
   const scanErrorFallback = useCallback(
     (error: Error, retry: () => void) => (
@@ -282,7 +300,7 @@ export default function HomeClient({
             className="btn"
             onClick={() => {
               retry();
-              setShowScanner(true);
+              updateScannerView("scan");
             }}
             type="button"
           >
@@ -292,7 +310,7 @@ export default function HomeClient({
             className="btn bg-white/10 text-white hover:bg-white/20"
             onClick={() => {
               retry();
-              setShowScanner(false);
+              updateScannerView(null);
             }}
             type="button"
           >
@@ -301,11 +319,15 @@ export default function HomeClient({
         </div>
       </div>
     ),
-    [setShowScanner],
+    [updateScannerView],
   );
-  const pathname = usePathname();
-  const isHomeRoute = pathname === "/";
   const shouldShowScanner = isHomeRoute && showScanner;
+
+  useEffect(() => {
+    if (showScanner !== isScannerView) {
+      setShowScanner(isScannerView);
+    }
+  }, [isScannerView, setShowScanner, showScanner]);
 
   useEffect(() => {
     if (!isHomeRoute) {
@@ -574,7 +596,7 @@ export default function HomeClient({
         ]);
         setDraft((prev) => {
           const next = prev.filter((_, i) => i !== index);
-          if (next.length === 0) setShowScanner(false);
+          if (next.length === 0) updateScannerView(null);
           return next;
         });
         bumpPortionMemory(item.food_name, item.weight);
@@ -647,7 +669,7 @@ export default function HomeClient({
     if (successCount > 0) {
       toast.success(`Saved ${successCount} items`);
       setDraft((prev) => prev.filter((_, index) => !successfulIndices.has(index))); 
-      if (successfulIndices.size === currentDraft.length) setShowScanner(false);
+      if (successfulIndices.size === currentDraft.length) updateScannerView(null);
       refreshRecentFoods();
     } else {
       toast.error("No items saved. Please check matches.");
@@ -744,7 +766,7 @@ export default function HomeClient({
       const mem = portionMemories.find(p => p.food_name.toLowerCase() === match.description.toLowerCase());
       if (mem) newDraftItem.weight = mem.last_weight_g;
       setDraft([newDraftItem]);
-      setShowScanner(true); 
+      updateScannerView("scan");
     } else {
       const newDraft = [...draft];
       const originalItem = newDraft[manualOpenIndex];
@@ -955,7 +977,7 @@ export default function HomeClient({
               {draft.length === 0 ? (
                 <CameraErrorBoundary
                   onManualUpload={handleImageUpload}
-                  onRetry={() => setShowScanner(true)}
+                  onRetry={() => updateScannerView("scan")}
                 >
                   <CameraCapture
                     captureMode="photo"
@@ -989,7 +1011,7 @@ export default function HomeClient({
                           className="btn"
                           onClick={() => {
                             resetAnalysis();
-                            setShowScanner(true);
+                            updateScannerView("scan");
                           }}
                           type="button"
                         >
@@ -1193,7 +1215,7 @@ export default function HomeClient({
                onDeleteLog={handleDeleteLog}
              />
              <div className="scanner-container right-4 flex flex-col gap-3">
-                <button className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition hover:bg-emerald-400" onClick={() => setShowScanner(true)} aria-label="Add Log">
+                <button className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg transition hover:bg-emerald-400" onClick={() => updateScannerView("scan")} aria-label="Add Log">
                   <span className="text-2xl">+</span>
                 </button>
                 <button className="rounded-full bg-white/10 p-3 text-sm font-medium text-white backdrop-blur-md" onClick={() => { setManualOpenIndex(-1); setManualQuery(""); }}>
