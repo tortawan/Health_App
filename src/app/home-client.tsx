@@ -44,7 +44,6 @@ import {
   LogCorrection,
 } from "@/types/food";
 import { logManualCorrection, logWeightCorrection } from "./actions/utils";
-import { v4 as uuidv4 } from "uuid";
 import { generateDraftId } from "@/lib/uuid";
 
 type WaterLog = {
@@ -656,6 +655,7 @@ export default function HomeClient({
   };
 
   return (
+    <>
       <main className="mx-auto max-w-md pb-24">
         <header className="mb-6 flex items-center justify-between">
           <div>
