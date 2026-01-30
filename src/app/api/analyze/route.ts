@@ -530,7 +530,7 @@ export async function POST(request: Request) {
         query_text: queryText,
         match_threshold: matchThresholdValue,
         match_count: matchCount,
-        p_user_id: userId,
+        user_id: userId,
       });
 
       const { data: matches, error: rpcError } = await supabase.rpc("match_foods", {
