@@ -319,7 +319,7 @@ export default function HomeClient({
         </div>
       </div>
     ),
-    [setDraft, updateScannerView],
+    [updateScannerView],
   );
   const shouldShowScanner = isHomeRoute && showScanner;
 
@@ -385,17 +385,20 @@ export default function HomeClient({
     }
   }, [draftWithDefaults, templateName]);
 
-  const handleUpdateMacro = useCallback((index: number, field: MacroField, value: number) => {
-    setDraft((prev) => {
-      const next = [...prev];
-      const item = next[index];
-      if (!item) return prev;
-      const macroOverrides = { ...(item.macro_overrides ?? {}) };
-      macroOverrides[field] = value;
-      next[index] = { ...item, macro_overrides: macroOverrides };
-      return next;
-    });
-  }, []);
+  const handleUpdateMacro = useCallback(
+    (index: number, field: MacroField, value: number) => {
+      setDraft((prev) => {
+        const next = [...prev];
+        const item = next[index];
+        if (!item) return prev;
+        const macroOverrides = { ...(item.macro_overrides ?? {}) };
+        macroOverrides[field] = value;
+        next[index] = { ...item, macro_overrides: macroOverrides };
+        return next;
+      });
+    },
+    [setDraft],
+  );
 
   const handleSaveTemplateFromLogs = useCallback(async () => {
     const name = templateFromLogsName.trim();
