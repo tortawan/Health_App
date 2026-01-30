@@ -319,7 +319,7 @@ export default function HomeClient({
         </div>
       </div>
     ),
-    [updateScannerView],
+    [setDraft, updateScannerView],
   );
   const shouldShowScanner = isHomeRoute && showScanner;
 
