@@ -1,158 +1,42 @@
-
-# 🚀 Technical Blueprint: AI-Native Nutrition Tracker (Production-Ready)
-
-> **Status:** Final Execution Plan
-> **Core Principle:** "Visual RAG" (Perception via AI -> Fact Retrieval via Database)
-> **Constraint:** Zero Infrastructure Cost (Free Tiers Only)
-
----
+# 🚀 Technical Blueprint: AI-Native Nutrition Tracker
 
 ## 1. Executive Summary
+This project implements a Multimodal RAG pipeline. We use Large Multimodal Models (LMMs) for perception and Vector Databases for factual retrieval.
 
-This project builds a friction-less food tracker using **Multimodal RAG**. Instead of asking an LLM to hallucinate nutrition facts, we use:
+## 2. The "Visual RAG" Pipeline
 
-1.  **gemini‑2.5‑flash** to *perceive* the image (identify food names + visual quantity estimation).
-2.  **Supabase Vector Search** to *retrieve* validated nutrition facts from a self-hosted USDA database.
-3.  **Next.js Server Actions** to orchestrate the flow without managing a separate backend server.
+### Step A: Perception (Gemini 2.5 Flash)
+- **Input:** Base64 encoded image + System Prompt.
+- **Output:** Structured JSON containing `food_name`, `search_term`, and `quantity_estimate`.
+- **Circuit Breaker:** If Gemini fails 3 times within 60 seconds (monitored via Upstash Redis), the system automatically falls back to manual text search to prevent UI hangs.
 
----
+### Step B: Embedding Generation (Transformers.js)
+- **Model:** Xenova/all-MiniLM-L6-v2.
+- **Dimensions:** 384.
+- **Optimization:** Embeddings are generated on the server (Next.js API) to ensure consistent vector space alignment with the database.
 
-## 2. The "Free Tier" Production Stack
+### Step C: Hybrid Retrieval (Supabase + pgvector)
+- **Function:** `match_foods(query_embedding, query_text, user_id, ...)`.
+- **Logic:**
+  - Perform cosine similarity search on the embedding column.
+  - Perform full-text search (tsvector) on the description column.
+  - Combine scores to return a ranked list of USDA items.
 
-| Component | Technology | Reasoning |
-| :--- | :--- | :--- |
-| **Framework** | **Next.js 15+ (App Router)** | Deployed on Vercel. Server Actions handle logic; avoids "cold start" timeouts of free containers. |
-| **AI Vision** | **gemini‑2.5‑flash** | High rate limit (1,500/day free). Used strictly for *identification*, not for factual nutrition data. |
-| **Database** | **Supabase (PostgreSQL)** | Stores user logs and USDA data. Includes `pgvector` for semantic search. |
-| **Embeddings** | **Transformers.js** | **CRITICAL FIX:** Runs `all-MiniLM-L6-v2` inside the Next.js API route. **Requirement:** Define `EMBEDDING_MODEL=Xenova/all-MiniLM-L6-v2` in `.env` and use this variable in both the ingestion script and the app to guarantee vector alignment. |
-| **Data Source** | **USDA Foundation Foods** | Downloaded and **denormalized** into a flat table to avoid complex joins at runtime. |
+## 3. Database Architecture (Key Tables)
 
----
+### usda_library
+- Stores the static nutritional truth.
+- **Indexing:** IVFFlat index on embedding for lookups.
+- **Columns:** `id`, `description`, `kcal_100g`, `protein_100g`, `carbs_100g`, `fat_100g`, `fiber_100g`, `sugar_100g`, `sodium_100g`.
 
-## 3. The Optimized "Visual RAG" Workflow
+### food_logs
+- Stores user-specific consumption history.
+- **Security:** RLS policies ensure `user_id` matches the authenticated session.
+- **Audit Trail:** Includes `image_path` (Supabase Storage) for historical review.
 
-1.  **Capture & Optimistic UI:**
-    * User snaps photo.
-    * **UI Update:** Immediately show the image with a "Scanning..." skeleton loader (Masks latency).
-    * Image is uploaded to Supabase Storage.
+### ai_corrections
+- Captures user adjustments (e.g., when a user corrects a weight from 100g to 200g).
 
-2.  **AI Analysis (Gemini):**
-    * Backend sends image URL to Gemini.
-    * **Prompt:** *"Identify all distinct food items in this image. Return a JSON array where each object contains: `food_name` (string, for search), `search_term` (string, optimized for database lookup), and `quantity_estimate` (string, e.g., '150g'). Do not hallucinate nutrition data."*
-
-3.  **Vector Retrieval (The "Truth" Step):**
-    * Backend generates a vector embedding for the *search query string* using `transformers.js`.
-    * Database performs a similarity search on `usda_library`.
-
-4.  **Verification (The "Human Loop"):**
-    * App presents a "Draft Log": *"We found Grilled Salmon. Estimated 150g?"*
-    * User can quickly tap "Small (100g) / Medium (150g) / Large (200g)" or edit manually.
-    * **Reasoning:** AI weight guessing is error-prone; user confirmation prevents frustration.
-
----
-
-## 4. Revised Database Schema
-
-Run this in your Supabase SQL Editor. It includes the critical **RLS (Row Level Security)** fixes to ensure users can actually read the public USDA data.
-
-```sql
--- 1. Enable Vector Extension
-create extension if not exists vector;
-
--- 2. USDA Library (Denormalized & Public)
-create table usda_library (
-  id bigint primary key,            -- Matches USDA FDC ID
-  description text not null,        -- Product name (e.g., "Avocado, raw")
-  embedding vector(384),            -- Matches 'all-MiniLM-L6-v2' dimensions
-  kcal_100g numeric,
-  protein_100g numeric,
-  carbs_100g numeric,
-  fat_100g numeric,
-  search_text tsvector generated always as (to_tsvector('english', description)) stored
-);
-
--- Index for speed
-create index on usda_library using ivfflat (embedding vector_cosine_ops) with (lists = 100);
-
--- 3. User Logs (Private)
-create table food_logs (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users(id) not null,
-  image_path text,
-  
-  -- Snapshot of data at time of logging (in case USDA DB changes)
-  food_name text not null,
-  weight_g numeric not null default 100,
-  calories numeric,
-  protein numeric,
-  carbs numeric,
-  fat numeric,
-  
-  consumed_at timestamptz default now()
-);
-
--- 4. SECURITY POLICIES (CRITICAL FIXES)
-alter table usda_library enable row level security;
-alter table food_logs enable row level security;
-
--- Allow EVERYONE (including anon) to read USDA data
-create policy "Public Read USDA"
-on usda_library for select
-using (true);
-
--- Allow Users to manage ONLY their own logs
-create policy "Users manage own logs"
-on food_logs for all
-using (auth.uid() = user_id);
-
-```
-
----
-
-## 5. Implementation Roadmap
-
-### Phase 1: The Data Foundation (Do this first)
-
-* **Goal:** Create the "Truth" database.
-* **Action:**
-1. Download USDA "Foundation Foods" CSV.
-2. Write a local script to **flatten** the data (merge `food_nutrient` rows into a single `kcal`, `protein`, `fat` row per food).
-3. Generate embeddings for all rows using the **same model** you will use in the app (e.g., `Xenova/all-MiniLM-L6-v2`).
-4. Upload the resulting clean JSON/CSV to Supabase.
-
-
-
-### Phase 2: The Core Loop (Back-end)
-
-* **Goal:** Input Image -> Output Nutrition JSON.
-* **Action:**
-1. Set up Next.js API route `/api/analyze`.
-2. Integrate Gemini SDK to handle image inputs.
-3. Integrate `transformers.js` (or Supabase's built-in embedding generation if available) to vectorize the Gemini text output.
-4. Query Supabase and return the merged object.
-
-
-
-### Phase 3: The MVP UI (Front-end)
-
-* **Goal:** A simple, fast mobile web interface.
-* **Action:**
-1. Camera capture button (input `type="file" capture="environment"`).
-2. "Draft" Review Screen (allows users to correct the AI's weight guess).
-3. "Daily Log" Dashboard (simple list of today's entries).
-
-
-
----
-
-## 6. Strategic UX Notes
-
-* **Trust but Verify:** Never auto-save. Always present the data as a "suggestion" for the user to tap "Confirm".
-* **Confidence Thresholds:**
-* **High (>0.85):** Auto-select the top match.
-* **Medium (0.70 - 0.85):** Show top 3 matches for user to tap.
-* **Low (<0.70):** Default to the "Manual Search" input box; do not show bad guesses.
-
-
-* **Privacy:** Since you are using Gemini Free Tier, add a footer note: *"Food images are processed by Google AI."*
-
+## 4. Error Handling & Edge Cases
+- **No Food Detected:** UI displays a "Couldn't see any food" message and opens the manual search bar.
+- **Low Confidence Matches:** If similarity score < 0.5, the app provides a "Possible Matches" list.

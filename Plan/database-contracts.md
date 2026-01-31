@@ -1,200 +1,54 @@
-# Database Contracts (Supabase)
+# Database Contracts & RPC Signatures
 
-Last verified: 2026-01-19
+## 1. Primary Function: match_foods
+This RPC is the gateway for all food discovery operations.
 
-This document captures the **current Supabase/Postgres database surface area** (tables, RPCs, extensions) that the app depends on, so everyone stays aligned when making changes.
-
----
-
-## Extensions
-
-### pgvector
-- Installed and in use for embeddings.
-- Helper function present in this DB: `public.vector_dims(vector)`
-
----
-
-## Tables
-
-### `public.usda_library`
-Purpose: USDA food reference library used for search/matching.
-
-Key fields (non-exhaustive):
-- `id` (int/bigint) — primary identifier used by the app
-- `description` (text)
-- `kcal_100g`, `protein_100g`, `carbs_100g`, `fat_100g`
-- `fiber_100g`, `sugar_100g`, `sodium_100g`
-- `embedding` **`vector(384)`**
-
-#### Verified embedding type
+### SQL Signature
 ```sql
-SELECT pg_catalog.format_type(atttypid, atttypmod) AS embedding_type
-FROM pg_attribute
-WHERE attrelid = 'public.usda_library'::regclass
-  AND attname = 'embedding';
--- Expect: vector(384)
-```
-
-#### Verified stored embedding dimension
-```sql
-SELECT vector_dims(embedding) AS embedding_dim
-FROM public.usda_library
-WHERE embedding IS NOT NULL
-LIMIT 5;
--- Expect: 384 for all rows
-```
-
----
-
-### `public.ai_corrections`
-Purpose: Stores user corrections that can be used to improve model behavior (e.g., adaptive thresholds), and/or track weight corrections.
-
-Columns (as of 2026-01-19):
-- `id` uuid (PK)
-- `user_id` uuid **NOT NULL**
-- `original_weight` numeric (nullable)
-- `corrected_weight` numeric (nullable)
-- `food_name` text (nullable)
-- `correction_type` text (nullable/required depending on policy)
-- `logged_at` timestamptz
-- `original_search` text (nullable) ✅ added for match-learning
-- `final_match_desc` text (nullable) ✅ added for match-learning
-
-#### Match-learning convention
-When a user rejects the AI top match and chooses a different USDA item, write a row with:
-- `correction_type = 'manual_match'`
-- `original_search` = what the system searched/assumed (e.g., draft food name or manual query)
-- `final_match_desc` = the USDA description ultimately chosen by the user
-
-#### Insert example (requires a real user_id)
-```sql
-INSERT INTO public.ai_corrections (
-  user_id, original_search, final_match_desc, correction_type
-) VALUES (
-  '00000000-0000-0000-0000-000000000001'::uuid,
-  'apple',
-  'Apple, raw, with skin',
-  'manual_match'
-);
-```
-
----
-
-## RPC Functions
-
-### `public.match_foods`
-Purpose: Hybrid search against `usda_library` using optional **embedding similarity** + optional **text ranking**.
-
-#### Signature (identity arguments)
-```
-match_foods(
-  query_embedding vector,
+CREATE OR REPLACE FUNCTION match_foods(
+  query_embedding vector(384),
   query_text text,
-  match_threshold double precision,
-  match_count integer,
-  p_user_id uuid
+  match_threshold float,
+  match_count int,
+  user_id uuid
 )
 ```
 
-#### Permissions
-Supabase RPCs often need explicit execute grants:
-```sql
-GRANT EXECUTE ON FUNCTION public.match_foods(vector, text, double precision, integer, uuid)
-TO authenticated, anon;
-```
+### Interface Contract
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| query_embedding | vector(384) | No | The semantic vector of the search term. |
+| query_text | text | Yes | The raw string for full-text ranking. |
+| match_threshold | float | Yes | Results with similarity below this are discarded. |
+| match_count | int | Yes | Maximum number of rows to return (Limit). |
+| user_id | uuid | Yes | The authenticated user's ID for logging. |
 
-#### Return shape (expected columns)
-- `id`
-- `description`
-- `kcal_100g`, `protein_100g`, `carbs_100g`, `fat_100g`
-- `fiber_100g`, `sugar_100g`, `sodium_100g`
-- `similarity` (nullable; null if `query_embedding` is null)
-- `text_rank` (nullable; 0 if `query_text` is null, depending on implementation)
+**Important:** The key name `user_id` is required by the production database schema. Using `p_user_id` will cause a PostgREST error `PGRST202`.
 
-#### Usage examples
+## 2. Table Schemas
 
-**1) Text-only search**
-```sql
-SELECT *
-FROM match_foods(
-  NULL::vector,          -- query_embedding
-  'apple',               -- query_text
-  0.0::double precision, -- match_threshold
-  3,                     -- match_count
-  NULL::uuid             -- p_user_id
-);
-```
+### food_logs
+- `id`: uuid (PK)
+- `user_id`: uuid (FK)
+- `food_name`: text
+- `weight_g`: numeric
+- `calories`: numeric
+- `protein`: numeric
+- `carbs`: numeric
+- `fat`: numeric
+- `fiber`: numeric
+- `sugar`: numeric
+- `sodium`: numeric
+- `consumed_at`: timestamptz
 
-**2) Embedding-only search**
-```sql
-SELECT *
-FROM match_foods(
-  (SELECT embedding FROM public.usda_library WHERE embedding IS NOT NULL LIMIT 1),
-  NULL,
-  0.0::double precision,
-  3,
-  NULL::uuid
-);
-```
+### ai_corrections
+- `user_id`: uuid
+- `original_search`: text
+- `final_match_desc`: text
+- `correction_type`: text ('weight' or 'manual_match')
+- `original_weight`: numeric
+- `corrected_weight`: numeric
 
-**3) Hybrid search**
-```sql
-SELECT *
-FROM match_foods(
-  (SELECT embedding FROM public.usda_library WHERE embedding IS NOT NULL LIMIT 1),
-  'apple',
-  0.6::double precision,
-  5,
-  NULL::uuid
-);
-```
-
----
-
-## Verification Runbook (copy/paste)
-
-### 1) Function exists
-```sql
-SELECT COUNT(*) AS match_foods_exists
-FROM information_schema.routines
-WHERE routine_schema='public' AND routine_name='match_foods';
--- Expect: 1
-```
-
-### 2) Callable (text-only)
-```sql
-SELECT COUNT(*)
-FROM match_foods(NULL::vector, 'apple', 0.0::double precision, 3, NULL::uuid);
--- Expect: >= 0 and NO error
-```
-
-### 3) Callable (embedding-only)
-```sql
-SELECT COUNT(*)
-FROM match_foods(
-  (SELECT embedding FROM public.usda_library WHERE embedding IS NOT NULL LIMIT 1),
-  NULL,
-  0.0::double precision,
-  3,
-  NULL::uuid
-);
--- Expect: >= 0 and NO error
-```
-
-### 4) Embedding dimension is 384
-```sql
-SELECT vector_dims(embedding) AS embedding_dim
-FROM public.usda_library
-WHERE embedding IS NOT NULL
-LIMIT 5;
--- Expect: 384
-```
-
-### 5) `ai_corrections` has match-learning columns
-```sql
-SELECT column_name, data_type
-FROM information_schema.columns
-WHERE table_schema='public' AND table_name='ai_corrections'
-ORDER BY ordinal_position;
--- Expect: includes original_search and final_match_desc
-```
+## 3. RLS Policies
+- `usda_library`: SELECT allowed for all users (`true`).
+- `food_logs`: ALL restricted to `auth.uid() = user_id`.
