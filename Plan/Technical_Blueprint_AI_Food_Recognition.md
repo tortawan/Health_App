@@ -33,6 +33,7 @@ This project implements a Multimodal RAG pipeline. We use Large Multimodal Model
 - Stores user-specific consumption history.
 - **Security:** RLS policies ensure `user_id` matches the authenticated session.
 - **Audit Trail:** Includes `image_path` (Supabase Storage) for historical review.
+- **Columns:** `id`, `user_id`, `food_name`, `weight_g`, `calories`, `protein`, `carbs`, `fat`, `fiber`, `sugar`, `sodium`, `consumed_at`, `image_path`.
 
 ### ai_corrections
 - Captures user adjustments (e.g., when a user corrects a weight from 100g to 200g).
