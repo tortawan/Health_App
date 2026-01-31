@@ -52,3 +52,30 @@ CREATE OR REPLACE FUNCTION match_foods(
 ## 3. RLS Policies
 - `usda_library`: SELECT allowed for all users (`true`).
 - `food_logs`: ALL restricted to `auth.uid() = user_id`.
+
+## 4. Phase 3 Community Data Contracts
+
+### user_profiles (enhanced)
+- `user_id`: uuid (PK/FK to auth.users)
+- `username`: text (unique, indexed)
+- `is_public`: boolean (indexed)
+
+### community_posts
+- `id`: uuid (PK)
+- `user_id`: uuid (FK)
+- `image_path`: text
+- `caption`: text
+- `macro_snapshot`: jsonb
+- `created_at`: timestamptz
+
+### leaderboard RPC (planned)
+Calculates rankings by aggregating `food_logs` and `weight_logs` against user-defined goals.
+
+**Draft signature (subject to change):**
+```sql
+CREATE OR REPLACE FUNCTION leaderboard_rankings(
+  start_date date,
+  end_date date,
+  metric text
+)
+```

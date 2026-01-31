@@ -40,3 +40,10 @@ This project implements a Multimodal RAG pipeline. We use Large Multimodal Model
 ## 4. Error Handling & Edge Cases
 - **No Food Detected:** UI displays a "Couldn't see any food" message and opens the manual search bar.
 - **Low Confidence Matches:** If similarity score < 0.5, the app provides a "Possible Matches" list.
+
+## 5. Phase 3 Community & Gamification Support
+
+### Required Data Updates
+- **user_profiles enhancements:** Ensure `is_public` boolean and `username` fields are indexed to support community feed lookups.
+- **community_posts table:** Store shared meal photos, captions, and macro snapshots independently of private logs.
+- **Leaderboard RPC:** Add a function that aggregates `food_logs` and `weight_logs` against user-defined goals to calculate rankings.

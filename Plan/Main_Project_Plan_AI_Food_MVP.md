@@ -22,7 +22,7 @@ The absolute core of this project is a "Visual RAG" (Retrieval-Augmented Generat
 7. **Human-in-the-Loop Verification:** User sees a "Draft Entry" and confirms the weight (Small/Medium/Large presets).
 8. **Final Log:** Data is persisted to the food_logs table.
 
-### 📅 DETAILED PHASING & ROADMAP
+### 📅 UPDATED PHASING & ROADMAP
 
 #### PHASE 1: THE TRACKING FOUNDATION (Current)
 - Authentication: Supabase Auth (Magic Link/Email).
@@ -31,16 +31,27 @@ The absolute core of this project is a "Visual RAG" (Retrieval-Augmented Generat
 - Manual Fallback: Search-as-you-type interface for the USDA library.
 
 #### PHASE 2: ANALYTICS & REINFORCEMENT
-- Weight Tracking: Manual entry with trend visualization (Recharts).
+- Weight Tracking: Manual entry with trend visualization.
 - RLHF (Reinforcement Learning): Log corrections to the ai_corrections table to improve future portion estimates.
 - Water Tracking: Quick-log buttons for common volumes (250ml, 500ml).
 
-#### PHASE 3: iOS NATIVE TRANSITION (Q2 2024)
+#### PHASE 3: COMMUNITY & GAMIFICATION (New Priority)
+- Social Sharing: Allow users to share their "Healthy Lunch" photos and macro breakdowns to a community feed.
+- Challenges: System-generated or peer-to-peer challenges (e.g., "7-Day No Sugar Streak" or "High Protein Week").
+- Leaderboards: Weekly rankings based on goal consistency, challenge completion, or "Verification Accuracy" to encourage community engagement.
+- Public Profiles: Toggle to make daily logs visible to friends or the general community.
+
+#### PHASE 4: iOS NATIVE TRANSITION
 - Framework: React Native + Expo.
-- Architecture: Use the existing Next.js API routes as a "Backend-as-a-Service."
+- Architecture: Use the existing Next.js API routes as a "Backend-as-a-Service".
 - Native Features: Push notifications for logging reminders and deep integration with the iOS Camera API for faster capture.
 
-### ✅ SUCCESS CRITERIA
+### 🧱 TECHNICAL ADJUSTMENTS FOR PHASE 3
+- user_profiles Enhancement: Ensure `is_public` boolean and `username` fields are fully indexed for the community feed.
+- New community_posts Table: Store shared meal photos and captions independently of private logs.
+- Leaderboard RPC: A new function to calculate rankings by aggregating `food_logs` and `weight_logs` against user-defined goals.
+
+### ✅ SUCCESS CRITERIA (REVISED)
 - **Latency:** Total processing time (Capture -> Retrieval) < 3.5 seconds.
 - **Accuracy:** Top-3 search results contain the correct food item 90% of the time.
-- **Persistence:** 100% data integrity for logged entries.
+- **Engagement:** 30% of active users participate in at least one community challenge per month.
