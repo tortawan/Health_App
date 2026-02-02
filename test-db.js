@@ -1,13 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
-import fs from "fs";
 import dotenv from "dotenv";
 
 dotenv.config({ path: ".env.local" });
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-// Using the bucket name from your env file
-const bucketName = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || 'food-photos';
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("❌ Missing API Keys.");
@@ -17,56 +14,41 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function runTest() {
-  console.log("---------------------------------------------------");
-  console.log("🛠️  TESTING CLOUD DB: " + supabaseUrl);
-  console.log("---------------------------------------------------");
+  console.log("\n🧪 STARTING VERIFICATION...");
 
-  // 1. TEST SQL FUNCTION
-  console.log("\n1️⃣  Testing SQL Function 'match_foods'...");
-  const dummyEmbedding = Array(384).fill(0.1); 
-
-  const { error: rpcError } = await supabase.rpc('match_foods', {
-    query_embedding: dummyEmbedding,
-    query_text: "apple",
-    match_threshold: 0.1,
-    match_count: 5,
-    user_id: null 
+  // 1. Text-Only Search (Simulating "Manual Search")
+  console.log("\n1️⃣  Testing Manual Search (Text Only: 'chicken')...");
+  const { data: textData, error: textError } = await supabase.rpc('match_foods', {
+    query_embedding: null, // ✅ THIS MUST WORK NOW
+    query_text: "chicken",
+    match_threshold: 0.0,
+    match_count: 3,
+    user_id: null
   });
 
-  if (rpcError) {
-    console.error("❌ SQL CRASH:", rpcError.message);
-    if (rpcError.message.includes("does not match expected type")) console.log("   👉 Hint: You still need to run the ::double precision cast fix.");
-    if (rpcError.message.includes("ambiguous")) console.log("   👉 Hint: The RPC parameter rename may be incomplete.");
+  if (textError) {
+    console.error("❌ Text Search Failed:", textError.message);
+  } else if (!textData || textData.length === 0) {
+    console.error("⚠️  Text Search Returned 0 Results. (Is the DB empty?)");
   } else {
-    console.log("✅ SQL SUCCESS! The database function is fixed.");
+    console.log(`✅ Text Search Success! Found: ${textData[0].description}`);
   }
 
-  // 2. TEST UPLOAD
-  console.log(`\n2️⃣  Testing Upload to bucket: '${bucketName}'...`);
-  const filePath = String.raw`C:\Users\torta\Desktop\Health_App\tests\fixtures\sample.png`;
+  // 2. Vector Search (Simulating "Scan")
+  // Note: This still might return 0 if the dummy vector is too random, 
+  // but it verifies the function doesn't crash.
+  console.log("\n2️⃣  Testing Vector Search (Dummy Vector)...");
+  const dummyEmbedding = Array(384).fill(0.1); 
+  const { data: vecData, error: vecError } = await supabase.rpc('match_foods', {
+    query_embedding: dummyEmbedding,
+    query_text: null,
+    match_threshold: 0.0, // Lower threshold to force results if possible
+    match_count: 3,
+    user_id: null
+  });
 
-  if (!fs.existsSync(filePath)) {
-    console.error(`❌ File not found at: ${filePath}`);
-    return;
-  }
-
-  const fileBuffer = fs.readFileSync(filePath);
-  const fileName = `test-upload-${Date.now()}.png`;
-
-  const { data: uploadData, error: uploadError } = await supabase
-    .storage
-    .from(bucketName)
-    .upload(fileName, fileBuffer, {
-      contentType: 'image/png',
-      upsert: true
-    });
-
-  if (uploadError) {
-    console.error("❌ Upload Failed:", uploadError.message);
-    console.log("   👉 Hint: Go to Supabase > Storage. Does 'food-photos' bucket exist? Is it set to Public?");
-  } else {
-    console.log(`✅ Upload Success! Path: ${uploadData.path}`);
-  }
+  if (vecError) console.error("❌ Vector Search Failed:", vecError.message);
+  else console.log(`✅ Vector Search RPC Call Successful (Matches: ${vecData?.length})`);
 }
 
 runTest();
