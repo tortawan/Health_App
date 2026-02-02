@@ -92,7 +92,7 @@ match_foods(
   query_text text,
   match_threshold double precision,
   match_count integer,
-  p_user_id uuid
+  user_id uuid DEFAULT NULL
 )
 ```
 
@@ -121,7 +121,7 @@ FROM match_foods(
   'apple',               -- query_text
   0.0::double precision, -- match_threshold
   3,                     -- match_count
-  NULL::uuid             -- p_user_id
+  NULL::uuid             -- user_id
 );
 ```
 
@@ -154,11 +154,12 @@ FROM match_foods(
 ## Verification Runbook (copy/paste)
 
 ### 1) Function exists
-```sql
-SELECT COUNT(*) AS match_foods_exists
-FROM information_schema.routines
-WHERE routine_schema='public' AND routine_name='match_foods';
--- Expect: 1
+```SELECT count(*) 
+FROM pg_proc p 
+JOIN pg_namespace n ON p.pronamespace = n.oid 
+WHERE n.nspname = 'public' 
+  AND p.proname = 'match_foods' 
+  AND p.pronargs = 5; -- Expect: 1
 ```
 
 ### 2) Callable (text-only)
@@ -172,13 +173,18 @@ FROM match_foods(NULL::vector, 'apple', 0.0::double precision, 3, NULL::uuid);
 ```sql
 SELECT COUNT(*)
 FROM match_foods(
-  (SELECT embedding FROM public.usda_library WHERE embedding IS NOT NULL LIMIT 1),
-  NULL,
-  0.0::double precision,
-  3,
-  NULL::uuid
+  NULL::vector, 
+  'salmon', 
+  0.0::double precision, 
+  1, 
+  '00000000-0000-0000-0000-000000000000'::uuid -- Standardized user_id
 );
--- Expect: >= 0 and NO error
+```
+
+### 3.5 ) Permissions Check
+```sql
+SELECT has_function_privilege('anon', 'match_foods(vector, text, double precision, int, uuid)', 'execute');
+-- Expect: true
 ```
 
 ### 4) Embedding dimension is 384
