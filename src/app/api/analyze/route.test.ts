@@ -7,6 +7,7 @@ const buildSupabaseMock = (rpcResult: { data: unknown; error: unknown }) => ({
   rpc: vi.fn().mockResolvedValue(rpcResult),
   auth: {
     getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+    getUser: vi.fn().mockResolvedValue({ data: { user: null } }), // <--- ADD THIS LINE
   },
 });
 
