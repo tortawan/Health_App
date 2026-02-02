@@ -46,7 +46,7 @@ test.describe("Feature Parity Verification", () => {
     const entry = page.locator('section').filter({ hasText: 'Water' }).locator('p').filter({ hasText: /^500 ml$/ }).first();
     await expect(entry).toBeVisible();
     
-    await expect(page.getByText("25% of goal")).toBeVisible();
+    await expect(page.getByText(/25% of .*goal/i)).toBeVisible();
   });
 
   test("Manual Search: trigger modal and select result", async ({ page }) => {
@@ -64,7 +64,8 @@ test.describe("Feature Parity Verification", () => {
       });
     });
 
-    const searchInput = page.getByPlaceholder("Search for food...");
+    const dialog = page.getByRole("dialog");
+    const searchInput = dialog.getByPlaceholder(/Search for food/i);
     await expect(searchInput).toBeVisible({ timeout: 10000 });
     await searchInput.fill("Blueberry");
     await page.keyboard.press("Enter");
@@ -91,7 +92,7 @@ test.describe("Feature Parity Verification", () => {
     const initialUrl = page.url();
     
     // Click navigation (Previous Day)
-    const prevBtn = page.locator('button').filter({ hasText: /<|Previous/ });
+    const prevBtn = page.getByRole("button", { name: /previous/i });
     await expect(prevBtn).toBeVisible();
     await prevBtn.click();
     
