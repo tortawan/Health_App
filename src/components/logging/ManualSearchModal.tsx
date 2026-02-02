@@ -32,7 +32,12 @@ export function ManualSearchModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl">
+      <div
+        aria-label="Manual search"
+        aria-modal="true"
+        className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-xl"
+        role="dialog"
+      >
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm uppercase tracking-wide text-emerald-200">Manual search</p>

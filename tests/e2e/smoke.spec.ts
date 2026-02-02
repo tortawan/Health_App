@@ -9,6 +9,19 @@ function getLocalMiddayIso() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0).toISOString();
 }
 
+function getSelectedDateMiddayIso(page: Page) {
+  const url = new URL(page.url(), "http://localhost");
+  const dateParam = url.searchParams.get("date");
+  if (!dateParam) {
+    return getLocalMiddayIso();
+  }
+  const [year, month, day] = dateParam.split("-").map(Number);
+  if (!year || !month || !day) {
+    return getLocalMiddayIso();
+  }
+  return new Date(year, month - 1, day, 12, 0, 0).toISOString();
+}
+
 async function ensureLoggedIn(page: Page) {
   await page.goto("/");
   try {
@@ -71,7 +84,7 @@ async function stubLogFood(page: Page) {
             protein: 0.5,
             carbs: 25,
             fat: 0.3,
-            consumed_at: getLocalMiddayIso(),
+            consumed_at: getSelectedDateMiddayIso(page),
           },
         ],
       }),

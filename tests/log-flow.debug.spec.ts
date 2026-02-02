@@ -20,6 +20,19 @@ function getLocalMiddayIso() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0).toISOString();
 }
 
+function getSelectedDateMiddayIso(page: Page) {
+  const url = new URL(page.url(), "http://localhost");
+  const dateParam = url.searchParams.get("date");
+  if (!dateParam) {
+    return getLocalMiddayIso();
+  }
+  const [year, month, day] = dateParam.split("-").map(Number);
+  if (!year || !month || !day) {
+    return getLocalMiddayIso();
+  }
+  return new Date(year, month - 1, day, 12, 0, 0).toISOString();
+}
+
 // Shared in-memory storage for the test session to handle re-fetches
 type MockFoodLog = {
   food_name?: string;
@@ -82,7 +95,7 @@ async function stubLogFood(page: Page) {
     // FIX 2: Fallback values to prevent undefined errors
     const foodName = postData?.foodName || postData?.food_name || 'Unknown Food';
     const weight = postData?.weight || postData?.weight_g || 100;
-    const consumedAt = postData?.consumed_at || postData?.date || getLocalMiddayIso();
+    const consumedAt = postData?.consumed_at || postData?.date || getSelectedDateMiddayIso(page);
     
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`);
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`);

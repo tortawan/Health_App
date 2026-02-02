@@ -43,7 +43,12 @@ test.describe("Feature Parity Verification", () => {
 
     // Avoid strict mode violation by looking for the specific text inside the "Recent entries" section
     // or by using nth(0) or filtering by class.
-    const entry = page.locator('section').filter({ hasText: 'Water' }).locator('p').filter({ hasText: /^500 ml$/ }).first();
+    const entry = page
+      .locator("section")
+      .filter({ hasText: "Water" })
+      .locator("p")
+      .filter({ hasText: /500 ml/i })
+      .first();
     await expect(entry).toBeVisible();
     
     await expect(page.getByText(/25% of .*goal/i)).toBeVisible();
@@ -64,7 +69,7 @@ test.describe("Feature Parity Verification", () => {
       });
     });
 
-    const dialog = page.getByRole("dialog");
+    const dialog = page.getByRole("dialog", { name: /manual search/i });
     const searchInput = dialog.getByPlaceholder(/Search for food/i);
     await expect(searchInput).toBeVisible({ timeout: 10000 });
     await searchInput.fill("Blueberry");
