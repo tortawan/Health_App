@@ -690,14 +690,14 @@ export default function HomeClient({
       try {
         const supabase = createClient();
         const {
-          data: { session },
-        } = await supabase.auth.getSession();
+          data: { user },
+        } = await supabase.auth.getUser();
         const { data, error } = await supabase.rpc("match_foods", {
           query_embedding: null,
           query_text: manualQuery,
           match_threshold: 0.0,
           match_count: 10,
-          p_user_id: session?.user?.id ?? null,
+          user_id: user?.id ?? null,
         });
 
         if (error) {

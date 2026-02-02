@@ -25,21 +25,18 @@ async function runTest() {
   console.log("\n1️⃣  Testing SQL Function 'match_foods'...");
   const dummyEmbedding = Array(384).fill(0.1); 
 
-  // Notice we use 'p_user_id' in the definition, but Supabase maps arguments by position or name.
-  // We can just call it normally.
-  // Fix: Removed unused 'rpcData' variable
   const { error: rpcError } = await supabase.rpc('match_foods', {
     query_embedding: dummyEmbedding,
     query_text: "apple",
     match_threshold: 0.1,
     match_count: 5,
-    p_user_id: null 
+    user_id: null 
   });
 
   if (rpcError) {
     console.error("❌ SQL CRASH:", rpcError.message);
     if (rpcError.message.includes("does not match expected type")) console.log("   👉 Hint: You still need to run the ::double precision cast fix.");
-    if (rpcError.message.includes("ambiguous")) console.log("   👉 Hint: You didn't rename the parameter to p_user_id.");
+    if (rpcError.message.includes("ambiguous")) console.log("   👉 Hint: The RPC parameter rename may be incomplete.");
   } else {
     console.log("✅ SQL SUCCESS! The database function is fixed.");
   }
