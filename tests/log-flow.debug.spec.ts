@@ -15,6 +15,11 @@ import {
 const TEST_EMAIL = process.env.PLAYWRIGHT_EMAIL || "tortawan@gmail.com";
 const TEST_PASSWORD = process.env.PLAYWRIGHT_PASSWORD || "password123";
 
+function getLocalMiddayIso() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0).toISOString();
+}
+
 // Shared in-memory storage for the test session to handle re-fetches
 type MockFoodLog = {
   food_name?: string;
@@ -77,7 +82,7 @@ async function stubLogFood(page: Page) {
     // FIX 2: Fallback values to prevent undefined errors
     const foodName = postData?.foodName || postData?.food_name || 'Unknown Food';
     const weight = postData?.weight || postData?.weight_g || 100;
-    const consumedAt = postData?.consumed_at || postData?.date || new Date().toISOString();
+    const consumedAt = postData?.consumed_at || postData?.date || getLocalMiddayIso();
     
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted foodName: "${foodName}" (type: ${typeof foodName})`);
     console.log(`${DEBUG_CONFIG.LOG_PREFIX} [STUB] Extracted weight: ${weight}`);

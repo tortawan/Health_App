@@ -4,6 +4,11 @@ import { test, expect, type Page } from "@playwright/test";
 const TEST_EMAIL = process.env.PLAYWRIGHT_EMAIL || "tortawan@gmail.com";
 const TEST_PASSWORD = process.env.PLAYWRIGHT_PASSWORD || "password123";
 
+function getLocalMiddayIso() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0).toISOString();
+}
+
 async function ensureLoggedIn(page: Page) {
   await page.goto("/");
   try {
@@ -66,7 +71,7 @@ async function stubLogFood(page: Page) {
             protein: 0.5,
             carbs: 25,
             fat: 0.3,
-            consumed_at: new Date().toISOString(),
+            consumed_at: getLocalMiddayIso(),
           },
         ],
       }),
