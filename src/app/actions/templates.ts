@@ -26,16 +26,16 @@ function isMealTemplateItemInput(item: unknown): item is MealTemplateItemInput {
 
 export async function saveMealTemplate(name: string, items: MealTemplateItemInput[]) {
   const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) throw new Error("You must be signed in to save templates.");
+  if (!user) throw new Error("You must be signed in to save templates.");
   if (!Array.isArray(items) || !items.every(isMealTemplateItemInput)) {
     throw new Error("Template items are invalid.");
   }
 
   const { data: template, error: templateError } = await supabase
     .from("meal_templates")
-    .insert({ user_id: session.user.id, name })
+    .insert({ user_id: user.id, name })
     .select("id, user_id, name, created_at")
     .single();
 
@@ -61,9 +61,9 @@ export async function saveMealTemplate(name: string, items: MealTemplateItemInpu
 
 export async function saveMealTemplateFromLogs(name: string, logs: MealTemplateLogInput[]) {
   const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) throw new Error("You must be signed in to save templates.");
+  if (!user) throw new Error("You must be signed in to save templates.");
   if (!Array.isArray(logs) || logs.length === 0) throw new Error("No logs provided to save.");
 
   const embed = await getEmbedder();
@@ -77,7 +77,7 @@ export async function saveMealTemplateFromLogs(name: string, logs: MealTemplateL
       query_text: queryText,
       match_threshold: 0.55,
       match_count: 1,
-      p_user_id: session.user.id,
+      user_id: user.id,
     });
 
     if (matchError) throw matchError;
@@ -101,9 +101,9 @@ export async function saveMealTemplateFromLogs(name: string, logs: MealTemplateL
 
 export async function applyMealTemplate(templateId: string, scaleFactor: number = 1) {
   const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) throw new Error("You must be signed in to load templates.");
+  if (!user) throw new Error("You must be signed in to load templates.");
 
   const { data: template, error: templateError } = await supabase
     .from("meal_templates")
@@ -114,7 +114,7 @@ export async function applyMealTemplate(templateId: string, scaleFactor: number 
     .maybeSingle();
 
   if (templateError) throw templateError;
-  if (!template || template.user_id !== session.user.id) throw new Error("Template not found.");
+  if (!template || template.user_id !== user.id) throw new Error("Template not found.");
 
   const now = new Date();
   const factor = Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : 1;
@@ -130,7 +130,7 @@ export async function applyMealTemplate(templateId: string, scaleFactor: number 
     const factorForWeight = weight / 100;
 
     return {
-      user_id: session.user.id,
+      user_id: user.id,
       food_name: library.description,
       weight_g: Math.round(weight * 1000) / 1000,
       calories: calc(library.kcal_100g, factorForWeight),
@@ -154,15 +154,15 @@ export async function applyMealTemplate(templateId: string, scaleFactor: number 
 
 export async function deleteMealTemplate(id: string) {
   const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) throw new Error("You must be signed in to delete templates.");
+  if (!user) throw new Error("You must be signed in to delete templates.");
 
   const { error } = await supabase
     .from("meal_templates")
     .delete()
     .eq("id", id)
-    .eq("user_id", session.user.id);
+    .eq("user_id", user.id);
 
   if (error) throw error;
   revalidatePath("/");

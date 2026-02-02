@@ -149,15 +149,15 @@ export async function submitLogFood(args: Parameters<typeof logFood>[0]) {
 
 export async function updateFoodLog(id: string, updates: Partial<LogFoodInput>) {
   const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) throw new Error("Unauthorized");
+  if (!user) throw new Error("Unauthorized");
 
   const { data: currentLog, error: fetchError } = await supabase
     .from("food_logs")
     .select("*")
     .eq("id", id)
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .single();
 
   if (fetchError || !currentLog) {
@@ -186,7 +186,7 @@ export async function updateFoodLog(id: string, updates: Partial<LogFoodInput>) 
     .from("food_logs")
     .update(finalChanges)
     .eq("id", id)
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .select()
     .single();
 
@@ -201,15 +201,15 @@ export async function updateFoodLog(id: string, updates: Partial<LogFoodInput>) 
 
 export async function deleteFoodLog(id: string) {
   const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) throw new Error("You must be signed in to delete entries.");
+  if (!user) throw new Error("You must be signed in to delete entries.");
 
   const { error } = await supabase
     .from("food_logs")
     .delete()
     .eq("id", id)
-    .eq("user_id", session.user.id);
+    .eq("user_id", user.id);
 
   if (error) throw error;
 
@@ -222,10 +222,6 @@ export async function manualSearch(searchTerm: string) {
   const query = searchTerm.trim();
   if (!query) return [];
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("You must be signed in to search.");
-
-  // FIX: Issue #1 - Use getUser()
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("You must be signed in to search.");
 
@@ -234,7 +230,7 @@ export async function manualSearch(searchTerm: string) {
     query_text: query ?? null,
     match_threshold: 0.0,
     match_count: 10,
-    user_id: user.id ?? null, // KEEP 'user_id'
+    user_id: user.id ?? null,
   });
 
   if (error) {
@@ -246,14 +242,14 @@ export async function manualSearch(searchTerm: string) {
 }
 export async function getRecentFoods() {
   const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) throw new Error("You must be signed in to view recents.");
+  if (!user) throw new Error("You must be signed in to view recents.");
 
   const { data, error } = await supabase
     .from("food_logs")
     .select("food_name, calories, protein, carbs, fat, fiber, sugar, sodium, weight_g, consumed_at")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .order("consumed_at", { ascending: false })
     .limit(40);
 
@@ -283,9 +279,9 @@ export async function getRecentFoods() {
 
 export async function copyDay(sourceDate: string) {
   const supabase = await createSupabaseServerClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) throw new Error("You must be signed in to copy a day.");
+  if (!user) throw new Error("You must be signed in to copy a day.");
 
   const source = new Date(sourceDate);
   source.setHours(0, 0, 0, 0);
@@ -295,7 +291,7 @@ export async function copyDay(sourceDate: string) {
   const { data: logs, error } = await supabase
     .from("food_logs")
     .select("food_name, weight_g, calories, protein, carbs, fat, fiber, sugar, sodium, image_path, consumed_at")
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .gte("consumed_at", source.toISOString())
     .lt("consumed_at", next.toISOString());
 
@@ -311,7 +307,7 @@ export async function copyDay(sourceDate: string) {
     consumedAt.setHours(time.getHours(), time.getMinutes(), time.getSeconds(), index);
 
     return {
-      user_id: session.user.id,
+      user_id: user.id,
       food_name: log.food_name,
       weight_g: log.weight_g,
       calories: log.calories,
@@ -341,13 +337,13 @@ export async function copyDay(sourceDate: string) {
 export async function logCorrection(payload: { original: number; corrected: number; foodName: string }) {
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    console.log("[RLHF] Weight Correction:", { user: session?.user?.id, ...payload });
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (session) {
+    console.log("[RLHF] Weight Correction:", { user: user?.id, ...payload });
+
+    if (user) {
       await supabase.from("ai_corrections").insert({
-        user_id: session.user.id,
+        user_id: user.id,
         original_search: payload.foodName,
         final_match_desc: payload.foodName,
         correction_type: "weight",
