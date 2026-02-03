@@ -36,6 +36,36 @@ describe("useTemplateManagement", () => {
       expect(result.current.templateList).toEqual(initialTemplates);
       expect(result.current.isTemplateManagerOpen).toBe(false);
     });
+
+    it("should sync template list when initial templates change", () => {
+      const initialTemplates = [
+        {
+          id: "1",
+          name: "Breakfast",
+          items: [],
+          created_at: "2026-02-02",
+          user_id: "user-1",
+        },
+      ];
+      const { result, rerender } = renderHook(
+        ({ templates }) => useTemplateManagement(templates),
+        { initialProps: { templates: initialTemplates } },
+      );
+
+      const updatedTemplates = [
+        {
+          id: "2",
+          name: "Lunch",
+          items: [],
+          created_at: "2026-02-03",
+          user_id: "user-1",
+        },
+      ];
+
+      rerender({ templates: updatedTemplates });
+
+      expect(result.current.templateList).toEqual(updatedTemplates);
+    });
   });
 
   describe("saveTemplate", () => {
@@ -116,6 +146,82 @@ describe("useTemplateManagement", () => {
         expect(result.current.selectedTemplateId).toBeNull();
         expect(result.current.templateScale).toBe(1);
       });
+    });
+
+    it("should surface errors when apply fails", async () => {
+      const error = new Error("Boom");
+      (applyMealTemplate as jest.Mock).mockRejectedValue(error);
+
+      const { result } = renderHook(() => useTemplateManagement([]));
+
+      let caught: unknown;
+      await act(async () => {
+        try {
+          await result.current.applyTemplate("template-1", 1);
+        } catch (err) {
+          caught = err;
+        }
+      });
+
+      expect(caught).toBe(error);
+      expect(toast.error).toHaveBeenCalledWith("Boom");
+    });
+  });
+
+  describe("saveTemplateFromLogs", () => {
+    it("should save template from logs successfully", async () => {
+      const savedTemplate = {
+        id: "new-2",
+        name: "Daily",
+        items: [{ usda_id: 789, grams: 150 }],
+        created_at: "2026-02-02",
+        user_id: "user-1",
+      };
+
+      (saveMealTemplateFromLogs as jest.Mock).mockResolvedValue(savedTemplate);
+
+      const { result } = renderHook(() => useTemplateManagement([]));
+
+      await act(async () => {
+        await result.current.saveTemplateFromLogs("Daily", [
+          { food_name: "Apple", weight_g: 100 },
+        ]);
+      });
+
+      await waitFor(() => {
+        expect(saveMealTemplateFromLogs).toHaveBeenCalledWith("Daily", [
+          { food_name: "Apple", weight_g: 100 },
+        ]);
+        expect(result.current.templateList).toHaveLength(1);
+        expect(result.current.templateFromLogsName).toBe("");
+        expect(toast.success).toHaveBeenCalledWith(
+          "Template created from today's logs."
+        );
+      });
+    });
+
+    it("should validate template from logs name", async () => {
+      const { result } = renderHook(() => useTemplateManagement([]));
+
+      await act(async () => {
+        await result.current.saveTemplateFromLogs("   ", [
+          { food_name: "Apple", weight_g: 100 },
+        ]);
+      });
+
+      expect(toast.error).toHaveBeenCalledWith("Enter a template name.");
+      expect(saveMealTemplateFromLogs).not.toHaveBeenCalled();
+    });
+
+    it("should validate log items for template from logs", async () => {
+      const { result } = renderHook(() => useTemplateManagement([]));
+
+      await act(async () => {
+        await result.current.saveTemplateFromLogs("Daily", []);
+      });
+
+      expect(toast.error).toHaveBeenCalledWith("No logs available to save.");
+      expect(saveMealTemplateFromLogs).not.toHaveBeenCalled();
     });
   });
 

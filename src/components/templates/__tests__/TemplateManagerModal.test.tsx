@@ -5,7 +5,9 @@ import { TemplateManagerModal } from "../TemplateManagerModal";
 import type { UseTemplateManagementReturn } from "@/types/template";
 
 describe("TemplateManagerModal", () => {
-  const mockProps: UseTemplateManagementReturn & { dailyLogs: any[] } = {
+  const mockProps: UseTemplateManagementReturn & {
+    dailyLogs: Array<{ food_name: string; weight_g: number }>;
+  } = {
     isTemplateManagerOpen: true,
     templateList: [],
     selectedTemplateId: null,
