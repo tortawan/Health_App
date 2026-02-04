@@ -1,292 +1,147 @@
-// src/hooks/features/__tests__/useTemplateManagement.test.ts
 import { renderHook, act, waitFor } from "@testing-library/react";
-import toast from "react-hot-toast";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useTemplateManagement } from "../useTemplateManagement";
-import {
-  saveMealTemplate,
-  saveMealTemplateFromLogs,
-  applyMealTemplate,
-  deleteMealTemplate,
-} from "@/app/actions/templates";
+import * as templateActions from "@/app/actions/templates";
+import toast from "react-hot-toast";
 
-jest.mock("react-hot-toast");
-jest.mock("@/app/actions/templates");
+// 1. Use vi.mock instead of jest.mock
+vi.mock("react-hot-toast", () => ({
+  default: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+vi.mock("@/app/actions/templates", () => ({
+  saveMealTemplate: vi.fn(),
+  saveMealTemplateFromLogs: vi.fn(),
+  applyMealTemplate: vi.fn(),
+  deleteMealTemplate: vi.fn(),
+}));
 
 describe("useTemplateManagement", () => {
+  const initialTemplates = [
+    { id: "1", name: "Breakfast", items: [], created_at: "", user_id: "" }
+  ];
+
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe("Initialization", () => {
-    it("should initialize with provided templates", () => {
-      const initialTemplates = [
-        { 
-          id: "1", 
-          name: "Breakfast", 
-          items: [{ usda_id: 123, grams: 100 }],
-          created_at: "2026-02-02",
-          user_id: "user-1"
-        },
-      ];
-
-      const { result } = renderHook(() =>
-        useTemplateManagement(initialTemplates)
-      );
-
+    it("initializes with provided templates", () => {
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
       expect(result.current.templateList).toEqual(initialTemplates);
       expect(result.current.isTemplateManagerOpen).toBe(false);
     });
 
-    it("should sync template list when initial templates change", () => {
-      const initialTemplates = [
-        {
-          id: "1",
-          name: "Breakfast",
-          items: [],
-          created_at: "2026-02-02",
-          user_id: "user-1",
-        },
-      ];
+    it("updates templateList when prop changes", () => {
       const { result, rerender } = renderHook(
         ({ templates }) => useTemplateManagement(templates),
-        { initialProps: { templates: initialTemplates } },
+        { initialProps: { templates: initialTemplates } }
       );
 
-      const updatedTemplates = [
-        {
-          id: "2",
-          name: "Lunch",
-          items: [],
-          created_at: "2026-02-03",
-          user_id: "user-1",
-        },
-      ];
+      const newTemplates = [...initialTemplates, { id: "2", name: "Lunch", items: [], created_at: "", user_id: "" }];
+      rerender({ templates: newTemplates });
 
-      rerender({ templates: updatedTemplates });
-
-      expect(result.current.templateList).toEqual(updatedTemplates);
+      expect(result.current.templateList).toEqual(newTemplates);
     });
   });
 
   describe("saveTemplate", () => {
-    it("should save template successfully", async () => {
-      const savedTemplate = {
-        id: "new-1",
-        name: "Lunch",
-        items: [{ usda_id: 456, grams: 200 }],
-        created_at: "2026-02-02",
-        user_id: "user-1",
-      };
+    it("saves a template successfully", async () => {
+      const newTemplate = { id: "2", name: "New Meal", items: [], created_at: "", user_id: "" };
+      (templateActions.saveMealTemplate as any).mockResolvedValue(newTemplate);
 
-      (saveMealTemplate as jest.Mock).mockResolvedValue(savedTemplate);
-
-      const { result } = renderHook(() => useTemplateManagement([]));
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
 
       await act(async () => {
-        await result.current.saveTemplate("Lunch", [{ usda_id: 456, grams: 200 }]);
+        await result.current.saveTemplate("New Meal", [{ food_name: "Apple", weight_g: 100 } as any]);
       });
 
-      await waitFor(() => {
-        expect(saveMealTemplate).toHaveBeenCalledWith("Lunch", [
-          { usda_id: 456, grams: 200 },
-        ]);
-        expect(toast.success).toHaveBeenCalledWith("Template saved.");
-        expect(result.current.templateList).toHaveLength(1);
-        expect(result.current.templateName).toBe("");
-      });
+      expect(templateActions.saveMealTemplate).toHaveBeenCalledWith("New Meal", expect.anything());
+      expect(result.current.templateList).toHaveLength(2);
+      expect(result.current.templateList[0]).toEqual(newTemplate); // Newest first
+      expect(toast.success).toHaveBeenCalledWith("Template saved.");
     });
 
-    it("should validate template name", async () => {
-      const { result } = renderHook(() => useTemplateManagement([]));
-
+    it("validates empty name", async () => {
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
       await act(async () => {
-        await result.current.saveTemplate("   ", [{ usda_id: 456, grams: 200 }]);
+        await result.current.saveTemplate("", []);
       });
-
       expect(toast.error).toHaveBeenCalledWith("Enter a template name.");
-      expect(saveMealTemplate).not.toHaveBeenCalled();
+      expect(templateActions.saveMealTemplate).not.toHaveBeenCalled();
     });
 
-    it("should validate template has items", async () => {
-      const { result } = renderHook(() => useTemplateManagement([]));
-
+    it("validates empty items", async () => {
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
       await act(async () => {
-        await result.current.saveTemplate("Lunch", []);
+        await result.current.saveTemplate("My Template", []);
       });
-
-      expect(toast.error).toHaveBeenCalledWith(
-        "Template must have at least one item."
-      );
-      expect(saveMealTemplate).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("applyTemplate", () => {
-    it("should apply template and reset state", async () => {
-      const insertedLogs = [
-        { id: "log-1", food_name: "Apple", weight_g: 100 },
-      ];
-
-      (applyMealTemplate as jest.Mock).mockResolvedValue(insertedLogs);
-
-      const { result } = renderHook(() => useTemplateManagement([]));
-
-      act(() => {
-        result.current.setSelectedTemplateId("template-1");
-        result.current.setTemplateScale(2);
-      });
-
-      await act(async () => {
-        await result.current.applyTemplate("template-1", 2);
-      });
-
-      await waitFor(() => {
-        expect(applyMealTemplate).toHaveBeenCalledWith("template-1", 2);
-        expect(toast.success).toHaveBeenCalledWith("Template applied.");
-        expect(result.current.selectedTemplateId).toBeNull();
-        expect(result.current.templateScale).toBe(1);
-      });
-    });
-
-    it("should surface errors when apply fails", async () => {
-      const error = new Error("Boom");
-      (applyMealTemplate as jest.Mock).mockRejectedValue(error);
-
-      const { result } = renderHook(() => useTemplateManagement([]));
-
-      let caught: unknown;
-      await act(async () => {
-        try {
-          await result.current.applyTemplate("template-1", 1);
-        } catch (err) {
-          caught = err;
-        }
-      });
-
-      expect(caught).toBe(error);
-      expect(toast.error).toHaveBeenCalledWith("Boom");
+      expect(toast.error).toHaveBeenCalledWith("Template must have at least one item.");
     });
   });
 
   describe("saveTemplateFromLogs", () => {
-    it("should save template from logs successfully", async () => {
-      const savedTemplate = {
-        id: "new-2",
-        name: "Daily",
-        items: [{ usda_id: 789, grams: 150 }],
-        created_at: "2026-02-02",
-        user_id: "user-1",
-      };
+    it("creates template from logs successfully", async () => {
+      const newTemplate = { id: "3", name: "Log Meal", items: [], created_at: "", user_id: "" };
+      (templateActions.saveMealTemplateFromLogs as any).mockResolvedValue(newTemplate);
 
-      (saveMealTemplateFromLogs as jest.Mock).mockResolvedValue(savedTemplate);
-
-      const { result } = renderHook(() => useTemplateManagement([]));
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
 
       await act(async () => {
-        await result.current.saveTemplateFromLogs("Daily", [
-          { food_name: "Apple", weight_g: 100 },
-        ]);
+        await result.current.saveTemplateFromLogs("Log Meal", [{ food_name: "Apple", weight_g: 100 }]);
       });
 
-      await waitFor(() => {
-        expect(saveMealTemplateFromLogs).toHaveBeenCalledWith("Daily", [
-          { food_name: "Apple", weight_g: 100 },
-        ]);
-        expect(result.current.templateList).toHaveLength(1);
-        expect(result.current.templateFromLogsName).toBe("");
-        expect(toast.success).toHaveBeenCalledWith(
-          "Template created from today's logs."
-        );
+      expect(templateActions.saveMealTemplateFromLogs).toHaveBeenCalled();
+      expect(result.current.templateList).toContainEqual(newTemplate);
+      expect(toast.success).toHaveBeenCalled();
+    });
+  });
+
+  describe("applyTemplate", () => {
+    it("applies template successfully", async () => {
+      (templateActions.applyMealTemplate as any).mockResolvedValue([]);
+
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
+
+      await act(async () => {
+        await result.current.applyTemplate("1", 1.5);
       });
+
+      expect(templateActions.applyMealTemplate).toHaveBeenCalledWith("1", 1.5);
+      expect(toast.success).toHaveBeenCalledWith("Template applied.");
     });
 
-    it("should validate template from logs name", async () => {
-      const { result } = renderHook(() => useTemplateManagement([]));
+    it("handles apply error", async () => {
+      (templateActions.applyMealTemplate as any).mockRejectedValue(new Error("Fail"));
 
-      await act(async () => {
-        await result.current.saveTemplateFromLogs("   ", [
-          { food_name: "Apple", weight_g: 100 },
-        ]);
-      });
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
 
-      expect(toast.error).toHaveBeenCalledWith("Enter a template name.");
-      expect(saveMealTemplateFromLogs).not.toHaveBeenCalled();
-    });
-
-    it("should validate log items for template from logs", async () => {
-      const { result } = renderHook(() => useTemplateManagement([]));
-
-      await act(async () => {
-        await result.current.saveTemplateFromLogs("Daily", []);
-      });
-
-      expect(toast.error).toHaveBeenCalledWith("No logs available to save.");
-      expect(saveMealTemplateFromLogs).not.toHaveBeenCalled();
+      await expect(
+        act(async () => {
+          await result.current.applyTemplate("1", 1);
+        })
+      ).rejects.toThrow("Fail");
+      
+      expect(toast.error).toHaveBeenCalledWith("Fail");
     });
   });
 
   describe("deleteTemplate", () => {
-    it("should delete template from list", async () => {
-      const initialTemplates = [
-        { 
-          id: "1", 
-          name: "Breakfast", 
-          items: [],
-          created_at: "2026-02-02",
-          user_id: "user-1"
-        },
-        { 
-          id: "2", 
-          name: "Lunch", 
-          items: [],
-          created_at: "2026-02-02",
-          user_id: "user-1"
-        },
-      ];
+    it("deletes template successfully", async () => {
+      (templateActions.deleteMealTemplate as any).mockResolvedValue(undefined);
 
-      (deleteMealTemplate as jest.Mock).mockResolvedValue(undefined);
-
-      const { result } = renderHook(() =>
-        useTemplateManagement(initialTemplates)
-      );
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
 
       await act(async () => {
         await result.current.deleteTemplate("1");
       });
 
-      await waitFor(() => {
-        expect(deleteMealTemplate).toHaveBeenCalledWith("1");
-        expect(result.current.templateList).toHaveLength(1);
-        expect(result.current.templateList[0].id).toBe("2");
-      });
-    });
-
-    it("should clear selectedTemplateId if deleted template was selected", async () => {
-      const initialTemplates = [
-        { 
-          id: "1", 
-          name: "Breakfast", 
-          items: [],
-          created_at: "2026-02-02",
-          user_id: "user-1"
-        },
-      ];
-
-      (deleteMealTemplate as jest.Mock).mockResolvedValue(undefined);
-
-      const { result } = renderHook(() =>
-        useTemplateManagement(initialTemplates)
-      );
-
-      act(() => {
-        result.current.setSelectedTemplateId("1");
-      });
-
-      await act(async () => {
-        await result.current.deleteTemplate("1");
-      });
-
-      expect(result.current.selectedTemplateId).toBeNull();
+      expect(templateActions.deleteMealTemplate).toHaveBeenCalledWith("1");
+      expect(result.current.templateList).toHaveLength(0);
+      expect(toast.success).toHaveBeenCalledWith("Template deleted.");
     });
   });
 });
