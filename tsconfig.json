@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    
     "target": "ES2022",
     "lib": [
       "dom",

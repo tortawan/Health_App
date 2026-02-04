@@ -25,6 +25,8 @@ vi.mock("@/app/actions/tracking", () => ({
 describe("useWaterTracking", () => {
   const mockRouter = { refresh: vi.fn(), push: vi.fn() };
   const selectedDate = "2026-02-02";
+  // Fix: Create a stable empty array to prevent infinite loops in tests
+  const EMPTY_LOGS: any[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,7 +76,8 @@ describe("useWaterTracking", () => {
         logged_at: "2026-02-02T10:00:00Z",
       });
 
-      const { result } = renderHook(() => useWaterTracking([], selectedDate));
+      // Fix: Use stable EMPTY_LOGS instead of []
+      const { result } = renderHook(() => useWaterTracking(EMPTY_LOGS, selectedDate));
 
       await act(async () => {
         await result.current.addWater(500);
@@ -95,7 +98,8 @@ describe("useWaterTracking", () => {
     it("should rollback on error", async () => {
       vi.mocked(logWater).mockRejectedValue(new Error("Network error"));
 
-      const { result } = renderHook(() => useWaterTracking([], selectedDate));
+      // Fix: Use stable EMPTY_LOGS instead of []
+      const { result } = renderHook(() => useWaterTracking(EMPTY_LOGS, selectedDate));
 
       await act(async () => {
         await result.current.addWater(500);
@@ -108,7 +112,8 @@ describe("useWaterTracking", () => {
     });
 
     it("should validate amount before adding", async () => {
-      const { result } = renderHook(() => useWaterTracking([], selectedDate));
+      // Fix: Use stable EMPTY_LOGS instead of []
+      const { result } = renderHook(() => useWaterTracking(EMPTY_LOGS, selectedDate));
 
       await act(async () => {
         await result.current.addWater(-100);
@@ -195,7 +200,9 @@ describe("useWaterTracking", () => {
         amount_ml: 250,
         logged_at: "2026-02-02T10:00:00Z",
       };
-      const { result } = renderHook(() => useWaterTracking([log], selectedDate));
+      // Fix: Use stable initialLogs variable
+      const initialLogs = [log];
+      const { result } = renderHook(() => useWaterTracking(initialLogs, selectedDate));
 
       act(() => {
         result.current.startEditWater(log);
@@ -211,7 +218,9 @@ describe("useWaterTracking", () => {
         amount_ml: 250,
         logged_at: "2026-02-02T10:00:00Z",
       };
-      const { result } = renderHook(() => useWaterTracking([log], selectedDate));
+      // Fix: Use stable initialLogs variable
+      const initialLogs = [log];
+      const { result } = renderHook(() => useWaterTracking(initialLogs, selectedDate));
 
       act(() => {
         result.current.startEditWater(log);

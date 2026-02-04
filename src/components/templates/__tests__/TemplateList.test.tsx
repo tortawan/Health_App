@@ -1,62 +1,52 @@
-// src/components/templates/__tests__/TemplateList.test.tsx
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
 import { TemplateList } from "../TemplateList";
 
 describe("TemplateList", () => {
   it("renders empty state when no templates", () => {
     render(
-      <TemplateList templates={[]} onUse={jest.fn()} onDelete={jest.fn()} />
+      <TemplateList templates={[]} onUse={vi.fn()} onDelete={vi.fn()} />
     );
-
-    expect(
-      screen.getByText(/No templates yet/i)
-    ).toBeInTheDocument();
+    // FIX: Match the actual text rendered by the component
+    expect(screen.getByText(/No templates yet/i)).toBeInTheDocument();
   });
 
   it("calls onUse when use button clicked", () => {
-    const onUse = jest.fn();
+    const onUse = vi.fn();
+    const templates = [
+      { id: "1", name: "Breakfast", items: [], created_at: "", user_id: "" }
+    ];
+
     render(
       <TemplateList
-        templates={[
-          {
-            id: "template-1",
-            name: "Breakfast",
-            items: [{ usda_id: 123, grams: 100 }],
-            created_at: "2026-02-02",
-            user_id: "user-1",
-          },
-        ]}
+        templates={templates}
         onUse={onUse}
-        onDelete={jest.fn()}
+        onDelete={vi.fn()}
       />
     );
 
     fireEvent.click(screen.getByText("Use"));
-
-    expect(onUse).toHaveBeenCalledWith("template-1");
+    expect(onUse).toHaveBeenCalledWith("1");
   });
 
   it("calls onDelete when delete button clicked", () => {
-    const onDelete = jest.fn();
+    const onDelete = vi.fn();
+    const templates = [
+      { id: "1", name: "Breakfast", items: [], created_at: "", user_id: "" }
+    ];
+
     render(
       <TemplateList
-        templates={[
-          {
-            id: "template-2",
-            name: "Lunch",
-            items: [],
-            created_at: "2026-02-02",
-            user_id: "user-1",
-          },
-        ]}
-        onUse={jest.fn()}
+        templates={templates}
+        onUse={vi.fn()}
         onDelete={onDelete}
       />
     );
 
-    fireEvent.click(screen.getByText("Delete"));
-
-    expect(onDelete).toHaveBeenCalledWith("template-2");
+    // Find the delete button (trash icon or label)
+    const deleteBtn = screen.getByRole("button", { name: /delete/i }); 
+    fireEvent.click(deleteBtn);
+    expect(onDelete).toHaveBeenCalledWith("1");
   });
 });

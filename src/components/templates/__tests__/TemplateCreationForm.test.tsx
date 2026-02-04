@@ -1,6 +1,6 @@
-// src/components/templates/__tests__/TemplateCreationForm.test.tsx
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
 import { TemplateCreationForm } from "../TemplateCreationForm";
 
 describe("TemplateCreationForm", () => {
@@ -9,47 +9,44 @@ describe("TemplateCreationForm", () => {
       <TemplateCreationForm
         templateName="Daily"
         isSaving={false}
-        onNameChange={jest.fn()}
-        onSave={jest.fn()}
+        onNameChange={vi.fn()}
+        onSave={vi.fn()}
         description="Save today"
       />
     );
-
     expect(screen.getByDisplayValue("Daily")).toBeInTheDocument();
     expect(screen.getByText("Save today")).toBeInTheDocument();
   });
 
   it("calls onNameChange on input change", () => {
-    const onNameChange = jest.fn();
+    const onNameChange = vi.fn();
     render(
       <TemplateCreationForm
         templateName=""
         isSaving={false}
         onNameChange={onNameChange}
-        onSave={jest.fn()}
-        description="Save today"
+        onSave={vi.fn()}
       />
     );
 
+    // FIX: Match the actual placeholder "Template name" (lowercase 'n')
     fireEvent.change(screen.getByPlaceholderText("Template name"), {
-      target: { value: "New Template" },
+      target: { value: "New Name" },
     });
-
-    expect(onNameChange).toHaveBeenCalledWith("New Template");
+    expect(onNameChange).toHaveBeenCalledWith("New Name");
   });
 
   it("shows saving state and disables button", () => {
     render(
       <TemplateCreationForm
         templateName="Daily"
-        isSaving
-        onNameChange={jest.fn()}
-        onSave={jest.fn()}
-        description="Save today"
+        isSaving={true}
+        onNameChange={vi.fn()}
+        onSave={vi.fn()}
       />
     );
 
-    const button = screen.getByRole("button", { name: "Saving..." });
-    expect(button).toBeDisabled();
+    expect(screen.getByText("Saving...")).toBeInTheDocument();
+    expect(screen.getByRole("button")).toBeDisabled();
   });
 });
