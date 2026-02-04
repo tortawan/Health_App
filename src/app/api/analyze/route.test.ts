@@ -7,9 +7,10 @@ const buildSupabaseMock = (rpcResult: { data: unknown; error: unknown }) => ({
   rpc: vi.fn().mockResolvedValue(rpcResult),
   auth: {
     getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+    // ADD THIS:
+    getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }), 
   },
 });
-
 const mockGeminiClient = (payload: string | Error) => ({
   getGenerativeModel: vi.fn().mockReturnValue({
     generateContent: vi.fn().mockImplementation(() => {
