@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { vi } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { logWater, updateWaterLog, deleteWaterLog } from "@/app/actions/tracking";
 import { useWaterTracking } from "../useWaterTracking";
 
@@ -25,12 +25,22 @@ vi.mock("@/app/actions/tracking", () => ({
 describe("useWaterTracking", () => {
   const mockRouter = { refresh: vi.fn(), push: vi.fn() };
   const selectedDate = "2026-02-02";
-  // Fix: Create a stable empty array to prevent infinite loops in tests
+  // Stable empty array to prevent infinite loops in tests
   const EMPTY_LOGS: any[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Only fake 'Date' to fix timezone issues. 
+    // We intentionally leave 'setTimeout'/'setInterval' as real so 'waitFor' doesn't time out.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    
+    // Set system time to noon UTC on the selected date to prevent timezone rollovers
+    vi.setSystemTime(new Date("2026-02-02T12:00:00Z"));
     vi.mocked(useRouter).mockReturnValue(mockRouter);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe("Initialization", () => {
@@ -76,7 +86,6 @@ describe("useWaterTracking", () => {
         logged_at: "2026-02-02T10:00:00Z",
       });
 
-      // Fix: Use stable EMPTY_LOGS instead of []
       const { result } = renderHook(() => useWaterTracking(EMPTY_LOGS, selectedDate));
 
       await act(async () => {
@@ -98,7 +107,6 @@ describe("useWaterTracking", () => {
     it("should rollback on error", async () => {
       vi.mocked(logWater).mockRejectedValue(new Error("Network error"));
 
-      // Fix: Use stable EMPTY_LOGS instead of []
       const { result } = renderHook(() => useWaterTracking(EMPTY_LOGS, selectedDate));
 
       await act(async () => {
@@ -112,7 +120,6 @@ describe("useWaterTracking", () => {
     });
 
     it("should validate amount before adding", async () => {
-      // Fix: Use stable EMPTY_LOGS instead of []
       const { result } = renderHook(() => useWaterTracking(EMPTY_LOGS, selectedDate));
 
       await act(async () => {
@@ -238,7 +245,6 @@ describe("useWaterTracking", () => {
         amount_ml: 250,
         logged_at: "2026-02-02T10:00:00Z",
       };
-      // Fix: Use stable initialLogs variable
       const initialLogs = [log];
       const { result } = renderHook(() => useWaterTracking(initialLogs, selectedDate));
 
@@ -256,7 +262,6 @@ describe("useWaterTracking", () => {
         amount_ml: 250,
         logged_at: "2026-02-02T10:00:00Z",
       };
-      // Fix: Use stable initialLogs variable
       const initialLogs = [log];
       const { result } = renderHook(() => useWaterTracking(initialLogs, selectedDate));
 

@@ -1,10 +1,10 @@
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useTemplateManagement } from "../useTemplateManagement";
 import * as templateActions from "@/app/actions/templates";
 import toast from "react-hot-toast";
 
-// 1. Use vi.mock instead of jest.mock
+// Mock dependencies
 vi.mock("react-hot-toast", () => ({
   default: {
     success: vi.fn(),
@@ -176,6 +176,7 @@ describe("useTemplateManagement", () => {
       });
 
       expect(toast.error).toHaveBeenCalledWith("Delete failed");
+      // Should still have 1 item because deletion failed
       expect(result.current.templateList).toHaveLength(1);
     });
   });
