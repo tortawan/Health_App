@@ -167,6 +167,23 @@ describe("useWaterTracking", () => {
         expect(result.current.logs[0].amount_ml).toBe(250);
       });
     });
+
+    it("should validate amount before updating", async () => {
+      const initialLogs = [
+        { id: "1", amount_ml: 250, logged_at: "2026-02-02T10:00:00Z" },
+      ];
+
+      const { result } = renderHook(() =>
+        useWaterTracking(initialLogs, selectedDate)
+      );
+
+      await act(async () => {
+        await result.current.updateWater("1", 0);
+      });
+
+      expect(toast.error).toHaveBeenCalledWith("Enter a valid amount");
+      expect(updateWaterLog).not.toHaveBeenCalled();
+    });
   });
 
   describe("deleteWater", () => {
@@ -189,6 +206,27 @@ describe("useWaterTracking", () => {
         expect(deleteWaterLog).toHaveBeenCalledWith("1");
         expect(toast.success).toHaveBeenCalledWith("Water deleted");
         expect(result.current.logs).toHaveLength(0);
+      });
+    });
+
+    it("should rollback on delete error", async () => {
+      const initialLogs = [
+        { id: "1", amount_ml: 250, logged_at: "2026-02-02T10:00:00Z" },
+      ];
+
+      vi.mocked(deleteWaterLog).mockRejectedValue(new Error("Delete failed"));
+
+      const { result } = renderHook(() =>
+        useWaterTracking(initialLogs, selectedDate)
+      );
+
+      await act(async () => {
+        await result.current.deleteWater("1");
+      });
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith("Delete failed");
+        expect(result.current.logs).toHaveLength(1);
       });
     });
   });
