@@ -98,6 +98,28 @@ describe("useTemplateManagement", () => {
       expect(result.current.templateList).toContainEqual(newTemplate);
       expect(toast.success).toHaveBeenCalled();
     });
+
+    it("validates empty name", async () => {
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
+
+      await act(async () => {
+        await result.current.saveTemplateFromLogs("", [{ food_name: "Apple", weight_g: 100 }]);
+      });
+
+      expect(toast.error).toHaveBeenCalledWith("Enter a template name.");
+      expect(templateActions.saveMealTemplateFromLogs).not.toHaveBeenCalled();
+    });
+
+    it("validates empty logs", async () => {
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
+
+      await act(async () => {
+        await result.current.saveTemplateFromLogs("Log Meal", []);
+      });
+
+      expect(toast.error).toHaveBeenCalledWith("No logs available to save.");
+      expect(templateActions.saveMealTemplateFromLogs).not.toHaveBeenCalled();
+    });
   });
 
   describe("applyTemplate", () => {
@@ -142,6 +164,33 @@ describe("useTemplateManagement", () => {
       expect(templateActions.deleteMealTemplate).toHaveBeenCalledWith("1");
       expect(result.current.templateList).toHaveLength(0);
       expect(toast.success).toHaveBeenCalledWith("Template deleted.");
+    });
+
+    it("handles delete error", async () => {
+      (templateActions.deleteMealTemplate as any).mockRejectedValue(new Error("Delete failed"));
+
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
+
+      await act(async () => {
+        await result.current.deleteTemplate("1");
+      });
+
+      expect(toast.error).toHaveBeenCalledWith("Delete failed");
+      expect(result.current.templateList).toHaveLength(1);
+    });
+  });
+
+  describe("template selection", () => {
+    it("exposes setters for selection", () => {
+      const { result } = renderHook(() => useTemplateManagement(initialTemplates));
+
+      act(() => {
+        result.current.setSelectedTemplateId("1");
+        result.current.setTemplateScale(2);
+      });
+
+      expect(result.current.selectedTemplateId).toBe("1");
+      expect(result.current.templateScale).toBe(2);
     });
   });
 });
