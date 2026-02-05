@@ -430,6 +430,25 @@ export function useScanner(options: UseScannerOptions = {}) {
     setQueueNotice(null);
     setUsedFallback(false);
   };
+  const updateScannerView = useCallback((view: "scan" | null) => {
+    if (view === "scan") {
+      setShowScanner(true);
+      setDraft([]);
+      setError(null);
+      setImagePublicUrl(null);
+      setAnalysisMessage(null);
+      setNoFoodDetected(false);
+      setQueueNotice(null);
+    } else if (view === null) {
+      setShowScanner(false);
+      setDraft([]);
+      setError(null);
+      setImagePublicUrl(null);
+      setAnalysisMessage(null);
+      setNoFoodDetected(false);
+      setQueueNotice(null);
+    }
+  }, []);
 
   return {
     showScanner,
@@ -454,5 +473,6 @@ export function useScanner(options: UseScannerOptions = {}) {
     hasScannerInstance,
     isScanningBarcode,
     scannerError: error,
+    updateScannerView,
   };
 }
