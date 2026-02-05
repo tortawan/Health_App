@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { WaterLogEntry } from "../WaterLogEntry";
 
@@ -30,10 +31,11 @@ describe("WaterLogEntry", () => {
     expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
   });
 
-  it("renders edit mode and triggers callbacks", () => {
+  it("renders edit mode and triggers callbacks", async () => {
     const onSave = vi.fn();
     const onCancel = vi.fn();
     const onAmountChange = vi.fn();
+    const user = userEvent.setup();
 
     render(
       <WaterLogEntry
@@ -49,15 +51,35 @@ describe("WaterLogEntry", () => {
       />
     );
 
-    fireEvent.change(screen.getByRole("spinbutton"), {
-      target: { value: "350" },
-    });
+    const input = screen.getByRole("spinbutton");
+
+    await user.clear(input);
+    await user.type(input, "350");
     expect(onAmountChange).toHaveBeenCalledWith(350);
 
-    fireEvent.click(screen.getByText("Save"));
+    await user.click(screen.getByText("Save"));
     expect(onSave).toHaveBeenCalledWith(300);
 
-    fireEvent.click(screen.getByText("Cancel"));
+    await user.click(screen.getByText("Cancel"));
     expect(onCancel).toHaveBeenCalled();
+  });
+
+  it("shows deleting state", () => {
+    render(
+      <WaterLogEntry
+        log={baseLog}
+        isEditing={false}
+        editAmount={250}
+        isDeleting={true}
+        onEdit={vi.fn()}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        onDelete={vi.fn()}
+        onAmountChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Deleting...")).toBeInTheDocument();
+    expect(screen.getByText("Deleting...")).toBeDisabled();
   });
 });
