@@ -433,7 +433,6 @@ export function useScanner(options: UseScannerOptions = {}) {
   const updateScannerView = useCallback((view: "scan" | null) => {
     if (view === "scan") {
       setShowScanner(true);
-      setDraft([]);
       setError(null);
       setImagePublicUrl(null);
       setAnalysisMessage(null);
