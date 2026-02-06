@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import toast from "react-hot-toast";
-import { useScanner } from "@/app/hooks/useScanner"; 
+import { useScanner } from "@/hooks/scanner/useScanner"; 
 import { FoodLogRecord, DraftLog } from "@/types/food";
 
 type Props = {

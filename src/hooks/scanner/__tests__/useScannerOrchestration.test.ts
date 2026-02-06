@@ -1,11 +1,11 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useScannerOrchestration } from "../useScannerOrchestration";
-import * as useScannerModule from "@/app/hooks/useScanner";
+import * as useScannerModule from "@/hooks/scanner/useScanner";
 import toast from "react-hot-toast";
 
 // Mock dependencies
-vi.mock("@/app/hooks/useScanner");
+vi.mock("@/hooks/scanner/useScanner");
 vi.mock("react-hot-toast");
 
 describe("useScannerOrchestration", () => {
