@@ -28,6 +28,7 @@ type Props = {
   onConfirm: (index: number) => void;
   onManualSearch: (index: number) => void;
   onApplyMatch: (index: number, match: MacroMatch) => void;
+  onClose?: () => void;
 };
 
 const QUICK_MULTIPLIERS = [
@@ -61,6 +62,7 @@ export function DraftReview({
   onUpdateMacro,
   onConfirm: handleConfirm,
   onManualSearch,
+  onClose,
   // onApplyMatch, // Removed to fix unused var lint error
 }: Props) {
   // We'll track which items we've already auto-opened manual search for
@@ -109,26 +111,53 @@ export function DraftReview({
 
   return (
     <div className="space-y-6">
+      {/* Header with close button */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-white">Draft entries</h2>
           <p className="text-sm text-emerald-400">{confidenceLabel}</p>
         </div>
-        {usedFallback ? (
-          <div className="rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
-            ⚠️ AI Limit Reached
-          </div>
-        ) : null}
-        {draft.length > 1 && (
-          <button
-            className="text-sm font-medium text-emerald-400 hover:text-emerald-300"
-            disabled={isConfirmingAll || isImageUploading}
-            onClick={onConfirmAll}
-            type="button"
-          >
-            {isConfirmingAll ? "Saving all..." : "Confirm all"}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {usedFallback ? (
+            <div className="rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-100">
+              ⚠️ AI Limit Reached
+            </div>
+          ) : null}
+          {draft.length > 1 && (
+            <button
+              className="text-sm font-medium text-emerald-400 hover:text-emerald-300"
+              disabled={isConfirmingAll || isImageUploading}
+              onClick={onConfirmAll}
+              type="button"
+            >
+              {isConfirmingAll ? "Saving all..." : "Confirm all"}
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              disabled={isConfirmingAll || loggingIndex !== null}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              aria-label="Close scanner"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {imageSrc ? (
