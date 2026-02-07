@@ -22,6 +22,7 @@ type Props = {
   queueNotice?: string | null;
   fileInputRef?: React.RefObject<HTMLInputElement>;
   uploadInputId?: string;
+  onClose?: () => void;
 };
 
 export function CameraCapture({
@@ -43,11 +44,41 @@ export function CameraCapture({
   queueNotice,
   fileInputRef,
   uploadInputId = "photo-upload",
+  onClose,
 }: Props) {
   if (captureMode !== "photo") return null;
 
   return (
     <>
+      {/* Header with close button */}
+      {onClose && (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-white">Scan Food</h2>
+          <button
+            onClick={onClose}
+            disabled={isUploading}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/80 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            type="button"
+            aria-label="Close scanner"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Only show Quick load section if templates exist */}
       {templateList.length > 0 && (
         <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
