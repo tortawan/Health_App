@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
+import { usePathname } from "next/navigation";
 
 // --- Actions ---
 import {
@@ -62,6 +63,7 @@ export default function HomeClient({
   initialSelectedDate,
 }: Props) {
   // 1. Navigation & Refs
+  const pathname = usePathname();
   const { selectedDate, handleShiftDate, setSelectedDate } = useDateNavigation(initialSelectedDate);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const optimisticScanIdRef = useRef<string | null>(null);
@@ -174,7 +176,17 @@ export default function HomeClient({
     }
   });
 
-  // 7. Manual Search Orchestration
+  // 7. Reset scanner when navigating to home (pathname changes to "/")
+  useEffect(() => {
+    if (pathname === "/") {
+      // Close scanner view when navigating back to home
+      if (scanner.showScanner || scanner.draft.length > 0) {
+        scanner.updateScannerView(null);
+      }
+    }
+  }, [pathname]); // Only depend on pathname, not scanner object
+
+  // 8. Manual Search Orchestration
   const manualSearch = useManualFoodSearch({
     portionMemories, 
     onSelect: (draftItem, replaceIndex) => {
@@ -203,7 +215,7 @@ export default function HomeClient({
     },
   });
 
-  // 8. Calculations
+  // 9. Calculations
   const dailyTotals = useMemo(() => {
     return dailyLogs.reduce(
       (acc, log) => ({
@@ -224,7 +236,7 @@ export default function HomeClient({
   
   const calorieTarget = initialProfile?.calorie_target || 2500;
 
-  // 9. Local UI State (Editing/Flagging)
+  // 10. Local UI State (Editing/Flagging)
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<FoodLogRecord>>({});
   const [flaggingLog, setFlaggingLog] = useState<FoodLogRecord | null>(null);
