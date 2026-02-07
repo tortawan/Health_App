@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
-import { usePathname } from "next/navigation";
 
 // --- Actions ---
 import {
@@ -63,7 +62,6 @@ export default function HomeClient({
   initialSelectedDate,
 }: Props) {
   // 1. Navigation & Refs
-  const pathname = usePathname();
   const { selectedDate, handleShiftDate, setSelectedDate } = useDateNavigation(initialSelectedDate);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const optimisticScanIdRef = useRef<string | null>(null);
@@ -73,11 +71,6 @@ export default function HomeClient({
   const [recentFoods, setRecentFoods] = useState<RecentFood[]>(initialRecentFoods);
   const [portionMemories, setPortionMemories] = useState<PortionMemoryRow[]>(initialPortionMemories ?? []);
   const [isLoadingRecentFoods, setIsLoadingRecentFoods] = useState(false);
-
-  // Sync with server if initialLogs updates (e.g. server revalidation)
-  useEffect(() => {
-    setDailyLogs(initialLogs);
-  }, [initialLogs]);
 
   // 3. Feature Hooks
   const waterTracking = useWaterTracking(initialWaterLogs ?? [], selectedDate);
@@ -106,8 +99,6 @@ export default function HomeClient({
     if (!original.ai_suggested_weight || !original.weight) return;
     if (Math.abs(original.weight - original.ai_suggested_weight) <= 10) return;
     
-    // We treat the "original" draft item as having the AI weight for the 'original' field
-    // and the user's manual weight as the 'final'
     try {
       await fetch("/api/log-correction", {
         method: "POST",
@@ -169,46 +160,40 @@ export default function HomeClient({
     onRefreshRecent: refreshRecentFoods,
     onAnalysisStart: handleOptimisticScanStart,
     onAnalysisComplete: handleOptimisticScanComplete,
-    onAnalysisError: handleOptimisticScanComplete, // Cleanup on error too
+    onAnalysisError: handleOptimisticScanComplete,
     onLogConfirmed: (draftItem) => {
       bumpPortionMemory(draftItem.food_name, draftItem.weight);
       void logWeightCorrection(draftItem);
     }
   });
 
-  // 7. Reset scanner when navigating to home (pathname changes to "/")
-  useEffect(() => {
-    if (pathname === "/") {
-      // Close scanner view when navigating back to home
-      if (scanner.showScanner || scanner.draft.length > 0) {
-        scanner.updateScannerView(null);
-      }
-    }
-  }, [pathname]); // Only depend on pathname, not scanner object
+  // 7. Professional close handler - modal-ready architecture
+  const handleCloseScanner = useCallback(() => {
+    // Close the scanner view and reset state
+    scanner.updateScannerView(null);
+    // Future: This is where you'd call setModalOpen(false) when converting to modal
+  }, [scanner]);
 
   // 8. Manual Search Orchestration
   const manualSearch = useManualFoodSearch({
     portionMemories, 
     onSelect: (draftItem, replaceIndex) => {
       if (replaceIndex !== undefined) {
-         // Surgical update: Preserve ID and existing metadata
          scanner.setDraft((prev) => {
            const next = [...prev];
            const originalItem = next[replaceIndex];
-           if (!originalItem) return prev; // Safety check
+           if (!originalItem) return prev;
            
            next[replaceIndex] = {
              ...originalItem,
              food_name: draftItem.food_name,
              match: draftItem.match,
-             weight: draftItem.weight, // Update weight from portion memory/default
+             weight: draftItem.weight,
              search_term: draftItem.search_term,
-             // Implicitly preserves: id, macro_overrides, ai_suggested_weight
            };
            return next;
          });
       } else {
-         // Add new draft item
          scanner.setDraft((prev) => [...prev, draftItem]);
          scanner.updateScannerView("scan");
       }
@@ -399,7 +384,8 @@ export default function HomeClient({
                     analysisMessage={scanner.noFoodDetected ? null : scanner.analysisMessage}
                     queuedCount={scanner.queuedCount}
                     queueNotice={scanner.queueNotice}
-                    fileInputRef={photoInputRef} 
+                    fileInputRef={photoInputRef}
+                    onClose={handleCloseScanner}
                   />
                   {/* No Food Detected Fallback */}
                   {scanner.noFoodDetected && !scanner.isAnalyzing && !scanner.isImageUploading && (
@@ -423,7 +409,6 @@ export default function HomeClient({
                   isImageUploading={scanner.isImageUploading}
                   isSavingTemplate={templates.isSavingTemplate}
                   loggingIndex={scanner.loggingIndex}
-                  // Draft Actions via Scanner Hook
                   onApplyMatch={(idx, m) => {
                     const d = [...scanner.draft]; d[idx].match = m; scanner.setDraft(d);
                   }}
@@ -441,6 +426,7 @@ export default function HomeClient({
                   }}
                   onUpdateMacro={scanner.handleUpdateMacro}
                   templateName={templates.templateName}
+                  onClose={handleCloseScanner}
                 />
               )}
             </div>
@@ -459,7 +445,6 @@ export default function HomeClient({
                isCopyingDay={false}
                onCopyYesterday={() => toast("Copy not implemented in demo")}
                
-               // Edit / Delete / Flag
                editingLogId={editingLogId}
                editForm={editForm}
                onEditField={handleEditField}
