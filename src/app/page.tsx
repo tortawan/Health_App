@@ -56,7 +56,7 @@ export default async function HomePage({
   const { data: logs, error } = await supabase
     .from("food_logs")
     .select("*")
-    .eq("user_id", user.id) // Use user.id
+    .eq("user_id", user.id)
     .gte("consumed_at", dayStart.toISOString())
     .lt("consumed_at", nextDay.toISOString())
     .order("consumed_at", { ascending: false });
@@ -68,7 +68,7 @@ export default async function HomePage({
   const { data: profile } = await supabase
     .from("user_profiles")
     .select("*")
-    .eq("user_id", user.id) // Use user.id
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (!profile || profile.daily_calorie_target === null || profile.daily_calorie_target === 0) {
@@ -80,7 +80,7 @@ export default async function HomePage({
     .select(
       "id, name, created_at, meal_template_items (id, usda_id, grams, usda_library (description))",
     )
-    .eq("user_id", user.id) // Use user.id
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
 
@@ -101,7 +101,7 @@ export default async function HomePage({
   const { data: portionMemoryRaw } = await supabase
     .from("food_logs")
     .select("food_name, weight_g")
-    .eq("user_id", user.id) // Use user.id
+    .eq("user_id", user.id)
     .order("consumed_at", { ascending: false })
     .limit(500);
 
@@ -129,21 +129,19 @@ export default async function HomePage({
     .select(
       "food_name, calories, protein, carbs, fat, fiber, sugar, sodium, weight_g, consumed_at",
     )
-    .eq("user_id", user.id) // Use user.id
+    .eq("user_id", user.id)
     .order("consumed_at", { ascending: false })
     .limit(40);
 
   const { data: waterLogs } = await supabase
     .from("water_logs")
     .select("id, amount_ml, logged_at")
-    .eq("user_id", user.id) // Use user.id
+    .eq("user_id", user.id)
     .gte("logged_at", dayStart.toISOString())
     .lt("logged_at", nextDay.toISOString())
     .order("logged_at", { ascending: false });
 
-  // --- ADDED: Weight Data Fetching ---
   const weightLogs = await getWeightHistory(5);
-  // Default to 70kg (or null) if no history exists
   const latestWeight = weightLogs[0]?.weight_kg ?? 70;
 
   return (
@@ -158,8 +156,8 @@ export default async function HomePage({
         initialWaterLogs={waterLogs ?? []}
       />
       
-      {/* --- ADDED: Weight Logger Component --- */}
-      <div className="mx-auto max-w-md px-4 pb-24 -mt-20 relative z-10">
+      {/* Weight Logger - positioned naturally below content */}
+      <div className="mx-auto max-w-md px-4 pb-24">
          <WeightLogger initialLogs={weightLogs} defaultWeight={latestWeight} />
       </div>
     </main>
